@@ -1,5 +1,8 @@
+--==================================================
 -- TALES MOD MENU
 -- Feito por Tales
+-- Versão atualizada
+--==================================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -14,20 +17,31 @@ local Settings = {
     ESP = false,
     Aimbot = false,
     Target = nil,
+
     FOV = false,
-    FOVSize = 120
+    FOVSize = 120,
+
+    AssistIA = false
 }
 
 local CurrentTarget = nil
 local ESPObjects = {}
+local PlayerConnections = {}
 
+--==================================================
 -- LIMPAR MENU ANTIGO
+--==================================================
+
 local Old = PlayerGui:FindFirstChild("TalesModMenu")
+
 if Old then
     Old:Destroy()
 end
 
+--==================================================
 -- INTERFACE
+--==================================================
+
 local GUI = Instance.new("ScreenGui")
 GUI.Name = "TalesModMenu"
 GUI.ResetOnSpawn = false
@@ -35,8 +49,8 @@ GUI.IgnoreGuiInset = true
 GUI.Parent = PlayerGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(460, 320)
-Main.Position = UDim2.new(0.5, -230, 0.5, -160)
+Main.Size = UDim2.fromOffset(460, 360)
+Main.Position = UDim2.new(0.5, -230, 0.5, -180)
 Main.BackgroundColor3 = Color3.fromRGB(20, 22, 30)
 Main.BorderSizePixel = 0
 Main.Parent = GUI
@@ -72,6 +86,10 @@ Content.Parent = Main
 
 local Tabs = {}
 local TabButtons = {}
+
+--==================================================
+-- FUNÇÕES DA INTERFACE
+--==================================================
 
 local function CreateTab(Name)
     local Page = Instance.new("Frame")
@@ -128,7 +146,6 @@ local function CreateButton(Parent, Text, Y, Callback)
     return Button
 end
 
--- CORREÇÃO DA FUNÇÃO DOS BOTÕES ON/OFF
 local function CreateToggle(Parent, Name, Y, Callback)
     local Enabled = false
     local Button
@@ -151,12 +168,7 @@ local function CreateToggle(Parent, Name, Y, Callback)
             end)
 
             if not Success then
-                warn(
-                    "[TALES MENU] Erro em "
-                    .. Name
-                    .. ": "
-                    .. tostring(ErrorMessage)
-                )
+                warn("[TALES MENU] Erro em " .. Name .. ": " .. tostring(ErrorMessage))
             end
         end
     )
@@ -164,7 +176,10 @@ local function CreateToggle(Parent, Name, Y, Callback)
     return Button
 end
 
+--==================================================
 -- AIMBOT
+--==================================================
+
 local AimTab = CreateTab("AIMBOT")
 
 local Prompt = Instance.new("TextLabel")
@@ -195,11 +210,13 @@ CreateToggle(AimTab, "AIMBOT", 15, function(State)
         Settings.Target = nil
         Prompt.Text = "Selecione a opção desejada:"
         Prompt.Visible = true
+
         HeadButton.Visible = true
         ChestButton.Visible = true
     else
         Settings.Target = nil
         Prompt.Visible = false
+
         HeadButton.Visible = false
         ChestButton.Visible = false
     end
@@ -226,7 +243,35 @@ ChestButton = CreateButton(
 HeadButton.Visible = false
 ChestButton.Visible = false
 
--- ESP
+--==================================================
+-- ASSISTENTE IA DE MIRA
+--==================================================
+
+CreateToggle(AimTab, "ASSISTENTE IA DE MIRA", 205, function(State)
+    Settings.AssistIA = State
+
+    if State then
+        Prompt.Text = "Assistente IA ativada"
+    else
+        Prompt.Text = "Assistente IA desativada"
+    end
+end)
+
+local AssistInfo = Instance.new("TextLabel")
+AssistInfo.Size = UDim2.new(1, -20, 0, 65)
+AssistInfo.Position = UDim2.fromOffset(10, 250)
+AssistInfo.BackgroundTransparency = 1
+AssistInfo.TextColor3 = Color3.fromRGB(180, 190, 210)
+AssistInfo.TextWrapped = true
+AssistInfo.TextSize = 11
+AssistInfo.Font = Enum.Font.Gotham
+AssistInfo.Text = "A assistência identifica alvos e disponibiliza o alvo selecionado para integração com o sistema de armas."
+AssistInfo.Parent = AimTab
+
+--==================================================
+-- ESP PLAYER
+--==================================================
+
 local EspTab = CreateTab("ESP")
 
 local function RemoveESP(Target)
@@ -246,15 +291,31 @@ local function RemoveESP(Target)
 end
 
 local function AddESP(Target)
-    if Target == Player then return end
+    if Target == Player then
+        return
+    end
+
+    if not Target or Target.Parent ~= Players then
+        return
+    end
 
     local Character = Target.Character
-    if not Character then return end
+
+    if not Character then
+        return
+    end
 
     local Head = Character:FindFirstChild("Head")
     local Humanoid = Character:FindFirstChildOfClass("Humanoid")
 
-    if not Head or not Humanoid then return end
+    if not Head or not Humanoid then
+        return
+    end
+
+    if Humanoid.Health <= 0 then
+        RemoveESP(Target)
+        return
+    end
 
     local Existing = ESPObjects[Target]
 
@@ -265,6 +326,7 @@ local function AddESP(Target)
     RemoveESP(Target)
 
     local Highlight = Instance.new("Highlight")
+    Highlight.Name = "TalesPlayerHighlight"
     Highlight.Adornee = Character
     Highlight.FillColor = BLUE
     Highlight.OutlineColor = BLUE
@@ -274,6 +336,7 @@ local function AddESP(Target)
     Highlight.Parent = workspace
 
     local Billboard = Instance.new("BillboardGui")
+    Billboard.Name = "TalesPlayerName"
     Billboard.Adornee = Head
     Billboard.Size = UDim2.fromOffset(180, 30)
     Billboard.StudsOffset = Vector3.new(0, 2.7, 0)
@@ -327,19 +390,55 @@ CreateToggle(EspTab, "ESP PLAYER", 15, function(State)
     end
 end)
 
-Players.PlayerAdded:Connect(function(Target)
-    Target.CharacterAdded:Connect(function()
-        task.wait(1)
+--==================================================
+-- CONEXÕES DOS JOGADORES
+--==================================================
+
+local function ConnectPlayer(Target)
+    if Target == Player then
+        return
+    end
+
+    if PlayerConnections[Target] then
+        return
+    end
+
+    PlayerConnections[Target] = Target.CharacterAdded:Connect(function()
+        task.wait(0.5)
 
         if Settings.ESP then
             AddESP(Target)
         end
     end)
+
+    if Settings.ESP then
+        task.defer(function()
+            AddESP(Target)
+        end)
+    end
+end
+
+for _, Target in ipairs(Players:GetPlayers()) do
+    ConnectPlayer(Target)
+end
+
+Players.PlayerAdded:Connect(function(Target)
+    ConnectPlayer(Target)
 end)
 
-Players.PlayerRemoving:Connect(RemoveESP)
+Players.PlayerRemoving:Connect(function(Target)
+    RemoveESP(Target)
 
+    if PlayerConnections[Target] then
+        PlayerConnections[Target]:Disconnect()
+        PlayerConnections[Target] = nil
+    end
+end)
+
+--==================================================
 -- AIM FOV
+--==================================================
+
 local FovTab = CreateTab("AIM FOV")
 
 local Circle = Instance.new("Frame")
@@ -370,29 +469,36 @@ SizeLabel.TextColor3 = Color3.new(1, 1, 1)
 SizeLabel.Text = "Tamanho: 120"
 SizeLabel.Parent = FovTab
 
-CreateButton(FovTab, "AUMENTAR +", 105, function()
-    Settings.FOVSize = math.clamp(Settings.FOVSize + 20, 40, 300)
-
+local function UpdateFOVSize()
     Circle.Size = UDim2.fromOffset(
         Settings.FOVSize * 2,
         Settings.FOVSize * 2
     )
 
     SizeLabel.Text = "Tamanho: " .. Settings.FOVSize
+end
+
+CreateButton(FovTab, "AUMENTAR +", 105, function()
+    Settings.FOVSize = math.clamp(Settings.FOVSize + 20, 40, 300)
+    UpdateFOVSize()
 end)
 
 CreateButton(FovTab, "DIMINUIR -", 150, function()
     Settings.FOVSize = math.clamp(Settings.FOVSize - 20, 40, 300)
-
-    Circle.Size = UDim2.fromOffset(
-        Settings.FOVSize * 2,
-        Settings.FOVSize * 2
-    )
-
-    SizeLabel.Text = "Tamanho: " .. Settings.FOVSize
+    UpdateFOVSize()
 end)
 
+UpdateFOVSize()
+
+--==================================================
+-- SELEÇÃO DE PARTE DO PERSONAGEM
+--==================================================
+
 local function GetTargetPart(Character)
+    if not Character then
+        return nil
+    end
+
     if Settings.Target == "Cabeça" then
         return Character:FindFirstChild("Head")
     end
@@ -402,7 +508,13 @@ local function GetTargetPart(Character)
             or Character:FindFirstChild("Torso")
             or Character:FindFirstChild("HumanoidRootPart")
     end
+
+    return nil
 end
+
+--==================================================
+-- LOCALIZAR ALVO MAIS PRÓXIMO DA MIRA
+--==================================================
 
 local function GetClosestTarget()
     Camera = workspace.CurrentCamera
@@ -451,6 +563,10 @@ local function GetClosestTarget()
     return BestTarget
 end
 
+--==================================================
+-- VALORES PARA INTEGRAÇÃO COM O SISTEMA DE ARMAS
+--==================================================
+
 local TargetValue = Instance.new("ObjectValue")
 TargetValue.Name = "TalesCurrentTarget"
 TargetValue.Parent = GUI
@@ -458,6 +574,20 @@ TargetValue.Parent = GUI
 local TargetPartValue = Instance.new("StringValue")
 TargetPartValue.Name = "TalesTargetPart"
 TargetPartValue.Parent = GUI
+
+local AssistValue = Instance.new("BoolValue")
+AssistValue.Name = "TalesAssistIA"
+AssistValue.Value = false
+AssistValue.Parent = GUI
+
+local FOVValue = Instance.new("BoolValue")
+FOVValue.Name = "TalesFOVEnabled"
+FOVValue.Value = false
+FOVValue.Parent = GUI
+
+--==================================================
+-- ATUALIZAÇÃO PRINCIPAL
+--==================================================
 
 RunService.RenderStepped:Connect(function()
     Camera = workspace.CurrentCamera
@@ -477,6 +607,8 @@ RunService.RenderStepped:Connect(function()
 
     if Settings.Aimbot and Settings.FOV and Settings.Target then
         CurrentTarget = GetClosestTarget()
+    elseif Settings.AssistIA and Settings.FOV and Settings.Target then
+        CurrentTarget = GetClosestTarget()
     else
         CurrentTarget = nil
     end
@@ -486,9 +618,15 @@ RunService.RenderStepped:Connect(function()
         or nil
 
     TargetPartValue.Value = Settings.Target or ""
+
+    AssistValue.Value = Settings.AssistIA
+    FOVValue.Value = Settings.FOV
 end)
 
+--==================================================
 -- MINIMIZAR
+--==================================================
+
 local Minimized = false
 
 Minimize.MouseButton1Click:Connect(function()
@@ -499,12 +637,15 @@ Minimize.MouseButton1Click:Connect(function()
 
     Main.Size = Minimized
         and UDim2.fromOffset(460, 45)
-        or UDim2.fromOffset(460, 320)
+        or UDim2.fromOffset(460, 360)
 
     Minimize.Text = Minimized and "+" or "-"
 end)
 
+--==================================================
 -- CRÉDITOS
+--==================================================
+
 local Credits = Instance.new("TextLabel")
 Credits.Size = UDim2.new(1, 0, 0, 20)
 Credits.Position = UDim2.new(0, 0, 1, -23)
@@ -514,4 +655,4 @@ Credits.TextColor3 = Color3.fromRGB(130, 140, 160)
 Credits.TextSize = 12
 Credits.Parent = Main
 
-print("Tales Mod Menu carregado com sucesso!")
+print("Tales Mod Menu atualizado e carregado!")
