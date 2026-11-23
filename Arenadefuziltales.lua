@@ -1,0 +1,442 @@
+```lua
+--[[
+    TALES MOD MENU
+    Feito por Tales
+    Roblox Studio - LuaU
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+-- CONFIGURAÇÕES
+local Settings = {
+    Aimbot = false,
+    Target = "Cabeça",
+    ESP = false,
+    FOV = false,
+    FOVSize = 120
+}
+
+-- GUI PRINCIPAL
+local GUI = Instance.new("ScreenGui")
+GUI.Name = "TalesModMenu"
+GUI.ResetOnSpawn = false
+GUI.Parent = PlayerGui
+
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.fromOffset(460, 320)
+Main.Position = UDim2.new(0.5, -230, 0.5, -160)
+Main.BackgroundColor3 = Color3.fromRGB(20, 22, 30)
+Main.BorderSizePixel = 0
+Main.Parent = GUI
+
+Instance.new("UICorner", Main).CornerRadius =
+    UDim.new(0, 12)
+
+-- TÍTULO
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -55, 0, 45)
+Title.Position = UDim2.fromOffset(10, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "TALES | MOD MENU"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 19
+Title.Font = Enum.Font.GothamBold
+Title.Parent = Main
+
+-- MINIMIZAR
+local Minimize = Instance.new("TextButton")
+Minimize.Size = UDim2.fromOffset(35, 30)
+Minimize.Position = UDim2.new(1, -42, 0, 7)
+Minimize.BackgroundColor3 = Color3.fromRGB(50, 55, 70)
+Minimize.Text = "-"
+Minimize.TextColor3 = Color3.new(1, 1, 1)
+Minimize.TextSize = 22
+Minimize.Parent = Main
+
+Instance.new("UICorner", Minimize)
+
+-- MENU LATERAL
+local Sidebar = Instance.new("Frame")
+Sidebar.Size = UDim2.new(0, 125, 1, -85)
+Sidebar.Position = UDim2.fromOffset(10, 50)
+Sidebar.BackgroundColor3 = Color3.fromRGB(29, 32, 43)
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = Main
+
+Instance.new("UICorner", Sidebar)
+
+-- ÁREA DAS CATEGORIAS
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -150, 1, -85)
+Content.Position = UDim2.fromOffset(140, 50)
+Content.BackgroundColor3 = Color3.fromRGB(29, 32, 43)
+Content.BorderSizePixel = 0
+Content.Parent = Main
+
+Instance.new("UICorner", Content)
+
+-- SISTEMA DE ABAS
+local Tabs = {}
+local TabButtons = {}
+
+local function CreateTab(Name)
+    local Page = Instance.new("Frame")
+    Page.Name = Name
+    Page.Size = UDim2.fromScale(1, 1)
+    Page.BackgroundTransparency = 1
+    Page.Visible = false
+    Page.Parent = Content
+
+    local Button = Instance.new("TextButton")
+    Button.Size = UDim2.new(1, -10, 0, 38)
+    Button.Position = UDim2.fromOffset(
+        5,
+        (#Tabs * 43) + 5
+    )
+
+    Button.BackgroundColor3 =
+        Color3.fromRGB(45, 49, 65)
+
+    Button.TextColor3 = Color3.new(1, 1, 1)
+    Button.Text = Name
+    Button.TextSize = 13
+    Button.Font = Enum.Font.GothamBold
+    Button.Parent = Sidebar
+
+    Instance.new("UICorner", Button)
+
+    Button.MouseButton1Click:Connect(function()
+        for _, Tab in pairs(Tabs) do
+            Tab.Visible = false
+        end
+
+        for _, TabButton in pairs(TabButtons) do
+            TabButton.BackgroundColor3 =
+                Color3.fromRGB(45, 49, 65)
+        end
+
+        Page.Visible = true
+
+        Button.BackgroundColor3 =
+            Color3.fromRGB(25, 125, 75)
+    end)
+
+    table.insert(Tabs, Page)
+    table.insert(TabButtons, Button)
+
+    if #Tabs == 1 then
+        Page.Visible = true
+        Button.BackgroundColor3 =
+            Color3.fromRGB(25, 125, 75)
+    end
+
+    return Page
+end
+
+-- SISTEMA ON/OFF
+local function CreateToggle(Parent, Name, Callback, Y)
+    local Button = Instance.new("TextButton")
+
+    Button.Size = UDim2.new(1, -20, 0, 38)
+    Button.Position = UDim2.fromOffset(10, Y)
+
+    Button.BackgroundColor3 =
+        Color3.fromRGB(75, 78, 90)
+
+    Button.TextColor3 = Color3.new(1, 1, 1)
+    Button.TextSize = 14
+    Button.Font = Enum.Font.GothamBold
+    Button.Text = Name .. " : OFF"
+    Button.Parent = Parent
+
+    Instance.new("UICorner", Button)
+
+    local Enabled = false
+
+    Button.MouseButton1Click:Connect(function()
+        Enabled = not Enabled
+
+        Button.Text = Name ..
+            (Enabled and " : ON" or " : OFF")
+
+        Button.BackgroundColor3 = Enabled
+            and Color3.fromRGB(20, 170, 85)
+            or Color3.fromRGB(75, 78, 90)
+
+        Callback(Enabled)
+    end)
+
+    return Button
+end
+
+-- BOTÕES DE SELEÇÃO
+local function CreateOption(Parent, Name, Y, Callback)
+    local Button = Instance.new("TextButton")
+
+    Button.Size = UDim2.new(1, -20, 0, 35)
+    Button.Position = UDim2.fromOffset(10, Y)
+
+    Button.BackgroundColor3 =
+        Color3.fromRGB(45, 95, 150)
+
+    Button.TextColor3 = Color3.new(1, 1, 1)
+    Button.Text = Name
+    Button.TextSize = 13
+    Button.Font = Enum.Font.GothamBold
+    Button.Parent = Parent
+
+    Instance.new("UICorner", Button)
+
+    Button.MouseButton1Click:Connect(function()
+        Callback()
+    end)
+
+    return Button
+end
+
+-- CATEGORIA AIMBOT
+local AimTab = CreateTab("AIMBOT")
+
+CreateToggle(AimTab, "AIMBOT", function(State)
+    Settings.Aimbot = State
+end, 15)
+
+local HeadButton = CreateOption(
+    AimTab,
+    "ALVO: CABEÇA",
+    65,
+    function()
+        Settings.Target = "Cabeça"
+    end
+)
+
+local ChestButton = CreateOption(
+    AimTab,
+    "ALVO: PEITO",
+    110,
+    function()
+        Settings.Target = "Peito"
+    end
+)
+
+-- A seleção de alvo fica disponível para
+-- integração com a assistência de mira
+-- autorizada no sistema de armas do jogo.
+
+-- CATEGORIA ESP
+local EspTab = CreateTab("ESP")
+
+local ESPObjects = {}
+
+local function RemoveESP(Target)
+    if ESPObjects[Target] then
+        ESPObjects[Target]:Destroy()
+        ESPObjects[Target] = nil
+    end
+end
+
+local function AddESP(Target)
+    if Target == Player then
+        return
+    end
+
+    local Character = Target.Character
+
+    if not Character then
+        return
+    end
+
+    RemoveESP(Target)
+
+    local Highlight = Instance.new("Highlight")
+
+    Highlight.Name = "TalesESP"
+    Highlight.Adornee = Character
+    Highlight.FillColor = Color3.fromRGB(0, 100, 255)
+    Highlight.OutlineColor = Color3.fromRGB(0, 150, 255)
+    Highlight.FillTransparency = 0.85
+    Highlight.OutlineTransparency = 0
+    Highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+    Highlight.Parent = GUI
+
+    local Head = Character:FindFirstChild("Head")
+
+    if Head then
+        local Billboard = Instance.new("BillboardGui")
+        Billboard.Name = "TalesESPName"
+        Billboard.Adornee = Head
+        Billboard.Size = UDim2.fromOffset(100, 20)
+        Billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+        Billboard.AlwaysOnTop = true
+        Billboard.Parent = GUI
+
+        local NameLabel = Instance.new("TextLabel")
+        NameLabel.Size = UDim2.fromScale(1, 1)
+        NameLabel.BackgroundTransparency = 1
+        NameLabel.Text = Target.DisplayName
+        NameLabel.TextColor3 =
+            Color3.fromRGB(255, 255, 255)
+        NameLabel.TextSize = 11
+        NameLabel.Font = Enum.Font.GothamBold
+        NameLabel.Parent = Billboard
+
+        local Folder = Instance.new("Folder")
+        Folder.Name = "TalesESPObjects"
+        Folder.Parent = GUI
+
+        Highlight.Parent = Folder
+        Billboard.Parent = Folder
+
+        ESPObjects[Target] = Folder
+    else
+        ESPObjects[Target] = Highlight
+    end
+end
+
+local function UpdateESP()
+    for _, Target in ipairs(Players:GetPlayers()) do
+        if Target ~= Player then
+            if Settings.ESP then
+                AddESP(Target)
+            else
+                RemoveESP(Target)
+            end
+        end
+    end
+end
+
+CreateToggle(EspTab, "ESP PLAYER", function(State)
+    Settings.ESP = State
+
+    if not State then
+        for Target in pairs(ESPObjects) do
+            RemoveESP(Target)
+        end
+    else
+        UpdateESP()
+    end
+end, 15)
+
+Players.PlayerAdded:Connect(function(Target)
+    Target.CharacterAdded:Connect(function()
+        task.wait(1)
+
+        if Settings.ESP then
+            AddESP(Target)
+        end
+    end)
+end)
+
+Players.PlayerRemoving:Connect(function(Target)
+    RemoveESP(Target)
+end)
+
+-- CATEGORIA AIM FOV
+local FovTab = CreateTab("AIM FOV")
+
+local FOVCircle = Instance.new("Frame")
+
+FOVCircle.Name = "TalesFOV"
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
+
+FOVCircle.Size = UDim2.fromOffset(
+    Settings.FOVSize * 2,
+    Settings.FOVSize * 2
+)
+
+FOVCircle.BackgroundTransparency = 1
+FOVCircle.Visible = false
+FOVCircle.Parent = GUI
+
+local CircleCorner = Instance.new("UICorner")
+CircleCorner.CornerRadius = UDim.new(1, 0)
+CircleCorner.Parent = FOVCircle
+
+local CircleStroke = Instance.new("UIStroke")
+CircleStroke.Thickness = 1
+CircleStroke.Color = Color3.fromRGB(255, 255, 255)
+CircleStroke.Parent = FOVCircle
+
+CreateToggle(FovTab, "AIM FOV", function(State)
+    Settings.FOV = State
+    FOVCircle.Visible = State
+end, 15)
+
+local SizeLabel = Instance.new("TextLabel")
+
+SizeLabel.Size = UDim2.new(1, -20, 0, 30)
+SizeLabel.Position = UDim2.fromOffset(10, 65)
+SizeLabel.BackgroundTransparency = 1
+SizeLabel.TextColor3 = Color3.new(1, 1, 1)
+SizeLabel.Text = "Tamanho: 120"
+SizeLabel.TextSize = 14
+SizeLabel.Font = Enum.Font.GothamBold
+SizeLabel.Parent = FovTab
+
+local function ChangeFOV(Value)
+    Settings.FOVSize = math.clamp(
+        Settings.FOVSize + Value,
+        40,
+        300
+    )
+
+    FOVCircle.Size = UDim2.fromOffset(
+        Settings.FOVSize * 2,
+        Settings.FOVSize * 2
+    )
+
+    SizeLabel.Text =
+        "Tamanho: " .. Settings.FOVSize
+end
+
+CreateOption(FovTab, "AUMENTAR +", 105, function()
+    ChangeFOV(20)
+end)
+
+CreateOption(FovTab, "DIMINUIR -", 150, function()
+    ChangeFOV(-20)
+end)
+
+-- ATUALIZAÇÃO
+RunService.RenderStepped:Connect(function()
+    FOVCircle.Visible = Settings.FOV
+end)
+
+-- MINIMIZAR E RESTAURAR
+local Minimized = false
+
+Minimize.MouseButton1Click:Connect(function()
+    Minimized = not Minimized
+
+    Sidebar.Visible = not Minimized
+    Content.Visible = not Minimized
+
+    Main.Size = Minimized
+        and UDim2.fromOffset(460, 45)
+        or UDim2.fromOffset(460, 320)
+
+    Minimize.Text = Minimized and "+" or "-"
+end)
+
+-- CRÉDITOS
+local Credits = Instance.new("TextLabel")
+
+Credits.Size = UDim2.new(1, 0, 0, 20)
+Credits.Position = UDim2.new(0, 0, 1, -23)
+Credits.BackgroundTransparency = 1
+Credits.Text = "Feito por Tales"
+Credits.TextColor3 =
+    Color3.fromRGB(130, 140, 160)
+Credits.TextSize = 12
+Credits.Font = Enum.Font.Gotham
+Credits.Parent = Main
+
+print("Tales Mod Menu carregado com sucesso!")
+```
