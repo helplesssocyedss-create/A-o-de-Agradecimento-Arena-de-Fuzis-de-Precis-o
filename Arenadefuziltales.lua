@@ -3,20 +3,16 @@
     Feito por Tales
     LocalScript para uso no proprio jogo, no Roblox Studio.
 
-    Recursos:
-    - Assistencia de mira suave para o alvo selecionado (camera local).
-    - Selecao de Cabeca/Peito e limite pelo FOV.
-    - ESP com reconciliacao periodica, respawn e jogadores novos.
-    - Perseguicao com estado compartilhado para integracao com o sistema de armas.
-    - Monitor IA: estados, recuperacao de ESP e deteccao de equipe/funcao civil.
-    - Minimizar para botao quadrado arredondado, movel por toque ou mouse.
-
-    IMPORTANTE:
-    A deteccao de civil usa Team/Attributes/ valores com nomes comuns.
-    Para trocar o jogador de funcao/civil automaticamente, conecte a funcao
-    real de equipes/cargos do seu jogo no ponto indicado em IsLocalPlayerCivil().
-    A perseguicao publica o alvo; a camera/arma so acompanha se o sistema do
-    jogo consumir TalesCurrentTarget / TalesTargetPart.
+    ATUALIZACOES:
+    - ESP PLAYER + ESP NAME.
+    - ESP BOT/NPC + NOME.
+    - Deteccao sem exigir a peca Head.
+    - Recuperacao automatica de ESP apos respawn.
+    - Aimbot procura jogadores e NPCs independentemente da ESP.
+    - Mantida a assistencia original de camera.
+    - Suavidade de 0% a 100%, passos de 5% ou 10%.
+    - Selecao estavel de alvo.
+    - FOV, perseguicao, IA Assist e minimizacao.
 ]]
 
 local Players = game:GetService("Players")
@@ -32,21 +28,28 @@ local PANEL = Color3.fromRGB(20, 22, 30)
 local PANEL_INNER = Color3.fromRGB(29, 32, 43)
 
 local old = PlayerGui:FindFirstChild("TalesModMenu")
-if old then old:Destroy() end
+if old then
+    old:Destroy()
+end
 
 local Settings = {
     Aimbot = false,
     Target = nil,
-    AimSmoothness = 0.22,
+    AimSmoothness = 0.20,
     SmoothStep = 5,
-    ESP = false,
+
+    ESPPlayers = false,
+    ESPBots = false,
+
     FOV = false,
     FOVSize = 120,
+
     Pursuit = false,
     PursuitActive = false,
     SensorLocked = true,
     SensorSize = 65,
     SensorPosition = UDim2.new(0.5, 0, 0.75, 0),
+
     SmartRecovery = true,
     CivilProtection = true,
 }
@@ -54,31 +57,44 @@ local Settings = {
 local CurrentTarget = nil
 local ESPObjects = {}
 local PlayerConnections = {}
+local CachedNPCs = {}
+
 local Camera = workspace.CurrentCamera
 local IsCivil = false
 local LastAIStatus = "AGUARDANDO"
 local AIEventStatus = nil
+
 local minimized = false
 local draggingPanel = false
 
 local function SetAIEvent(message)
     if AIEventStatus then
-        AIEventStatus.Text = "Ultima deteccao: " .. message
+        AIEventStatus.Text = "Ultima deteccao: " .. tostring(message)
     end
 end
 
 local function IsAlive(character)
-    if not character or not character.Parent then return false end
+    if not character or not character.Parent then
+        return false
+    end
+
     local humanoid = character:FindFirstChildOfClass("Humanoid")
+
     return humanoid ~= nil and humanoid.Health > 0
 end
 
--- Deteccao generica. Ajuste aqui se seu jogo usa outro nome de equipe/cargo.
 local function IsLocalPlayerCivil()
-    local teamName = Player.Team and string.lower(Player.Team.Name) or ""
-    local role = Player:GetAttribute("Role") or Player:GetAttribute("Class")
-        or Player:GetAttribute("Job") or Player:GetAttribute("TeamRole")
+    local teamName = Player.Team
+        and string.lower(Player.Team.Name)
+        or ""
+
+    local role = Player:GetAttribute("Role")
+        or Player:GetAttribute("Class")
+        or Player:GetAttribute("Job")
+        or Player:GetAttribute("TeamRole")
+
     role = string.lower(tostring(role or ""))
+
     local combined = teamName .. " " .. role
 
     return string.find(combined, "civil") ~= nil
@@ -90,7 +106,100 @@ local function CombatAllowed()
     return not (Settings.CivilProtection and IsCivil)
 end
 
+--==================================================
+-- IDENTIFICACAO DE PERSONAGENS E NPCS
+--==================================================
+
+local function GetCharacter(target)
+    if not target then
+        return nil
+    end
+
+    if target:IsA("Player") then
+        return target.Character
+    end
+
+    if target:IsA("Model") then
+        return target
+    end
+
+    return nil
+end
+
+local function GetTargetName(target)
+    if not target then
+        return "nenhum"
+    end
+
+    if target:IsA("Player") then
+        return target.DisplayName
+    end
+
+    if target:IsA("Model") then
+        return target.Name
+    end
+
+    return "alvo"
+end
+
+local function GetCharacterAnchor(character)
+    if not character then
+        return nil
+    end
+
+    return character:FindFirstChild("Head")
+        or character:FindFirstChild("HumanoidRootPart")
+        or character:FindFirstChild("UpperTorso")
+        or character:FindFirstChild("Torso")
+        or character.PrimaryPart
+        or character:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function IsPlayerCharacter(model)
+    if not model then
+        return false
+    end
+
+    return Players:GetPlayerFromCharacter(model) ~= nil
+end
+
+-- Atualiza a lista de NPCs/bots encontrados no Workspace.
+local function RefreshNPCs()
+    local found = {}
+
+    for _, object in ipairs(workspace:GetDescendants()) do
+        if object:IsA("Model") then
+            local humanoid = object:FindFirstChildOfClass("Humanoid")
+
+            if humanoid
+                and humanoid.Health > 0
+                and object ~= Player.Character
+                and not IsPlayerCharacter(object) then
+
+                local anchor = GetCharacterAnchor(object)
+
+                if anchor then
+                    found[object] = true
+                end
+            end
+        end
+    end
+
+    local newList = {}
+
+    for model in pairs(found) do
+        table.insert(newList, model)
+    end
+
+    CachedNPCs = newList
+
+    return newList
+end
+
+--==================================================
 -- GUI PRINCIPAL
+--==================================================
+
 local GUI = Instance.new("ScreenGui")
 GUI.Name = "TalesModMenu"
 GUI.ResetOnSpawn = false
@@ -105,6 +214,7 @@ Main.Position = UDim2.new(0.5, -230, 0.5, -210)
 Main.BackgroundColor3 = PANEL
 Main.BorderSizePixel = 0
 Main.Parent = GUI
+
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 
 local Title = Instance.new("TextLabel")
@@ -126,6 +236,7 @@ Minimize.TextColor3 = Color3.new(1, 1, 1)
 Minimize.TextSize = 22
 Minimize.Font = Enum.Font.GothamBold
 Minimize.Parent = Main
+
 Instance.new("UICorner", Minimize)
 
 local Sidebar = Instance.new("Frame")
@@ -134,6 +245,7 @@ Sidebar.Position = UDim2.fromOffset(10, 50)
 Sidebar.BackgroundColor3 = PANEL_INNER
 Sidebar.BorderSizePixel = 0
 Sidebar.Parent = Main
+
 Instance.new("UICorner", Sidebar)
 
 local Content = Instance.new("Frame")
@@ -142,6 +254,7 @@ Content.Position = UDim2.fromOffset(140, 50)
 Content.BackgroundColor3 = PANEL_INNER
 Content.BorderSizePixel = 0
 Content.Parent = Main
+
 Instance.new("UICorner", Content)
 
 local Credits = Instance.new("TextLabel")
@@ -154,7 +267,8 @@ Credits.TextSize = 12
 Credits.Font = Enum.Font.Gotham
 Credits.Parent = Main
 
--- Botao minimizado: quadrado arredondado e arrastavel.
+-- Botao minimizado.
+
 local MiniButton = Instance.new("TextButton")
 MiniButton.Name = "TalesMiniButton"
 MiniButton.Size = UDim2.fromOffset(58, 58)
@@ -175,6 +289,10 @@ local miniStroke = Instance.new("UIStroke")
 miniStroke.Color = BLUE_OUTLINE
 miniStroke.Thickness = 2
 miniStroke.Parent = MiniButton
+
+--==================================================
+-- ELEMENTOS DA INTERFACE
+--==================================================
 
 local function CreateTab(name, index)
     local page = Instance.new("Frame")
@@ -237,6 +355,7 @@ local function CreateToggle(parent, name, callback, y, initial)
 
     local function paint()
         button.Text = name .. (enabled and " : ON" or " : OFF")
+
         button.BackgroundColor3 = enabled
             and Color3.fromRGB(20, 150, 85)
             or Color3.fromRGB(75, 78, 90)
@@ -287,8 +406,12 @@ local function CreateInfo(parent, text, y, height)
     return label
 end
 
+--==================================================
 -- AIMBOT / ASSISTENCIA ORIGINAL
+--==================================================
+
 local AimTab = CreateTab("AIMBOT", 1)
+
 local AimPrompt = CreateInfo(
     AimTab,
     "Ative a assistencia e escolha a parte do corpo.",
@@ -296,7 +419,8 @@ local AimPrompt = CreateInfo(
     35
 )
 
-local HeadOption, ChestOption
+local HeadOption
+local ChestOption
 
 local function SelectAimPart(partName)
     Settings.Target = partName
@@ -334,22 +458,32 @@ end)
 HeadOption.Visible = false
 ChestOption.Visible = false
 
-local SmoothLabel = CreateInfo(AimTab, "Suavidade: 20%", 190, 25)
+local SmoothLabel = CreateInfo(
+    AimTab,
+    "Suavidade: 20%",
+    190,
+    25
+)
 
 local StepOption
+
 StepOption = CreateOption(
     AimTab,
     "PASSO: 5% (TOQUE PARA 10%)",
     218,
     function()
         Settings.SmoothStep = Settings.SmoothStep == 5 and 10 or 5
-        StepOption.Text = "PASSO: " .. Settings.SmoothStep
+
+        StepOption.Text = "PASSO: "
+            .. Settings.SmoothStep
             .. "% (TOQUE PARA ALTERNAR)"
     end
 )
 
 local function ChangeSmoothness(direction)
-    local current = math.floor(Settings.AimSmoothness * 100 + 0.5)
+    local current = math.floor(
+        Settings.AimSmoothness * 100 + 0.5
+    )
 
     current = math.clamp(
         current + direction * Settings.SmoothStep,
@@ -369,12 +503,18 @@ CreateOption(AimTab, "DIMINUIR SUAVIDADE -", 295, function()
     ChangeSmoothness(-1)
 end)
 
--- ESP
+--==================================================
+-- ESP PLAYER + ESP BOT
+--==================================================
+
 local EspTab = CreateTab("ESP", 2)
 
 local function RemoveESP(target)
     local objects = ESPObjects[target]
-    if not objects then return end
+
+    if not objects then
+        return
+    end
 
     if objects.Highlight then
         objects.Highlight:Destroy()
@@ -387,20 +527,34 @@ local function RemoveESP(target)
     ESPObjects[target] = nil
 end
 
-local function AddESP(target)
-    if target == Player or not Settings.ESP then return end
+-- Cria ESP para qualquer Model com Humanoid.
+-- Nao exige Head: usa outra BasePart se necessario.
 
-    local character = target.Character
-    if not IsAlive(character) then return end
+local function AddESP(target, character, displayName)
+    if not character or not character:IsA("Model") then
+        return
+    end
 
-    local head = character:FindFirstChild("Head")
-    if not head then return end
+    if not character.Parent or not IsAlive(character) then
+        return
+    end
+
+    local anchor = GetCharacterAnchor(character)
+
+    if not anchor then
+        return
+    end
 
     local oldObjects = ESPObjects[target]
 
-    if oldObjects and oldObjects.Character == character
-        and oldObjects.Highlight and oldObjects.Highlight.Parent
-        and oldObjects.Billboard and oldObjects.Billboard.Parent then
+    if oldObjects
+        and oldObjects.Character == character
+        and oldObjects.Highlight
+        and oldObjects.Highlight.Parent
+        and oldObjects.Billboard
+        and oldObjects.Billboard.Parent
+        and oldObjects.Billboard.Adornee == anchor then
+
         return
     end
 
@@ -418,16 +572,17 @@ local function AddESP(target)
 
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "TalesESPName"
-    billboard.Adornee = head
+    billboard.Adornee = anchor
     billboard.Size = UDim2.fromOffset(180, 30)
     billboard.StudsOffset = Vector3.new(0, 2.7, 0)
     billboard.AlwaysOnTop = true
     billboard.Parent = PlayerGui
 
     local label = Instance.new("TextLabel")
+    label.Name = "NameLabel"
     label.Size = UDim2.fromScale(1, 1)
     label.BackgroundTransparency = 1
-    label.Text = target.DisplayName
+    label.Text = tostring(displayName or character.Name)
     label.TextColor3 = BLUE_OUTLINE
     label.TextStrokeColor3 = Color3.fromRGB(0, 35, 90)
     label.TextStrokeTransparency = 0.15
@@ -439,84 +594,158 @@ local function AddESP(target)
         Character = character,
         Highlight = highlight,
         Billboard = billboard,
+        Anchor = anchor,
     }
 
-    SetAIEvent("ESP criado para " .. target.DisplayName)
+    SetAIEvent("ESP criado: " .. tostring(displayName or character.Name))
 end
 
 local function UpdateESP()
-    for _, target in ipairs(Players:GetPlayers()) do
-        if target ~= Player then
-            if Settings.ESP then
-                AddESP(target)
-            else
-                RemoveESP(target)
+    local activeObjects = {}
+
+    -- Jogadores.
+    if Settings.ESPPlayers then
+        for _, target in ipairs(Players:GetPlayers()) do
+            if target ~= Player then
+                local character = target.Character
+
+                if character and IsAlive(character) then
+                    activeObjects[target] = true
+
+                    AddESP(
+                        target,
+                        character,
+                        target.DisplayName
+                    )
+                end
             end
         end
     end
 
+    -- Bots/NPCs.
+    if Settings.ESPBots then
+        for _, model in ipairs(CachedNPCs) do
+            if model
+                and model.Parent
+                and IsAlive(model)
+                and not IsPlayerCharacter(model) then
+
+                activeObjects[model] = true
+
+                AddESP(
+                    model,
+                    model,
+                    model.Name
+                )
+            end
+        end
+    end
+
+    -- Remove objetos que nao devem mais aparecer.
     for target in pairs(ESPObjects) do
-        if target.Parent ~= Players then
+        if not activeObjects[target] then
             RemoveESP(target)
         end
     end
 end
 
-CreateToggle(EspTab, "ESP PLAYER", function(state)
-    Settings.ESP = state
+CreateToggle(EspTab, "ESP PLAYER + ESP NAME", function(state)
+    Settings.ESPPlayers = state
 
-    if state then
-        UpdateESP()
-    else
-        for target in pairs(ESPObjects) do
-            RemoveESP(target)
-        end
-    end
+    UpdateESP()
+
+    SetAIEvent(
+        state and "ESP de jogadores ativado"
+        or "ESP de jogadores desativado"
+    )
 end, 15)
 
-CreateInfo(
+CreateToggle(EspTab, "ESP BOT + NOME", function(state)
+    Settings.ESPBots = state
+
+    if state then
+        RefreshNPCs()
+    end
+
+    UpdateESP()
+
+    SetAIEvent(
+        state and "busca de bots/NPCs ativada"
+        or "busca de bots/NPCs desativada"
+    )
+end, 65)
+
+CreateToggle(EspTab, "RECUPERACAO AUTOMATICA", function(state)
+    Settings.SmartRecovery = state
+
+    SetAIEvent(
+        state and "recuperacao automatica ativada"
+        or "recuperacao automatica desativada"
+    )
+end, 115, true)
+
+local ESPInfo = CreateInfo(
     EspTab,
-    "A IA revisa os jogadores e recria o ESP apos respawn.",
-    70,
-    50
+    "Player e NPC possuem deteccao separada. O nome aparece junto com o ESP.",
+    165,
+    55
 )
 
+--==================================================
+-- EVENTOS DE JOGADORES E RESPAWN
+--==================================================
+
 local function TrackPlayer(target)
-    if target == Player or PlayerConnections[target] then return end
+    if target == Player or PlayerConnections[target] then
+        return
+    end
 
     local connections = {}
     PlayerConnections[target] = connections
 
-    table.insert(connections, target.CharacterAdded:Connect(function(character)
-        if Settings.ESP then
+    table.insert(
+        connections,
+        target.CharacterAdded:Connect(function(character)
             task.spawn(function()
                 character:WaitForChild("Humanoid", 12)
-                character:WaitForChild("Head", 12)
-                task.wait(0.15)
+                task.wait(0.2)
 
-                if Settings.ESP and target.Parent == Players then
-                    AddESP(target)
+                if Settings.ESPPlayers
+                    and target.Parent == Players
+                    and character.Parent then
+
+                    AddESP(
+                        target,
+                        character,
+                        target.DisplayName
+                    )
+
                     SetAIEvent(
-                        "respawn detectado; ESP verificado para "
-                        .. target.DisplayName
+                        "respawn detectado: " .. target.DisplayName
                     )
                 end
             end)
-        end
-    end))
+        end)
+    )
 
-    table.insert(connections, target.CharacterRemoving:Connect(function()
-        RemoveESP(target)
-    end))
+    table.insert(
+        connections,
+        target.CharacterRemoving:Connect(function()
+            RemoveESP(target)
+        end)
+    )
 
-    if Settings.ESP then
+    if Settings.ESPPlayers and target.Character then
         task.spawn(function()
-            if target.Character then
-                target.Character:WaitForChild("Humanoid", 8)
-                target.Character:WaitForChild("Head", 8)
-            end
+            target.Character:WaitForChild("Humanoid", 8)
 
-            AddESP(target)
+            if target.Character and Settings.ESPPlayers then
+                AddESP(
+                    target,
+                    target.Character,
+                    target.DisplayName
+                )
+            end
         end)
     end
 end
@@ -541,7 +770,10 @@ Players.PlayerRemoving:Connect(function(target)
     end
 end)
 
+--==================================================
 -- AIM FOV
+--==================================================
+
 local FovTab = CreateTab("AIM FOV", 3)
 
 local FOVCircle = Instance.new("Frame")
@@ -601,7 +833,10 @@ CreateOption(FovTab, "DIMINUIR -", 140, function()
     ChangeFOV(-20)
 end)
 
+--==================================================
 -- PERSEGUICAO
+--==================================================
+
 local PursuitTab = CreateTab("PERSEGUICAO", 4)
 
 local Sensor = Instance.new("Frame")
@@ -659,6 +894,7 @@ local function UpdateSensor()
 
     Sensor.Position = Settings.SensorPosition
     Sensor.Visible = Settings.Pursuit
+
     SensorText.Text = Settings.PursuitActive and "ON" or "MIRA"
 
     Sensor.BackgroundColor3 = Settings.PursuitActive
@@ -716,11 +952,16 @@ local sensorOrigin = nil
 local sensorMoved = false
 
 local function InputPosition(input)
-    return Vector2.new(input.Position.X, input.Position.Y)
+    return Vector2.new(
+        input.Position.X,
+        input.Position.Y
+    )
 end
 
 local function InsideSensor(position)
-    local center = Sensor.AbsolutePosition + Sensor.AbsoluteSize / 2
+    local center = Sensor.AbsolutePosition
+        + Sensor.AbsoluteSize / 2
+
     local half = Sensor.AbsoluteSize / 2
 
     return math.abs(position.X - center.X) <= half.X
@@ -729,7 +970,10 @@ end
 
 local function SetSensorPosition(position)
     local camera = workspace.CurrentCamera
-    if not camera then return end
+
+    if not camera then
+        return
+    end
 
     local viewport = camera.ViewportSize
 
@@ -744,15 +988,22 @@ local function SetSensorPosition(position)
 end
 
 UserInputService.InputBegan:Connect(function(input)
-    if not Settings.Pursuit then return end
+    if not Settings.Pursuit then
+        return
+    end
 
     local touch = input.UserInputType == Enum.UserInputType.Touch
     local click = input.UserInputType == Enum.UserInputType.MouseButton1
 
-    if not touch and not click then return end
+    if not touch and not click then
+        return
+    end
 
     local pos = InputPosition(input)
-    if not InsideSensor(pos) then return end
+
+    if not InsideSensor(pos) then
+        return
+    end
 
     if Settings.SensorLocked then
         Settings.PursuitActive = not Settings.PursuitActive
@@ -767,11 +1018,15 @@ UserInputService.InputBegan:Connect(function(input)
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if not sensorDragging then return end
+    if not sensorDragging then
+        return
+    end
 
     local move = input.UserInputType == Enum.UserInputType.MouseMovement
 
-    if not move and input ~= sensorInput then return end
+    if not move and input ~= sensorInput then
+        return
+    end
 
     local delta = InputPosition(input) - sensorStart
 
@@ -795,7 +1050,10 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- IA ASSIST: PAINEL DE ATIVIDADE E DIAGNOSTICO
+--==================================================
+-- IA ASSIST
+--==================================================
+
 local AITab = CreateTab("IA ASSIST", 5)
 
 local AIStatus = CreateInfo(
@@ -826,6 +1084,13 @@ AIEventStatus = CreateInfo(
     55
 )
 
+local NPCStatus = CreateInfo(
+    AITab,
+    "Bots detectados: 0",
+    145,
+    25
+)
+
 CreateToggle(AITab, "RECUPERACAO INTELIGENTE", function(state)
     Settings.SmartRecovery = state
 
@@ -833,7 +1098,7 @@ CreateToggle(AITab, "RECUPERACAO INTELIGENTE", function(state)
         state and "recuperacao inteligente ativada"
         or "recuperacao inteligente desativada"
     )
-end, 175, true)
+end, 180, true)
 
 CreateToggle(AITab, "PROTECAO AO VIRAR CIVIL", function(state)
     Settings.CivilProtection = state
@@ -851,16 +1116,19 @@ CreateToggle(AITab, "PROTECAO AO VIRAR CIVIL", function(state)
             or "protecao civil desativada"
         )
     end
-end, 220, true)
+end, 225, true)
 
 CreateInfo(
     AITab,
-    "A IA informa deteccoes, alvo, ESP e protecao. Ela monitora; nao altera dano nem cargo.",
-    265,
-    48
+    "A IA monitora alvos, ESP, bots e protecao. Nao altera dano nem cargo.",
+    270,
+    45
 )
 
--- VALORES PUBLICOS PARA O SISTEMA DE ARMAS / OUTROS LOCALSCRIPTS
+--==================================================
+-- VALORES PUBLICOS
+--==================================================
+
 local TargetValue = Instance.new("ObjectValue")
 TargetValue.Name = "TalesCurrentTarget"
 TargetValue.Parent = GUI
@@ -880,17 +1148,27 @@ CivilValue.Name = "TalesIsCivil"
 CivilValue.Value = false
 CivilValue.Parent = GUI
 
--- SELECAO DE ALVO
+--==================================================
+-- SELECAO DE ALVOS
+--==================================================
+
 local function GetTargetPart(character)
+    if not character then
+        return nil
+    end
+
     if Settings.Target == "Cabeca" then
         return character:FindFirstChild("Head")
+            or GetCharacterAnchor(character)
+
     elseif Settings.Target == "Peito" then
         return character:FindFirstChild("UpperTorso")
             or character:FindFirstChild("Torso")
             or character:FindFirstChild("HumanoidRootPart")
+            or GetCharacterAnchor(character)
     end
 
-    return character:FindFirstChild("HumanoidRootPart")
+    return GetCharacterAnchor(character)
 end
 
 local function GetTargetScreenDistance(target)
@@ -900,7 +1178,7 @@ local function GetTargetScreenDistance(target)
         return nil
     end
 
-    local character = target.Character
+    local character = GetCharacter(target)
     local part = character and GetTargetPart(character)
 
     if not part or not IsAlive(character) then
@@ -914,6 +1192,7 @@ local function GetTargetScreenDistance(target)
     end
 
     local viewport = Camera.ViewportSize
+
     local center = Vector2.new(
         viewport.X * 0.5,
         viewport.Y * 0.5
@@ -936,6 +1215,9 @@ local function IsTargetInRange(target)
     return distance <= limit
 end
 
+-- Busca jogadores e NPCs.
+-- A lista de alvos nao depende de ESP estar ligado.
+
 local function GetClosestTarget()
     Camera = workspace.CurrentCamera
 
@@ -944,30 +1226,45 @@ local function GetClosestTarget()
     end
 
     local bestDistance = math.huge
-    local bestPlayer = nil
+    local bestTarget = nil
 
-    for _, target in ipairs(Players:GetPlayers()) do
-        if target ~= Player then
-            local distance = GetTargetScreenDistance(target)
-            local limit = Settings.FOV and Settings.FOVSize or 300
+    local limit = Settings.FOV and Settings.FOVSize or 300
 
-            if distance and distance <= limit
-                and distance < bestDistance then
+    local function CheckTarget(target)
+        if not target or target == Player then
+            return
+        end
 
-                bestDistance = distance
-                bestPlayer = target
-            end
+        local distance = GetTargetScreenDistance(target)
+
+        if distance
+            and distance <= limit
+            and distance < bestDistance then
+
+            bestDistance = distance
+            bestTarget = target
         end
     end
 
-    return bestPlayer, bestDistance
+    -- Jogadores.
+    for _, target in ipairs(Players:GetPlayers()) do
+        if target ~= Player then
+            CheckTarget(target)
+        end
+    end
+
+    -- Bots/NPCs.
+    for _, model in ipairs(CachedNPCs) do
+        if model and model.Parent and not IsPlayerCharacter(model) then
+            CheckTarget(model)
+        end
+    end
+
+    return bestTarget, bestDistance
 end
 
--- SELECAO ESTAVEL:
--- Mantem o alvo atual para evitar alternancia rapida entre jogadores.
--- So troca se o atual ficar invalido/fora do FOV ou se outro estiver claramente melhor.
 local function GetStableTarget()
-    local bestPlayer, bestDistance = GetClosestTarget()
+    local bestTarget, bestDistance = GetClosestTarget()
 
     local currentDistance = CurrentTarget
         and IsTargetInRange(CurrentTarget)
@@ -975,22 +1272,29 @@ local function GetStableTarget()
         or nil
 
     if not currentDistance then
-        return bestPlayer
+        return bestTarget
     end
 
-    if not bestPlayer or bestPlayer == CurrentTarget then
+    if not bestTarget or bestTarget == CurrentTarget then
         return CurrentTarget
     end
 
     if bestDistance and bestDistance < currentDistance * 0.80 then
-        SetAIEvent("troca estavel de alvo: " .. bestPlayer.DisplayName)
-        return bestPlayer
+        SetAIEvent(
+            "troca estavel de alvo: "
+            .. GetTargetName(bestTarget)
+        )
+
+        return bestTarget
     end
 
     return CurrentTarget
 end
 
--- DRAG DA JANELA PRINCIPAL
+--==================================================
+-- ARRASTAR JANELA PRINCIPAL
+--==================================================
+
 do
     local dragStart
     local startPos
@@ -1008,7 +1312,9 @@ do
     end)
 
     UserInputService.InputChanged:Connect(function(input)
-        if not draggingPanel then return end
+        if not draggingPanel then
+            return
+        end
 
         if input ~= activeInput
             and input.UserInputType ~= Enum.UserInputType.MouseMovement then
@@ -1035,11 +1341,13 @@ do
     end)
 end
 
--- BOTAO MINIMIZADO MOVEL: arrastar move; toque curto restaura.
+--==================================================
+-- BOTAO MINIMIZADO MOVEL
+--==================================================
+
 local miniDragging = false
 local miniInput = nil
 local miniStart = nil
-local miniOrigin = nil
 local miniMoved = false
 
 MiniButton.InputBegan:Connect(function(input)
@@ -1049,13 +1357,14 @@ MiniButton.InputBegan:Connect(function(input)
         miniDragging = true
         miniInput = input
         miniStart = InputPosition(input)
-        miniOrigin = MiniButton.Position
         miniMoved = false
     end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if not miniDragging then return end
+    if not miniDragging then
+        return
+    end
 
     local isMouse = input.UserInputType == Enum.UserInputType.MouseMovement
 
@@ -1093,7 +1402,9 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if not miniDragging then return end
+    if not miniDragging then
+        return
+    end
 
     if input == miniInput
         or input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -1116,9 +1427,10 @@ Minimize.MouseButton1Click:Connect(function()
     MiniButton.Visible = true
 end)
 
--- MONITOR PRINCIPAL
-local espTimer = 0
-local aiTimer = 0
+--==================================================
+-- MORTE E RENASCIMENTO LOCAL
+--==================================================
+
 local characterConnection
 
 local function BindLocalCharacter(character)
@@ -1126,16 +1438,19 @@ local function BindLocalCharacter(character)
         characterConnection:Disconnect()
     end
 
-    characterConnection = character:WaitForChild("Humanoid", 10)
-        and character:FindFirstChildOfClass("Humanoid").Died:Connect(function()
+    local humanoid = character:WaitForChild("Humanoid", 10)
 
+    if humanoid then
+        characterConnection = humanoid.Died:Connect(function()
             Settings.PursuitActive = false
             CurrentTarget = nil
+
             TargetValue.Value = nil
             PursuitValue.Value = false
 
             UpdateSensor()
         end)
+    end
 end
 
 Player.CharacterAdded:Connect(BindLocalCharacter)
@@ -1143,6 +1458,7 @@ Player.CharacterAdded:Connect(BindLocalCharacter)
 Player.CharacterRemoving:Connect(function()
     Settings.PursuitActive = false
     CurrentTarget = nil
+
     TargetValue.Value = nil
     PursuitValue.Value = false
 
@@ -1153,8 +1469,13 @@ if Player.Character then
     task.spawn(BindLocalCharacter, Player.Character)
 end
 
-Player:GetPropertyChangedSignal("Team"):Connect(function()
+--==================================================
+-- DETECCAO DE EQUIPE CIVIL
+--==================================================
+
+local function UpdateCivilStatus()
     local wasCivil = IsCivil
+
     IsCivil = IsLocalPlayerCivil()
 
     if IsCivil ~= wasCivil then
@@ -1171,15 +1492,22 @@ Player:GetPropertyChangedSignal("Team"):Connect(function()
 
         UpdateSensor()
     end
-end)
+end
 
-Player:GetAttributeChangedSignal("Role"):Connect(function()
-    IsCivil = IsLocalPlayerCivil()
-end)
+Player:GetPropertyChangedSignal("Team"):Connect(UpdateCivilStatus)
 
-Player:GetAttributeChangedSignal("Class"):Connect(function()
-    IsCivil = IsLocalPlayerCivil()
-end)
+Player:GetAttributeChangedSignal("Role"):Connect(UpdateCivilStatus)
+Player:GetAttributeChangedSignal("Class"):Connect(UpdateCivilStatus)
+Player:GetAttributeChangedSignal("Job"):Connect(UpdateCivilStatus)
+Player:GetAttributeChangedSignal("TeamRole"):Connect(UpdateCivilStatus)
+
+--==================================================
+-- MONITOR PRINCIPAL
+--==================================================
+
+local espTimer = 0
+local npcTimer = 0
+local aiTimer = 0
 
 RunService.RenderStepped:Connect(function(deltaTime)
     Camera = workspace.CurrentCamera
@@ -1193,13 +1521,30 @@ RunService.RenderStepped:Connect(function(deltaTime)
         )
     end
 
+    -- Atualiza a lista de NPCs mesmo quando a ESP esta desligada,
+    -- pois o aimbot tambem pode procurar esses personagens.
+
+    npcTimer += deltaTime
+
+    if npcTimer >= 0.60 then
+        npcTimer = 0
+
+        RefreshNPCs()
+
+        if Settings.ESPBots or Settings.ESPPlayers then
+            UpdateESP()
+        end
+    end
+
+    -- Recuperacao periodica da ESP.
     espTimer += deltaTime
 
-    if Settings.ESP and Settings.SmartRecovery and espTimer >= 0.35 then
+    if Settings.SmartRecovery and espTimer >= 0.40 then
         espTimer = 0
-        UpdateESP()
-    elseif espTimer >= 1 then
-        espTimer = 0
+
+        if Settings.ESPPlayers or Settings.ESPBots then
+            UpdateESP()
+        end
     end
 
     IsCivil = IsLocalPlayerCivil()
@@ -1219,7 +1564,11 @@ RunService.RenderStepped:Connect(function(deltaTime)
         CurrentTarget = GetStableTarget()
 
         if CurrentTarget and CurrentTarget ~= previousTarget then
-            SetAIEvent("alvo localizado: " .. CurrentTarget.DisplayName)
+            SetAIEvent(
+                "alvo localizado: "
+                .. GetTargetName(CurrentTarget)
+            )
+
         elseif not CurrentTarget then
             SetAIEvent("nenhum alvo dentro do limite atual")
         end
@@ -1231,8 +1580,10 @@ RunService.RenderStepped:Connect(function(deltaTime)
         CurrentTarget = nil
     end
 
-    local targetCharacter = CurrentTarget and CurrentTarget.Character
-    local targetPart = targetCharacter and GetTargetPart(targetCharacter)
+    local targetCharacter = GetCharacter(CurrentTarget)
+
+    local targetPart = targetCharacter
+        and GetTargetPart(targetCharacter)
 
     if not targetPart or not IsAlive(targetCharacter) then
         CurrentTarget = nil
@@ -1240,10 +1591,13 @@ RunService.RenderStepped:Connect(function(deltaTime)
         targetPart = nil
     end
 
-    -- Assistencia visual de camera.
-    -- 0% = sem movimento; 100% = acompanhamento imediato.
+    -- Assistencia original de camera.
+    -- 0% = sem movimento.
+    -- 100% = acompanhamento imediato.
+
     if wantsAim and targetPart and Camera then
         local cameraPosition = Camera.CFrame.Position
+
         local desired = CFrame.lookAt(
             cameraPosition,
             targetPart.Position
@@ -1256,39 +1610,49 @@ RunService.RenderStepped:Connect(function(deltaTime)
         )
 
         local alpha = smooth <= 0 and 0
-            or (smooth >= 1 and 1
-            or 1 - math.pow(
-                1 - smooth,
-                math.max(deltaTime * 60, 0.01)
-            ))
+            or (
+                smooth >= 1 and 1
+                or 1 - math.pow(
+                    1 - smooth,
+                    math.max(deltaTime * 60, 0.01)
+                )
+            )
 
         if alpha > 0 then
-            Camera.CFrame = Camera.CFrame:Lerp(desired, alpha)
+            Camera.CFrame = Camera.CFrame:Lerp(
+                desired,
+                alpha
+            )
         end
     end
 
+    -- Publica o personagem, seja jogador ou NPC.
     TargetValue.Value = targetCharacter
     TargetPartValue.Value = Settings.Target or ""
     PursuitValue.Value = wantsPursuit
 
+    -- IA Assist.
     aiTimer += deltaTime
 
     if aiTimer >= 0.25 then
         aiTimer = 0
 
         if IsCivil then
-            LastAIStatus = "CIVIL DETECTADO - ASSISTENCIA DE COMBATE BLOQUEADA"
+            LastAIStatus = "CIVIL DETECTADO - COMBATE BLOQUEADO"
+
         elseif not CombatAllowed() then
             LastAIStatus = "PROTECAO ATIVA"
+
         elseif CurrentTarget then
             LastAIStatus = "ALVO ACOMPANHADO - "
-                .. CurrentTarget.DisplayName
+                .. GetTargetName(CurrentTarget)
+
         elseif wantsAim or wantsPursuit then
             LastAIStatus = "PROCURANDO ALVO NO FOV"
-        elseif Settings.ESP then
-            LastAIStatus = "MONITORANDO ESP - "
-                .. tostring(#Players:GetPlayers() - 1)
-                .. " JOGADOR(ES)"
+
+        elseif Settings.ESPPlayers or Settings.ESPBots then
+            LastAIStatus = "MONITORANDO ESP"
+
         else
             LastAIStatus = "MONITORANDO SISTEMAS"
         end
@@ -1296,15 +1660,33 @@ RunService.RenderStepped:Connect(function(deltaTime)
         AIStatus.Text = "IA: " .. LastAIStatus
 
         TargetStatus.Text = "Alvo: "
-            .. (CurrentTarget and CurrentTarget.DisplayName or "nenhum")
+            .. GetTargetName(CurrentTarget)
 
         CivilStatus.Text = IsCivil
             and "Funcao: CIVIL detectado"
             or "Funcao: nao identificada como civil"
+
+        NPCStatus.Text = "Bots detectados: "
+            .. tostring(#CachedNPCs)
+
+        ESPInfo.Text = "Players: "
+            .. tostring(#Players:GetPlayers() - 1)
+            .. " | Bots: "
+            .. tostring(#CachedNPCs)
+            .. " | Recuperacao: "
+            .. (Settings.SmartRecovery and "ON" or "OFF")
     end
 end)
 
+--==================================================
+-- INICIALIZACAO
+--==================================================
+
+RefreshNPCs()
 UpdateSensor()
-IsCivil = IsLocalPlayerCivil()
+UpdateCivilStatus()
 
 print("Tales Mod Menu IA Assist carregado.")
+print("ESP Player + Name: pronto.")
+print("ESP Bot/NPC: pronto.")
+print("Busca de alvos independente da ESP: pronta.")
