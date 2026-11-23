@@ -38,6 +38,7 @@ local Settings = {
     Aimbot = false,
     Target = nil,
     AimSmoothness = 0.22,
+    SmoothStep = 5,
     ESP = false,
     FOV = false,
     FOVSize = 120,
@@ -56,8 +57,15 @@ local PlayerConnections = {}
 local Camera = workspace.CurrentCamera
 local IsCivil = false
 local LastAIStatus = "AGUARDANDO"
+local AIEventStatus = nil
 local minimized = false
 local draggingPanel = false
+
+local function SetAIEvent(message)
+    if AIEventStatus then
+        AIEventStatus.Text = "Ultima deteccao: " .. message
+    end
+end
 
 local function IsAlive(character)
     if not character or not character.Parent then return false end
@@ -72,6 +80,7 @@ local function IsLocalPlayerCivil()
         or Player:GetAttribute("Job") or Player:GetAttribute("TeamRole")
     role = string.lower(tostring(role or ""))
     local combined = teamName .. " " .. role
+
     return string.find(combined, "civil") ~= nil
         or string.find(combined, "cidada") ~= nil
         or string.find(combined, "cidadão") ~= nil
@@ -91,8 +100,8 @@ GUI.Parent = PlayerGui
 
 local Main = Instance.new("Frame")
 Main.Name = "Main"
-Main.Size = UDim2.fromOffset(460, 340)
-Main.Position = UDim2.new(0.5, -230, 0.5, -170)
+Main.Size = UDim2.fromOffset(460, 420)
+Main.Position = UDim2.new(0.5, -230, 0.5, -210)
 Main.BackgroundColor3 = PANEL
 Main.BorderSizePixel = 0
 Main.Parent = GUI
@@ -159,6 +168,7 @@ MiniButton.Visible = false
 MiniButton.Active = true
 MiniButton.Parent = GUI
 MiniButton.ZIndex = 100
+
 Instance.new("UICorner", MiniButton).CornerRadius = UDim.new(0, 17)
 
 local miniStroke = Instance.new("UIStroke")
@@ -183,11 +193,14 @@ local function CreateTab(name, index)
     button.TextSize = 11
     button.Font = Enum.Font.GothamBold
     button.Parent = Sidebar
+
     Instance.new("UICorner", button)
 
     button.MouseButton1Click:Connect(function()
         for _, child in ipairs(Content:GetChildren()) do
-            if child:IsA("Frame") then child.Visible = false end
+            if child:IsA("Frame") then
+                child.Visible = false
+            end
         end
 
         for _, item in ipairs(Sidebar:GetChildren()) do
@@ -217,6 +230,7 @@ local function CreateToggle(parent, name, callback, y, initial)
     button.TextSize = 13
     button.Font = Enum.Font.GothamBold
     button.Parent = parent
+
     Instance.new("UICorner", button)
 
     local enabled = initial == true
@@ -249,9 +263,11 @@ local function CreateOption(parent, name, y, callback)
     button.TextSize = 12
     button.Font = Enum.Font.GothamBold
     button.Parent = parent
+
     Instance.new("UICorner", button)
 
     button.MouseButton1Click:Connect(callback)
+
     return button
 end
 
@@ -271,7 +287,7 @@ local function CreateInfo(parent, text, y, height)
     return label
 end
 
--- AIMBOT / ASSISTENCIA
+-- AIMBOT / ASSISTENCIA ORIGINAL
 local AimTab = CreateTab("AIMBOT", 1)
 local AimPrompt = CreateInfo(
     AimTab,
@@ -285,6 +301,7 @@ local HeadOption, ChestOption
 local function SelectAimPart(partName)
     Settings.Target = partName
     AimPrompt.Text = "Parte selecionada: " .. partName
+
     HeadOption.Visible = false
     ChestOption.Visible = false
 end
@@ -317,28 +334,39 @@ end)
 HeadOption.Visible = false
 ChestOption.Visible = false
 
-local SmoothLabel = CreateInfo(AimTab, "Suavidade: 22%", 190, 25)
+local SmoothLabel = CreateInfo(AimTab, "Suavidade: 20%", 190, 25)
 
-CreateOption(AimTab, "AUMENTAR SUAVIDADE +", 220, function()
-    Settings.AimSmoothness = math.clamp(
-        Settings.AimSmoothness + 0.05,
-        0.05,
-        0.8
+local StepOption
+StepOption = CreateOption(
+    AimTab,
+    "PASSO: 5% (TOQUE PARA 10%)",
+    218,
+    function()
+        Settings.SmoothStep = Settings.SmoothStep == 5 and 10 or 5
+        StepOption.Text = "PASSO: " .. Settings.SmoothStep
+            .. "% (TOQUE PARA ALTERNAR)"
+    end
+)
+
+local function ChangeSmoothness(direction)
+    local current = math.floor(Settings.AimSmoothness * 100 + 0.5)
+
+    current = math.clamp(
+        current + direction * Settings.SmoothStep,
+        0,
+        100
     )
 
-    SmoothLabel.Text = "Suavidade: "
-        .. math.floor(Settings.AimSmoothness * 100) .. "%"
+    Settings.AimSmoothness = current / 100
+    SmoothLabel.Text = "Suavidade: " .. current .. "%"
+end
+
+CreateOption(AimTab, "AUMENTAR SUAVIDADE +", 255, function()
+    ChangeSmoothness(1)
 end)
 
-CreateOption(AimTab, "DIMINUIR SUAVIDADE -", 260, function()
-    Settings.AimSmoothness = math.clamp(
-        Settings.AimSmoothness - 0.05,
-        0.05,
-        0.8
-    )
-
-    SmoothLabel.Text = "Suavidade: "
-        .. math.floor(Settings.AimSmoothness * 100) .. "%"
+CreateOption(AimTab, "DIMINUIR SUAVIDADE -", 295, function()
+    ChangeSmoothness(-1)
 end)
 
 -- ESP
@@ -365,21 +393,14 @@ local function AddESP(target)
     local character = target.Character
     if not IsAlive(character) then return end
 
-    -- Usa Head quando existir; em personagens que ainda estao carregando,
-    -- usa HumanoidRootPart temporariamente para nao perder o ESP.
     local head = character:FindFirstChild("Head")
-        or character:FindFirstChild("HumanoidRootPart")
-
     if not head then return end
 
     local oldObjects = ESPObjects[target]
 
-    if oldObjects
-        and oldObjects.Character == character
-        and oldObjects.Highlight
-        and oldObjects.Highlight.Parent
-        and oldObjects.Billboard
-        and oldObjects.Billboard.Parent then
+    if oldObjects and oldObjects.Character == character
+        and oldObjects.Highlight and oldObjects.Highlight.Parent
+        and oldObjects.Billboard and oldObjects.Billboard.Parent then
         return
     end
 
@@ -419,6 +440,8 @@ local function AddESP(target)
         Highlight = highlight,
         Billboard = billboard,
     }
+
+    SetAIEvent("ESP criado para " .. target.DisplayName)
 end
 
 local function UpdateESP()
@@ -468,16 +491,15 @@ local function TrackPlayer(target)
         if Settings.ESP then
             task.spawn(function()
                 character:WaitForChild("Humanoid", 12)
-
-                local head = character:WaitForChild("Head", 5)
-                if not head then
-                    character:WaitForChild("HumanoidRootPart", 5)
-                end
-
+                character:WaitForChild("Head", 12)
                 task.wait(0.15)
 
                 if Settings.ESP and target.Parent == Players then
                     AddESP(target)
+                    SetAIEvent(
+                        "respawn detectado; ESP verificado para "
+                        .. target.DisplayName
+                    )
                 end
             end)
         end
@@ -491,11 +513,7 @@ local function TrackPlayer(target)
         task.spawn(function()
             if target.Character then
                 target.Character:WaitForChild("Humanoid", 8)
-
-                local head = target.Character:WaitForChild("Head", 4)
-                if not head then
-                    target.Character:WaitForChild("HumanoidRootPart", 4)
-                end
+                target.Character:WaitForChild("Head", 8)
             end
 
             AddESP(target)
@@ -513,6 +531,7 @@ Players.PlayerRemoving:Connect(function(target)
     RemoveESP(target)
 
     local connections = PlayerConnections[target]
+
     if connections then
         for _, connection in ipairs(connections) do
             connection:Disconnect()
@@ -641,6 +660,7 @@ local function UpdateSensor()
     Sensor.Position = Settings.SensorPosition
     Sensor.Visible = Settings.Pursuit
     SensorText.Text = Settings.PursuitActive and "ON" or "MIRA"
+
     Sensor.BackgroundColor3 = Settings.PursuitActive
         and Color3.fromRGB(20, 190, 90)
         or BLUE
@@ -732,7 +752,6 @@ UserInputService.InputBegan:Connect(function(input)
     if not touch and not click then return end
 
     local pos = InputPosition(input)
-
     if not InsideSensor(pos) then return end
 
     if Settings.SensorLocked then
@@ -776,33 +795,45 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- IA ASSIST
+-- IA ASSIST: PAINEL DE ATIVIDADE E DIAGNOSTICO
 local AITab = CreateTab("IA ASSIST", 5)
 
 local AIStatus = CreateInfo(
     AITab,
     "IA: INICIANDO...",
     15,
-    38
+    35
 )
 
 local TargetStatus = CreateInfo(
     AITab,
     "Alvo: nenhum",
-    55,
-    30
+    52,
+    27
 )
 
 local CivilStatus = CreateInfo(
     AITab,
     "Funcao: verificando",
-    85,
-    32
+    80,
+    27
+)
+
+AIEventStatus = CreateInfo(
+    AITab,
+    "Ultima deteccao: aguardando atividade",
+    110,
+    55
 )
 
 CreateToggle(AITab, "RECUPERACAO INTELIGENTE", function(state)
     Settings.SmartRecovery = state
-end, 125, true)
+
+    SetAIEvent(
+        state and "recuperacao inteligente ativada"
+        or "recuperacao inteligente desativada"
+    )
+end, 175, true)
 
 CreateToggle(AITab, "PROTECAO AO VIRAR CIVIL", function(state)
     Settings.CivilProtection = state
@@ -812,14 +843,21 @@ CreateToggle(AITab, "PROTECAO AO VIRAR CIVIL", function(state)
         Settings.Aimbot = false
         CurrentTarget = nil
         UpdateSensor()
+
+        SetAIEvent("protecao ativada: funcao civil detectada")
+    else
+        SetAIEvent(
+            state and "protecao civil ativada"
+            or "protecao civil desativada"
+        )
     end
-end, 170, true)
+end, 220, true)
 
 CreateInfo(
     AITab,
-    "A IA monitora ESP, alvo, respawn e funcao civil. A troca de cargo depende do sistema de equipes do jogo.",
-    220,
-    65
+    "A IA informa deteccoes, alvo, ESP e protecao. Ela monitora; nao altera dano nem cargo.",
+    265,
+    48
 )
 
 -- VALORES PUBLICOS PARA O SISTEMA DE ARMAS / OUTROS LOCALSCRIPTS
@@ -855,13 +893,23 @@ local function GetTargetPart(character)
     return character:FindFirstChild("HumanoidRootPart")
 end
 
-local function GetClosestTarget(preferredTarget, requireFOV)
+local function GetTargetScreenDistance(target)
     Camera = workspace.CurrentCamera
 
-    if not Camera then return nil end
+    if not Camera or not target or target == Player then
+        return nil
+    end
 
-    -- Quando a assistencia de mira esta ativa, o FOV e obrigatorio.
-    if requireFOV and not Settings.FOV then
+    local character = target.Character
+    local part = character and GetTargetPart(character)
+
+    if not part or not IsAlive(character) then
+        return nil
+    end
+
+    local point, onScreen = Camera:WorldToViewportPoint(part.Position)
+
+    if not onScreen or point.Z <= 0 then
         return nil
     end
 
@@ -871,55 +919,75 @@ local function GetClosestTarget(preferredTarget, requireFOV)
         viewport.Y * 0.5
     )
 
-    local maxDistance = Settings.FOV and Settings.FOVSize or 300
-    local bestDistance = maxDistance
+    return (
+        Vector2.new(point.X, point.Y) - center
+    ).Magnitude
+end
+
+local function IsTargetInRange(target)
+    local distance = GetTargetScreenDistance(target)
+
+    if not distance then
+        return false
+    end
+
+    local limit = Settings.FOV and Settings.FOVSize or 300
+
+    return distance <= limit
+end
+
+local function GetClosestTarget()
+    Camera = workspace.CurrentCamera
+
+    if not Camera then
+        return nil
+    end
+
+    local bestDistance = math.huge
     local bestPlayer = nil
-    local preferredDistance = nil
 
     for _, target in ipairs(Players:GetPlayers()) do
         if target ~= Player then
-            local character = target.Character
+            local distance = GetTargetScreenDistance(target)
+            local limit = Settings.FOV and Settings.FOVSize or 300
 
-            local humanoid = character
-                and character:FindFirstChildOfClass("Humanoid")
+            if distance and distance <= limit
+                and distance < bestDistance then
 
-            local part = character and GetTargetPart(character)
-
-            if humanoid and humanoid.Health > 0 and part then
-                local point, onScreen =
-                    Camera:WorldToViewportPoint(part.Position)
-
-                if onScreen and point.Z > 0 then
-                    local distance = (
-                        Vector2.new(point.X, point.Y) - center
-                    ).Magnitude
-
-                    if target == preferredTarget then
-                        preferredDistance = distance
-                    end
-
-                    if distance <= bestDistance then
-                        bestDistance = distance
-                        bestPlayer = target
-                    end
-                end
+                bestDistance = distance
+                bestPlayer = target
             end
         end
     end
 
-    -- Pequena histerese: evita alternar entre jogadores muito proximos.
-    -- Se a mira manual se aproximar claramente de outro jogador, troca o alvo.
-    if preferredTarget
-        and preferredDistance
-        and preferredDistance <= maxDistance then
+    return bestPlayer, bestDistance
+end
 
-        if not bestPlayer
-            or preferredDistance <= bestDistance * 1.35 + 10 then
-            return preferredTarget
-        end
+-- SELECAO ESTAVEL:
+-- Mantem o alvo atual para evitar alternancia rapida entre jogadores.
+-- So troca se o atual ficar invalido/fora do FOV ou se outro estiver claramente melhor.
+local function GetStableTarget()
+    local bestPlayer, bestDistance = GetClosestTarget()
+
+    local currentDistance = CurrentTarget
+        and IsTargetInRange(CurrentTarget)
+        and GetTargetScreenDistance(CurrentTarget)
+        or nil
+
+    if not currentDistance then
+        return bestPlayer
     end
 
-    return bestPlayer
+    if not bestPlayer or bestPlayer == CurrentTarget then
+        return CurrentTarget
+    end
+
+    if bestDistance and bestDistance < currentDistance * 0.80 then
+        SetAIEvent("troca estavel de alvo: " .. bestPlayer.DisplayName)
+        return bestPlayer
+    end
+
+    return CurrentTarget
 end
 
 -- DRAG DA JANELA PRINCIPAL
@@ -989,10 +1057,11 @@ end)
 UserInputService.InputChanged:Connect(function(input)
     if not miniDragging then return end
 
-    local isMouse =
-        input.UserInputType == Enum.UserInputType.MouseMovement
+    local isMouse = input.UserInputType == Enum.UserInputType.MouseMovement
 
-    if not isMouse and input ~= miniInput then return end
+    if not isMouse and input ~= miniInput then
+        return
+    end
 
     local delta = InputPosition(input) - miniStart
 
@@ -1059,10 +1128,12 @@ local function BindLocalCharacter(character)
 
     characterConnection = character:WaitForChild("Humanoid", 10)
         and character:FindFirstChildOfClass("Humanoid").Died:Connect(function()
+
             Settings.PursuitActive = false
             CurrentTarget = nil
             TargetValue.Value = nil
             PursuitValue.Value = false
+
             UpdateSensor()
         end)
 end
@@ -1074,6 +1145,7 @@ Player.CharacterRemoving:Connect(function()
     CurrentTarget = nil
     TargetValue.Value = nil
     PursuitValue.Value = false
+
     UpdateSensor()
 end)
 
@@ -1082,12 +1154,21 @@ if Player.Character then
 end
 
 Player:GetPropertyChangedSignal("Team"):Connect(function()
+    local wasCivil = IsCivil
     IsCivil = IsLocalPlayerCivil()
+
+    if IsCivil ~= wasCivil then
+        SetAIEvent(
+            IsCivil and "funcao civil detectada"
+            or "funcao civil nao detectada"
+        )
+    end
 
     if IsCivil and Settings.CivilProtection then
         Settings.PursuitActive = false
         Settings.Aimbot = false
         CurrentTarget = nil
+
         UpdateSensor()
     end
 end)
@@ -1112,7 +1193,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
         )
     end
 
-    espTimer = espTimer + deltaTime
+    espTimer += deltaTime
 
     if Settings.ESP and Settings.SmartRecovery and espTimer >= 0.35 then
         espTimer = 0
@@ -1124,10 +1205,8 @@ RunService.RenderStepped:Connect(function(deltaTime)
     IsCivil = IsLocalPlayerCivil()
     CivilValue.Value = IsCivil
 
-    -- FOV passa a ser obrigatorio para a assistencia de mira.
     local wantsAim = Settings.Aimbot
         and Settings.Target ~= nil
-        and Settings.FOV
         and CombatAllowed()
 
     local wantsPursuit = Settings.Pursuit
@@ -1135,8 +1214,20 @@ RunService.RenderStepped:Connect(function(deltaTime)
         and CombatAllowed()
 
     if wantsAim or wantsPursuit then
-        CurrentTarget = GetClosestTarget(CurrentTarget, wantsAim)
+        local previousTarget = CurrentTarget
+
+        CurrentTarget = GetStableTarget()
+
+        if CurrentTarget and CurrentTarget ~= previousTarget then
+            SetAIEvent("alvo localizado: " .. CurrentTarget.DisplayName)
+        elseif not CurrentTarget then
+            SetAIEvent("nenhum alvo dentro do limite atual")
+        end
     else
+        if CurrentTarget then
+            SetAIEvent("rastreamento pausado")
+        end
+
         CurrentTarget = nil
     end
 
@@ -1149,45 +1240,55 @@ RunService.RenderStepped:Connect(function(deltaTime)
         targetPart = nil
     end
 
-    -- Assistencia visual de camera, suave, sem alterar disparo/dano.
+    -- Assistencia visual de camera.
+    -- 0% = sem movimento; 100% = acompanhamento imediato.
     if wantsAim and targetPart and Camera then
         local cameraPosition = Camera.CFrame.Position
-
         local desired = CFrame.lookAt(
             cameraPosition,
             targetPart.Position
         )
 
-        -- Suavidade independente da taxa de quadros; 80% continua fluido.
-        local alpha = 1 - math.exp(
-            -(2 + Settings.AimSmoothness * 10) * deltaTime
+        local smooth = math.clamp(
+            Settings.AimSmoothness,
+            0,
+            1
         )
 
-        Camera.CFrame = Camera.CFrame:Lerp(desired, alpha)
+        local alpha = smooth <= 0 and 0
+            or (smooth >= 1 and 1
+            or 1 - math.pow(
+                1 - smooth,
+                math.max(deltaTime * 60, 0.01)
+            ))
+
+        if alpha > 0 then
+            Camera.CFrame = Camera.CFrame:Lerp(desired, alpha)
+        end
     end
 
     TargetValue.Value = targetCharacter
     TargetPartValue.Value = Settings.Target or ""
     PursuitValue.Value = wantsPursuit
 
-    aiTimer = aiTimer + deltaTime
+    aiTimer += deltaTime
 
     if aiTimer >= 0.25 then
         aiTimer = 0
 
         if IsCivil then
-            LastAIStatus =
-                "CIVIL DETECTADO - ASSISTENCIA DE COMBATE BLOQUEADA"
-
+            LastAIStatus = "CIVIL DETECTADO - ASSISTENCIA DE COMBATE BLOQUEADA"
         elseif not CombatAllowed() then
             LastAIStatus = "PROTECAO ATIVA"
-
         elseif CurrentTarget then
-            LastAIStatus = "ALVO ACOMPANHADO"
-
+            LastAIStatus = "ALVO ACOMPANHADO - "
+                .. CurrentTarget.DisplayName
         elseif wantsAim or wantsPursuit then
-            LastAIStatus = "PROCURANDO ALVO"
-
+            LastAIStatus = "PROCURANDO ALVO NO FOV"
+        elseif Settings.ESP then
+            LastAIStatus = "MONITORANDO ESP - "
+                .. tostring(#Players:GetPlayers() - 1)
+                .. " JOGADOR(ES)"
         else
             LastAIStatus = "MONITORANDO SISTEMAS"
         end
