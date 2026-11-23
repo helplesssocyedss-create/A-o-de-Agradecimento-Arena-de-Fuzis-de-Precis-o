@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
+local Camera = workspace.CurrentCamera
 
 -- LIMPAR VERSÃO ANTERIOR
 local OldGUI = PlayerGui:FindFirstChild("TalesModMenu")
@@ -24,6 +25,9 @@ local Settings = {
     FOV = false,
     FOVSize = 120
 }
+
+local CurrentTarget = nil
+local ESPObjects = {}
 
 -- GUI PRINCIPAL
 local GUI = Instance.new("ScreenGui")
@@ -114,8 +118,7 @@ local function CreateTab(Name)
         end
 
         for _, TabButton in ipairs(TabButtons) do
-            TabButton.BackgroundColor3 =
-                Color3.fromRGB(45, 49, 65)
+            TabButton.BackgroundColor3 = Color3.fromRGB(45, 49, 65)
         end
 
         Page.Visible = true
@@ -152,8 +155,7 @@ local function CreateToggle(Parent, Name, Callback, Y)
     Button.MouseButton1Click:Connect(function()
         Enabled = not Enabled
 
-        Button.Text = Name ..
-            (Enabled and " : ON" or " : OFF")
+        Button.Text = Name .. (Enabled and " : ON" or " : OFF")
 
         Button.BackgroundColor3 = Enabled
             and Color3.fromRGB(20, 170, 85)
@@ -178,7 +180,6 @@ local function CreateOption(Parent, Name, Y, Callback)
     Button.Parent = Parent
 
     Instance.new("UICorner", Button)
-
     Button.MouseButton1Click:Connect(Callback)
 
     return Button
@@ -189,26 +190,34 @@ local AimTab = CreateTab("AIMBOT")
 
 CreateToggle(AimTab, "AIMBOT", function(State)
     Settings.Aimbot = State
+    if not State then
+        CurrentTarget = nil
+    end
 end, 15)
 
-CreateOption(AimTab, "ALVO: CABEÇA", 65, function()
+local HeadOption = CreateOption(AimTab, "ALVO: CABEÇA", 65, function()
     Settings.Target = "Cabeça"
 end)
 
-CreateOption(AimTab, "ALVO: PEITO", 110, function()
+local ChestOption = CreateOption(AimTab, "ALVO: PEITO", 110, function()
     Settings.Target = "Peito"
 end)
 
 -- ESP
 local EspTab = CreateTab("ESP")
 
-local ESPObjects = {}
-
 local function RemoveESP(Target)
     local Object = ESPObjects[Target]
 
     if Object then
-        Object:Destroy()
+        if Object.Highlight then
+            Object.Highlight:Destroy()
+        end
+
+        if Object.Billboard then
+            Object.Billboard:Destroy()
+        end
+
         ESPObjects[Target] = nil
     end
 end
@@ -219,49 +228,60 @@ local function AddESP(Target)
     end
 
     local Character = Target.Character
-
     if not Character then
+        return
+    end
+
+    local Head = Character:FindFirstChild("Head")
+    if not Head then
+        return
+    end
+
+    -- Não recriar se já estiver aplicado no personagem atual
+    if ESPObjects[Target]
+        and ESPObjects[Target].Character == Character then
         return
     end
 
     RemoveESP(Target)
 
-    local Folder = Instance.new("Folder")
-    Folder.Name = "TalesESP_" .. Target.UserId
-    Folder.Parent = GUI
-
+    -- CONTORNO HOLOGRÁFICO
     local Highlight = Instance.new("Highlight")
     Highlight.Name = "TalesESP"
     Highlight.Adornee = Character
     Highlight.FillColor = Color3.fromRGB(0, 100, 255)
-    Highlight.OutlineColor = Color3.fromRGB(0, 150, 255)
+    Highlight.OutlineColor = Color3.fromRGB(0, 200, 255)
     Highlight.FillTransparency = 0.85
     Highlight.OutlineTransparency = 0
-    Highlight.DepthMode = Enum.HighlightDepthMode.Occluded
-    Highlight.Parent = Folder
+    Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 
-    local Head = Character:FindFirstChild("Head")
+    -- O Highlight fica no Workspace para ser renderizado corretamente
+    Highlight.Parent = workspace
 
-    if Head then
-        local Billboard = Instance.new("BillboardGui")
-        Billboard.Name = "TalesESPName"
-        Billboard.Adornee = Head
-        Billboard.Size = UDim2.fromOffset(120, 25)
-        Billboard.StudsOffset = Vector3.new(0, 2.5, 0)
-        Billboard.AlwaysOnTop = true
-        Billboard.Parent = Folder
+    -- NOME DO JOGADOR
+    local Billboard = Instance.new("BillboardGui")
+    Billboard.Name = "TalesESPName"
+    Billboard.Adornee = Head
+    Billboard.Size = UDim2.fromOffset(150, 30)
+    Billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+    Billboard.AlwaysOnTop = true
+    Billboard.Parent = PlayerGui
 
-        local NameLabel = Instance.new("TextLabel")
-        NameLabel.Size = UDim2.fromScale(1, 1)
-        NameLabel.BackgroundTransparency = 1
-        NameLabel.Text = Target.DisplayName
-        NameLabel.TextColor3 = Color3.new(1, 1, 1)
-        NameLabel.TextSize = 11
-        NameLabel.Font = Enum.Font.GothamBold
-        NameLabel.Parent = Billboard
-    end
+    local NameLabel = Instance.new("TextLabel")
+    NameLabel.Size = UDim2.fromScale(1, 1)
+    NameLabel.BackgroundTransparency = 1
+    NameLabel.Text = Target.DisplayName
+    NameLabel.TextColor3 = Color3.new(1, 1, 1)
+    NameLabel.TextStrokeTransparency = 0
+    NameLabel.TextSize = 13
+    NameLabel.Font = Enum.Font.GothamBold
+    NameLabel.Parent = Billboard
 
-    ESPObjects[Target] = Folder
+    ESPObjects[Target] = {
+        Character = Character,
+        Highlight = Highlight,
+        Billboard = Billboard
+    }
 end
 
 local function UpdateESP()
@@ -295,14 +315,14 @@ local function SetupPlayer(Target)
     end
 
     Target.CharacterAdded:Connect(function()
-        task.wait(1)
+        task.wait(0.5)
 
         if Settings.ESP then
             AddESP(Target)
         end
     end)
 
-    if Settings.ESP and Target.Character then
+    if Settings.ESP then
         AddESP(Target)
     end
 end
@@ -334,13 +354,17 @@ CircleCorner.CornerRadius = UDim.new(1, 0)
 CircleCorner.Parent = FOVCircle
 
 local CircleStroke = Instance.new("UIStroke")
-CircleStroke.Thickness = 1
-CircleStroke.Color = Color3.new(1, 1, 1)
+CircleStroke.Thickness = 1.5
+CircleStroke.Color = Color3.fromRGB(0, 200, 255)
 CircleStroke.Parent = FOVCircle
 
 CreateToggle(FovTab, "AIM FOV", function(State)
     Settings.FOV = State
     FOVCircle.Visible = State
+
+    if not State then
+        CurrentTarget = nil
+    end
 end, 15)
 
 local SizeLabel = Instance.new("TextLabel")
@@ -376,6 +400,85 @@ CreateOption(FovTab, "DIMINUIR -", 150, function()
     ChangeFOV(-20)
 end)
 
+-- SELEÇÃO DO ALVO DENTRO DO FOV
+local function GetTargetPart(Character)
+    if Settings.Target == "Cabeça" then
+        return Character:FindFirstChild("Head")
+    end
+
+    return Character:FindFirstChild("UpperTorso")
+        or Character:FindFirstChild("Torso")
+end
+
+local function GetClosestTarget()
+    if not Camera then
+        return nil
+    end
+
+    local Viewport = Camera.ViewportSize
+    local ScreenCenter = Vector2.new(
+        Viewport.X / 2,
+        Viewport.Y / 2
+    )
+
+    local ClosestPlayer = nil
+    local ClosestDistance = Settings.FOVSize
+
+    for _, Target in ipairs(Players:GetPlayers()) do
+        if Target ~= Player then
+            local Character = Target.Character
+            local Humanoid = Character
+                and Character:FindFirstChildOfClass("Humanoid")
+
+            local Part = Character and GetTargetPart(Character)
+
+            if Humanoid and Humanoid.Health > 0 and Part then
+                local ScreenPosition, OnScreen =
+                    Camera:WorldToViewportPoint(Part.Position)
+
+                if OnScreen and ScreenPosition.Z > 0 then
+                    local Distance = (
+                        Vector2.new(ScreenPosition.X, ScreenPosition.Y)
+                        - ScreenCenter
+                    ).Magnitude
+
+                    if Distance <= ClosestDistance then
+                        ClosestDistance = Distance
+                        ClosestPlayer = Target
+                    end
+                end
+            end
+        end
+    end
+
+    return ClosestPlayer
+end
+
+-- ATUALIZAÇÃO
+RunService.RenderStepped:Connect(function()
+    Camera = workspace.CurrentCamera
+
+    -- Atualizar posição do círculo no centro da tela
+    if Camera then
+        FOVCircle.Position = UDim2.fromOffset(
+            Camera.ViewportSize.X / 2,
+            Camera.ViewportSize.Y / 2
+        )
+    end
+
+    -- Atualizar seleção de alvo
+    if Settings.Aimbot and Settings.FOV then
+        CurrentTarget = GetClosestTarget()
+    else
+        CurrentTarget = nil
+    end
+
+    -- Atualizar ESP
+    if Settings.ESP then
+        UpdateESP()
+    end
+end)
+
 -- MINIMIZAR
 local Minimized = false
 
@@ -402,5 +505,19 @@ Credits.TextColor3 = Color3.fromRGB(130, 140, 160)
 Credits.TextSize = 12
 Credits.Font = Enum.Font.Gotham
 Credits.Parent = Main
+
+-- REFERÊNCIA PARA INTEGRAÇÃO COM A ARMA
+-- Outros LocalScripts do seu jogo podem consultar o alvo selecionado
+local TargetValue = Instance.new("ObjectValue")
+TargetValue.Name = "TalesCurrentTarget"
+TargetValue.Parent = GUI
+
+RunService.RenderStepped:Connect(function()
+    if CurrentTarget then
+        TargetValue.Value = CurrentTarget.Character
+    else
+        TargetValue.Value = nil
+    end
+end)
 
 print("Tales Mod Menu carregado com sucesso!")
