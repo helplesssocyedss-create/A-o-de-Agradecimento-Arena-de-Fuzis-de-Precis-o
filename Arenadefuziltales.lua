@@ -252,7 +252,6 @@ local function CreateOption(parent, name, y, callback)
     Instance.new("UICorner", button)
 
     button.MouseButton1Click:Connect(callback)
-
     return button
 end
 
@@ -366,7 +365,11 @@ local function AddESP(target)
     local character = target.Character
     if not IsAlive(character) then return end
 
+    -- Usa Head quando existir; em personagens que ainda estao carregando,
+    -- usa HumanoidRootPart temporariamente para nao perder o ESP.
     local head = character:FindFirstChild("Head")
+        or character:FindFirstChild("HumanoidRootPart")
+
     if not head then return end
 
     local oldObjects = ESPObjects[target]
@@ -465,7 +468,12 @@ local function TrackPlayer(target)
         if Settings.ESP then
             task.spawn(function()
                 character:WaitForChild("Humanoid", 12)
-                character:WaitForChild("Head", 12)
+
+                local head = character:WaitForChild("Head", 5)
+                if not head then
+                    character:WaitForChild("HumanoidRootPart", 5)
+                end
+
                 task.wait(0.15)
 
                 if Settings.ESP and target.Parent == Players then
@@ -483,7 +491,11 @@ local function TrackPlayer(target)
         task.spawn(function()
             if target.Character then
                 target.Character:WaitForChild("Humanoid", 8)
-                target.Character:WaitForChild("Head", 8)
+
+                local head = target.Character:WaitForChild("Head", 4)
+                if not head then
+                    target.Character:WaitForChild("HumanoidRootPart", 4)
+                end
             end
 
             AddESP(target)
@@ -629,7 +641,6 @@ local function UpdateSensor()
     Sensor.Position = Settings.SensorPosition
     Sensor.Visible = Settings.Pursuit
     SensorText.Text = Settings.PursuitActive and "ON" or "MIRA"
-
     Sensor.BackgroundColor3 = Settings.PursuitActive
         and Color3.fromRGB(20, 190, 90)
         or BLUE
@@ -835,7 +846,6 @@ CivilValue.Parent = GUI
 local function GetTargetPart(character)
     if Settings.Target == "Cabeca" then
         return character:FindFirstChild("Head")
-
     elseif Settings.Target == "Peito" then
         return character:FindFirstChild("UpperTorso")
             or character:FindFirstChild("Torso")
@@ -845,10 +855,15 @@ local function GetTargetPart(character)
     return character:FindFirstChild("HumanoidRootPart")
 end
 
-local function GetClosestTarget()
+local function GetClosestTarget(preferredTarget, requireFOV)
     Camera = workspace.CurrentCamera
 
     if not Camera then return nil end
+
+    -- Quando a assistencia de mira esta ativa, o FOV e obrigatorio.
+    if requireFOV and not Settings.FOV then
+        return nil
+    end
 
     local viewport = Camera.ViewportSize
     local center = Vector2.new(
@@ -859,6 +874,7 @@ local function GetClosestTarget()
     local maxDistance = Settings.FOV and Settings.FOVSize or 300
     local bestDistance = maxDistance
     local bestPlayer = nil
+    local preferredDistance = nil
 
     for _, target in ipairs(Players:GetPlayers()) do
         if target ~= Player then
@@ -878,12 +894,28 @@ local function GetClosestTarget()
                         Vector2.new(point.X, point.Y) - center
                     ).Magnitude
 
+                    if target == preferredTarget then
+                        preferredDistance = distance
+                    end
+
                     if distance <= bestDistance then
                         bestDistance = distance
                         bestPlayer = target
                     end
                 end
             end
+        end
+    end
+
+    -- Pequena histerese: evita alternar entre jogadores muito proximos.
+    -- Se a mira manual se aproximar claramente de outro jogador, troca o alvo.
+    if preferredTarget
+        and preferredDistance
+        and preferredDistance <= maxDistance then
+
+        if not bestPlayer
+            or preferredDistance <= bestDistance * 1.35 + 10 then
+            return preferredTarget
         end
     end
 
@@ -1025,17 +1057,14 @@ local function BindLocalCharacter(character)
         characterConnection:Disconnect()
     end
 
-    local humanoid = character:WaitForChild("Humanoid", 10)
-
-    if humanoid then
-        characterConnection = humanoid.Died:Connect(function()
+    characterConnection = character:WaitForChild("Humanoid", 10)
+        and character:FindFirstChildOfClass("Humanoid").Died:Connect(function()
             Settings.PursuitActive = false
             CurrentTarget = nil
             TargetValue.Value = nil
             PursuitValue.Value = false
             UpdateSensor()
         end)
-    end
 end
 
 Player.CharacterAdded:Connect(BindLocalCharacter)
@@ -1095,8 +1124,10 @@ RunService.RenderStepped:Connect(function(deltaTime)
     IsCivil = IsLocalPlayerCivil()
     CivilValue.Value = IsCivil
 
+    -- FOV passa a ser obrigatorio para a assistencia de mira.
     local wantsAim = Settings.Aimbot
         and Settings.Target ~= nil
+        and Settings.FOV
         and CombatAllowed()
 
     local wantsPursuit = Settings.Pursuit
@@ -1104,7 +1135,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
         and CombatAllowed()
 
     if wantsAim or wantsPursuit then
-        CurrentTarget = GetClosestTarget()
+        CurrentTarget = GetClosestTarget(CurrentTarget, wantsAim)
     else
         CurrentTarget = nil
     end
@@ -1121,14 +1152,15 @@ RunService.RenderStepped:Connect(function(deltaTime)
     -- Assistencia visual de camera, suave, sem alterar disparo/dano.
     if wantsAim and targetPart and Camera then
         local cameraPosition = Camera.CFrame.Position
+
         local desired = CFrame.lookAt(
             cameraPosition,
             targetPart.Position
         )
 
-        local alpha = 1 - math.pow(
-            1 - Settings.AimSmoothness,
-            math.max(deltaTime * 60, 0.01)
+        -- Suavidade independente da taxa de quadros; 80% continua fluido.
+        local alpha = 1 - math.exp(
+            -(2 + Settings.AimSmoothness * 10) * deltaTime
         )
 
         Camera.CFrame = Camera.CFrame:Lerp(desired, alpha)
