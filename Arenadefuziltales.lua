@@ -1,18 +1,12 @@
 --[[
     TALES MOD MENU
     Feito por Tales
-    LocalScript - Roblox Studio
+    LocalScript para uso no proprio jogo no Roblox Studio.
 
-    PERSEGUIÇÃO:
-    - Só acompanha enquanto o jogador estiver mirando.
-    - PC: botão direito do mouse.
-    - Controle: L2.
-    - Celular: botão MIRA na interface.
-
-    IMPORTANTE:
-    O script ajusta a câmera e publica o alvo selecionado.
-    O sistema de armas precisa consultar TalesCurrentTarget
-    e validar os disparos no servidor.
+    AIMBOT: selecao de Cabeca/Peito.
+    ESP: nomes e contorno para os jogadores.
+    AIM FOV: circulo e selecao por distancia na tela.
+    PERSEGUICAO: sensor de toque configuravel para o botao de mira.
 ]]
 
 local Players = game:GetService("Players")
@@ -23,24 +17,23 @@ local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
 local BLUE = Color3.fromRGB(0, 170, 255)
-local OUTLINE = Color3.fromRGB(0, 220, 255)
+local BLUE_OUTLINE = Color3.fromRGB(0, 200, 255)
 
-local Old = PlayerGui:FindFirstChild("TalesModMenu")
-if Old then Old:Destroy() end
+local old = PlayerGui:FindFirstChild("TalesModMenu")
+if old then old:Destroy() end
 
 local Settings = {
-    ESP = false,
     Aimbot = false,
     Target = nil,
+    ESP = false,
+    FOV = false,
+    FOVSize = 120,
 
     Pursuit = false,
-    AimHeld = false,
-
-    AssistIA = false,
-    FOV = false,
-    FOVSize = 150,
-
-    Smoothness = 0.22
+    PursuitActive = false,
+    SensorLocked = true,
+    SensorSize = 65,
+    SensorPosition = UDim2.new(0.5, 0, 0.75, 0)
 }
 
 local CurrentTarget = nil
@@ -48,9 +41,7 @@ local ESPObjects = {}
 local PlayerConnections = {}
 local Camera = workspace.CurrentCamera
 
---==================================================
--- INTERFACE
---==================================================
+-- GUI PRINCIPAL
 
 local GUI = Instance.new("ScreenGui")
 GUI.Name = "TalesModMenu"
@@ -59,12 +50,12 @@ GUI.IgnoreGuiInset = true
 GUI.Parent = PlayerGui
 
 local Main = Instance.new("Frame")
+Main.Name = "Main"
 Main.Size = UDim2.fromOffset(460, 320)
 Main.Position = UDim2.new(0.5, -230, 0.5, -160)
 Main.BackgroundColor3 = Color3.fromRGB(20, 22, 30)
 Main.BorderSizePixel = 0
 Main.Parent = GUI
-
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 
 local Title = Instance.new("TextLabel")
@@ -117,11 +108,11 @@ local function CreateTab(name)
 
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(1, -10, 0, 38)
-    button.Position = UDim2.fromOffset(5, #Tabs * 43 + 5)
+    button.Position = UDim2.fromOffset(5, (#Tabs * 43) + 5)
     button.BackgroundColor3 = Color3.fromRGB(45, 49, 65)
     button.TextColor3 = Color3.new(1, 1, 1)
     button.Text = name
-    button.TextSize = 13
+    button.TextSize = 12
     button.Font = Enum.Font.GothamBold
     button.Parent = Sidebar
     Instance.new("UICorner", button)
@@ -131,8 +122,8 @@ local function CreateTab(name)
             tab.Visible = false
         end
 
-        for _, b in ipairs(TabButtons) do
-            b.BackgroundColor3 = Color3.fromRGB(45, 49, 65)
+        for _, tabButton in ipairs(TabButtons) do
+            tabButton.BackgroundColor3 = Color3.fromRGB(45, 49, 65)
         end
 
         page.Visible = true
@@ -160,7 +151,6 @@ local function CreateToggle(parent, name, callback, y)
     button.Font = Enum.Font.GothamBold
     button.Text = name .. " : OFF"
     button.Parent = parent
-
     Instance.new("UICorner", button)
 
     local enabled = false
@@ -189,40 +179,22 @@ local function CreateOption(parent, name, y, callback)
     button.TextSize = 13
     button.Font = Enum.Font.GothamBold
     button.Parent = parent
-
     Instance.new("UICorner", button)
+
     button.MouseButton1Click:Connect(callback)
 
     return button
 end
 
---==================================================
--- VALORES DE INTEGRAÇÃO COM O JOGO
---==================================================
-
-local TargetValue = Instance.new("ObjectValue")
-TargetValue.Name = "TalesCurrentTarget"
-TargetValue.Parent = GUI
-
-local TargetPartValue = Instance.new("StringValue")
-TargetPartValue.Name = "TalesTargetPart"
-TargetPartValue.Parent = GUI
-
-local AimHeldValue = Instance.new("BoolValue")
-AimHeldValue.Name = "TalesAimHeld"
-AimHeldValue.Parent = GUI
-
---==================================================
--- AIMBOT E PERSEGUIÇÃO
---==================================================
+-- AIMBOT
 
 local AimTab = CreateTab("AIMBOT")
 
 local AimPrompt = Instance.new("TextLabel")
 AimPrompt.Size = UDim2.new(1, -20, 0, 30)
-AimPrompt.Position = UDim2.fromOffset(10, 105)
+AimPrompt.Position = UDim2.fromOffset(10, 62)
 AimPrompt.BackgroundTransparency = 1
-AimPrompt.Text = "Escolha Cabeça ou Peito"
+AimPrompt.Text = "Selecione a opcao desejada:"
 AimPrompt.TextColor3 = Color3.new(1, 1, 1)
 AimPrompt.TextSize = 13
 AimPrompt.Font = Enum.Font.GothamBold
@@ -232,10 +204,9 @@ AimPrompt.Parent = AimTab
 local HeadOption
 local ChestOption
 
-local function SelectAimPart(part)
-    Settings.Target = part
-    AimPrompt.Text = "Selecionado: " .. part
-
+local function SelectAimPart(partName)
+    Settings.Target = partName
+    AimPrompt.Text = "Selecionado: " .. partName
     HeadOption.Visible = false
     ChestOption.Visible = false
 end
@@ -246,96 +217,30 @@ CreateToggle(AimTab, "AIMBOT", function(state)
 
     if state then
         Settings.Target = nil
-        AimPrompt.Text = "Escolha Cabeça ou Peito"
+        AimPrompt.Text = "Selecione a opcao desejada:"
         AimPrompt.Visible = true
-
         HeadOption.Visible = true
         ChestOption.Visible = true
     else
         Settings.Target = nil
         AimPrompt.Visible = false
-
         HeadOption.Visible = false
         ChestOption.Visible = false
     end
 end, 15)
 
-HeadOption = CreateOption(AimTab, "AIMBOT CABEÇA", 145, function()
-    SelectAimPart("Cabeça")
+HeadOption = CreateOption(AimTab, "AIMBOT CABECA", 100, function()
+    SelectAimPart("Cabeca")
 end)
 
-ChestOption = CreateOption(AimTab, "AIMBOT PEITO", 190, function()
+ChestOption = CreateOption(AimTab, "AIMBOT PEITO", 145, function()
     SelectAimPart("Peito")
 end)
 
 HeadOption.Visible = false
 ChestOption.Visible = false
 
-CreateToggle(AimTab, "PERSEGUIÇÃO", function(state)
-    Settings.Pursuit = state
-
-    if not state then
-        CurrentTarget = nil
-    end
-end, 55)
-
-CreateToggle(AimTab, "ASSISTENTE IA", function(state)
-    Settings.AssistIA = state
-
-    -- Quanto menor o valor, mais rápida a correção.
-    Settings.Smoothness = state and 0.38 or 0.22
-end, 95)
-
--- Botão de mira para celular
-local MobileAim = Instance.new("TextButton")
-MobileAim.Size = UDim2.fromOffset(105, 42)
-MobileAim.Position = UDim2.new(1, -120, 0.72, 0)
-MobileAim.BackgroundColor3 = Color3.fromRGB(35, 95, 155)
-MobileAim.Text = "MIRA: OFF"
-MobileAim.TextColor3 = Color3.new(1, 1, 1)
-MobileAim.TextSize = 14
-MobileAim.Font = Enum.Font.GothamBold
-MobileAim.Visible = UserInputService.TouchEnabled
-MobileAim.Parent = GUI
-Instance.new("UICorner", MobileAim)
-
-MobileAim.MouseButton1Down:Connect(function()
-    Settings.AimHeld = true
-    MobileAim.Text = "MIRA: ON"
-end)
-
-MobileAim.MouseButton1Up:Connect(function()
-    Settings.AimHeld = false
-    MobileAim.Text = "MIRA: OFF"
-end)
-
-MobileAim.MouseLeave:Connect(function()
-    Settings.AimHeld = false
-    MobileAim.Text = "MIRA: OFF"
-end)
-
--- Comandos de mira para PC e controle
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-
-    if input.UserInputType == Enum.UserInputType.MouseButton2
-        or input.KeyCode == Enum.KeyCode.ButtonL2 then
-
-        Settings.AimHeld = true
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton2
-        or input.KeyCode == Enum.KeyCode.ButtonL2 then
-
-        Settings.AimHeld = false
-    end
-end)
-
---==================================================
--- ESP PLAYER
---==================================================
+-- ESP
 
 local EspTab = CreateTab("ESP")
 
@@ -364,13 +269,15 @@ local function AddESP(target)
     local head = character:FindFirstChild("Head")
 
     if not humanoid or not head then return end
-    if humanoid.Health <= 0 then return end
 
-    local old = ESPObjects[target]
+    local oldObjects = ESPObjects[target]
 
-    if old and old.Character == character
-        and old.Highlight and old.Highlight.Parent
-        and old.Billboard and old.Billboard.Parent then
+    if oldObjects
+        and oldObjects.Character == character
+        and oldObjects.Highlight
+        and oldObjects.Highlight.Parent
+        and oldObjects.Billboard
+        and oldObjects.Billboard.Parent then
         return
     end
 
@@ -380,7 +287,7 @@ local function AddESP(target)
     highlight.Name = "TalesESP"
     highlight.Adornee = character
     highlight.FillColor = BLUE
-    highlight.OutlineColor = OUTLINE
+    highlight.OutlineColor = BLUE_OUTLINE
     highlight.FillTransparency = 0.82
     highlight.OutlineTransparency = 0
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
@@ -398,7 +305,7 @@ local function AddESP(target)
     label.Size = UDim2.fromScale(1, 1)
     label.BackgroundTransparency = 1
     label.Text = target.DisplayName
-    label.TextColor3 = OUTLINE
+    label.TextColor3 = BLUE_OUTLINE
     label.TextStrokeColor3 = Color3.fromRGB(0, 35, 90)
     label.TextStrokeTransparency = 0.15
     label.TextSize = 13
@@ -443,41 +350,23 @@ CreateToggle(EspTab, "ESP PLAYER", function(state)
 end, 15)
 
 local function TrackPlayer(target)
-    if target == Player or PlayerConnections[target] then
-        return
-    end
+    if target == Player or PlayerConnections[target] then return end
 
-    local connections = {}
-    PlayerConnections[target] = connections
+    PlayerConnections[target] = target.CharacterAdded:Connect(function(character)
+        if Settings.ESP then
+            task.spawn(function()
+                character:WaitForChild("Humanoid", 10)
+                character:WaitForChild("Head", 10)
 
-    local function WatchCharacter(character)
-        RemoveESP(target)
+                if Settings.ESP and target.Parent == Players then
+                    AddESP(target)
+                end
+            end)
+        end
+    end)
 
-        task.spawn(function()
-            local humanoid = character:WaitForChild("Humanoid", 15)
-            local head = character:WaitForChild("Head", 15)
-
-            if humanoid and head and Settings.ESP
-                and target.Parent == Players
-                and target.Character == character then
-
-                AddESP(target)
-            end
-        end)
-    end
-
-    table.insert(connections,
-        target.CharacterAdded:Connect(WatchCharacter)
-    )
-
-    table.insert(connections,
-        target.CharacterRemoving:Connect(function()
-            RemoveESP(target)
-        end)
-    )
-
-    if target.Character then
-        WatchCharacter(target.Character)
+    if Settings.ESP then
+        AddESP(target)
     end
 end
 
@@ -490,20 +379,13 @@ Players.PlayerAdded:Connect(TrackPlayer)
 Players.PlayerRemoving:Connect(function(target)
     RemoveESP(target)
 
-    local connections = PlayerConnections[target]
-
-    if connections then
-        for _, connection in ipairs(connections) do
-            connection:Disconnect()
-        end
+    if PlayerConnections[target] then
+        PlayerConnections[target]:Disconnect()
+        PlayerConnections[target] = nil
     end
-
-    PlayerConnections[target] = nil
 end)
 
---==================================================
 -- AIM FOV
---==================================================
 
 local FovTab = CreateTab("AIM FOV")
 
@@ -522,7 +404,7 @@ Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
 
 local CircleStroke = Instance.new("UIStroke")
 CircleStroke.Thickness = 1.5
-CircleStroke.Color = OUTLINE
+CircleStroke.Color = BLUE_OUTLINE
 CircleStroke.Parent = FOVCircle
 
 CreateToggle(FovTab, "AIM FOV", function(state)
@@ -545,11 +427,7 @@ SizeLabel.Font = Enum.Font.GothamBold
 SizeLabel.Parent = FovTab
 
 local function ChangeFOV(amount)
-    Settings.FOVSize = math.clamp(
-        Settings.FOVSize + amount,
-        40,
-        300
-    )
+    Settings.FOVSize = math.clamp(Settings.FOVSize + amount, 40, 300)
 
     FOVCircle.Size = UDim2.fromOffset(
         Settings.FOVSize * 2,
@@ -567,37 +445,238 @@ CreateOption(FovTab, "DIMINUIR -", 150, function()
     ChangeFOV(-20)
 end)
 
---==================================================
--- SELEÇÃO DO ALVO
---==================================================
+-- PERSEGUICAO / SENSOR
+
+local PursuitTab = CreateTab("PERSEGUICAO")
+
+local Sensor = Instance.new("Frame")
+Sensor.Name = "TalesAimSensor"
+Sensor.AnchorPoint = Vector2.new(0.5, 0.5)
+Sensor.Size = UDim2.fromOffset(
+    Settings.SensorSize,
+    Settings.SensorSize
+)
+Sensor.Position = Settings.SensorPosition
+Sensor.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+Sensor.BackgroundTransparency = 0.35
+Sensor.BorderSizePixel = 0
+Sensor.Active = false
+Sensor.Visible = false
+Sensor.ZIndex = 20
+Sensor.Parent = GUI
+
+Instance.new("UICorner", Sensor).CornerRadius = UDim.new(1, 0)
+
+local SensorStroke = Instance.new("UIStroke")
+SensorStroke.Color = Color3.new(1, 1, 1)
+SensorStroke.Thickness = 2
+SensorStroke.Parent = Sensor
+
+local SensorText = Instance.new("TextLabel")
+SensorText.Size = UDim2.fromScale(1, 1)
+SensorText.BackgroundTransparency = 1
+SensorText.Text = "MIRA"
+SensorText.TextColor3 = Color3.new(1, 1, 1)
+SensorText.TextSize = 12
+SensorText.Font = Enum.Font.GothamBold
+SensorText.ZIndex = 21
+SensorText.Parent = Sensor
+
+local PursuitStatus = Instance.new("TextLabel")
+PursuitStatus.Size = UDim2.new(1, -20, 0, 35)
+PursuitStatus.Position = UDim2.fromOffset(10, 62)
+PursuitStatus.BackgroundTransparency = 1
+PursuitStatus.Text = "Perseguicao: DESATIVADA"
+PursuitStatus.TextColor3 = Color3.new(1, 1, 1)
+PursuitStatus.TextSize = 13
+PursuitStatus.Font = Enum.Font.GothamBold
+PursuitStatus.Parent = PursuitTab
+
+local SensorStatus = Instance.new("TextLabel")
+SensorStatus.Size = UDim2.new(1, -20, 0, 30)
+SensorStatus.Position = UDim2.fromOffset(10, 95)
+SensorStatus.BackgroundTransparency = 1
+SensorStatus.Text = "Sensor: TRAVADO"
+SensorStatus.TextColor3 = Color3.new(1, 1, 1)
+SensorStatus.TextSize = 12
+SensorStatus.Font = Enum.Font.Gotham
+SensorStatus.Parent = PursuitTab
+
+local function UpdateSensor()
+    Sensor.Size = UDim2.fromOffset(
+        Settings.SensorSize,
+        Settings.SensorSize
+    )
+
+    Sensor.Position = Settings.SensorPosition
+
+    Sensor.Visible = Settings.Pursuit
+
+    SensorText.Text = Settings.PursuitActive and "ON" or "MIRA"
+
+    Sensor.BackgroundColor3 = Settings.PursuitActive
+        and Color3.fromRGB(20, 190, 90)
+        or Color3.fromRGB(0, 170, 255)
+
+    PursuitStatus.Text = Settings.PursuitActive
+        and "Perseguicao: ATIVA"
+        or "Perseguicao: DESATIVADA"
+
+    SensorStatus.Text = Settings.SensorLocked
+        and "Sensor: TRAVADO"
+        or "Sensor: DESTRAVADO"
+end
+
+CreateToggle(PursuitTab, "PERSEGUICAO", function(state)
+    Settings.Pursuit = state
+
+    if not state then
+        Settings.PursuitActive = false
+    end
+
+    UpdateSensor()
+end, 15)
+
+CreateOption(PursuitTab, "TRAVAR / DESTRAVAR", 140, function()
+    Settings.SensorLocked = not Settings.SensorLocked
+    UpdateSensor()
+end)
+
+CreateOption(PursuitTab, "AUMENTAR BOLINHA +", 180, function()
+    Settings.SensorSize = math.clamp(
+        Settings.SensorSize + 10,
+        35,
+        150
+    )
+    UpdateSensor()
+end)
+
+CreateOption(PursuitTab, "DIMINUIR BOLINHA -", 220, function()
+    Settings.SensorSize = math.clamp(
+        Settings.SensorSize - 10,
+        35,
+        150
+    )
+    UpdateSensor()
+end)
+
+-- Sensor acompanha toques e cliques sem ser um botao ativo.
+-- Com o sensor travado, toque dentro dele alterna a perseguicao.
+-- Destravado, o toque permite arrastar a bolinha.
+
+local dragging = false
+local dragInput = nil
+local dragStart = nil
+local startPosition = nil
+local dragMoved = false
+
+local function GetInputPosition(input)
+    return Vector2.new(input.Position.X, input.Position.Y)
+end
+
+local function IsInsideSensor(position)
+    local center = Sensor.AbsolutePosition + (Sensor.AbsoluteSize / 2)
+    local half = Sensor.AbsoluteSize / 2
+
+    return math.abs(position.X - center.X) <= half.X
+        and math.abs(position.Y - center.Y) <= half.Y
+end
+
+local function SetSensorFromScreen(position)
+    local viewport = workspace.CurrentCamera
+        and workspace.CurrentCamera.ViewportSize
+
+    if not viewport then return end
+
+    local x = math.clamp(position.X / viewport.X, 0.03, 0.97)
+    local y = math.clamp(position.Y / viewport.Y, 0.05, 0.95)
+
+    Settings.SensorPosition = UDim2.new(x, 0, y, 0)
+    Sensor.Position = Settings.SensorPosition
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not Settings.Pursuit then return end
+
+    local isTouch = input.UserInputType == Enum.UserInputType.Touch
+    local isClick = input.UserInputType == Enum.UserInputType.MouseButton1
+
+    if not isTouch and not isClick then return end
+
+    local position = GetInputPosition(input)
+
+    if not IsInsideSensor(position) then return end
+
+    if Settings.SensorLocked then
+        Settings.PursuitActive = not Settings.PursuitActive
+        UpdateSensor()
+    else
+        dragging = true
+        dragInput = input
+        dragStart = position
+        startPosition = Sensor.AbsolutePosition + (Sensor.AbsoluteSize / 2)
+        dragMoved = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if not dragging then return end
+
+    local isMouseMove =
+        input.UserInputType == Enum.UserInputType.MouseMovement
+
+    local isSameTouch = input == dragInput
+
+    if not isMouseMove and not isSameTouch then return end
+
+    local position = GetInputPosition(input)
+    local delta = position - dragStart
+
+    if delta.Magnitude > 5 then
+        dragMoved = true
+    end
+
+    if dragMoved then
+        SetSensorFromScreen(startPosition + delta)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input == dragInput
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+        dragInput = nil
+        dragStart = nil
+        startPosition = nil
+    end
+end)
+
+-- SELECAO DE ALVO
 
 local function GetTargetPart(character)
-    if Settings.Target == "Cabeça" then
+    if Settings.Target == "Cabeca" then
         return character:FindFirstChild("Head")
-
     elseif Settings.Target == "Peito" then
         return character:FindFirstChild("UpperTorso")
             or character:FindFirstChild("Torso")
             or character:FindFirstChild("HumanoidRootPart")
     end
 
-    return nil
+    return character:FindFirstChild("HumanoidRootPart")
 end
 
 local function GetClosestTarget()
     Camera = workspace.CurrentCamera
 
-    if not Camera or not Settings.Target then
-        return nil
-    end
+    if not Camera then return nil end
 
     local viewport = Camera.ViewportSize
-    local center = Vector2.new(viewport.X / 2, viewport.Y / 2)
+    local center = Vector2.new(
+        viewport.X * 0.5,
+        viewport.Y * 0.5
+    )
 
-    local maxDistance = Settings.FOV
-        and Settings.FOVSize
-        or 250
-
+    local maxDistance = Settings.FOV and Settings.FOVSize or 300
     local bestPlayer = nil
     local bestDistance = maxDistance
 
@@ -630,90 +709,65 @@ local function GetClosestTarget()
     return bestPlayer
 end
 
---==================================================
--- ATUALIZAÇÃO PRINCIPAL
---==================================================
+-- VALORES PARA INTEGRACAO COM O SISTEMA DE ARMAS
+
+local TargetValue = Instance.new("ObjectValue")
+TargetValue.Name = "TalesCurrentTarget"
+TargetValue.Parent = GUI
+
+local TargetPartValue = Instance.new("StringValue")
+TargetPartValue.Name = "TalesTargetPart"
+TargetPartValue.Value = ""
+TargetPartValue.Parent = GUI
+
+local PursuitValue = Instance.new("BoolValue")
+PursuitValue.Name = "TalesPursuitActive"
+PursuitValue.Value = false
+PursuitValue.Parent = GUI
+
+-- ATUALIZACAO
 
 local espTimer = 0
 
 RunService.RenderStepped:Connect(function(deltaTime)
     Camera = workspace.CurrentCamera
 
-    if not Camera then return end
+    if Camera then
+        local viewport = Camera.ViewportSize
 
-    local viewport = Camera.ViewportSize
+        FOVCircle.Position = UDim2.fromOffset(
+            viewport.X * 0.5,
+            viewport.Y * 0.5
+        )
+    end
 
-    FOVCircle.Position = UDim2.fromOffset(
-        viewport.X / 2,
-        viewport.Y / 2
-    )
-
-    -- ESP: reconciliação periódica para recuperar personagens
-    -- que carregaram atrasados ou tiveram peças substituídas.
-    espTimer += deltaTime
+    espTimer = espTimer + deltaTime
 
     if Settings.ESP and espTimer >= 0.5 then
         espTimer = 0
         UpdateESP()
     end
 
-    -- Seleciona o alvo apenas com os recursos necessários ligados.
-    if Settings.Aimbot
-        and Settings.Pursuit
-        and Settings.Target then
+    local shouldSelectTarget =
+        (Settings.Aimbot and Settings.FOV and Settings.Target ~= nil)
+        or (Settings.Pursuit and Settings.PursuitActive)
 
+    if shouldSelectTarget then
         CurrentTarget = GetClosestTarget()
     else
         CurrentTarget = nil
     end
 
-    -- Publica o alvo para o sistema de armas do jogo.
-    TargetValue.Value = CurrentTarget
-        and CurrentTarget.Character
-        or nil
+    TargetValue.Value =
+        CurrentTarget and CurrentTarget.Character or nil
 
     TargetPartValue.Value = Settings.Target or ""
-    AimHeldValue.Value = Settings.AimHeld
 
-    -- Perseguição só acontece enquanto estiver mirando.
-    if Settings.Pursuit
-        and Settings.Aimbot
-        and Settings.AimHeld
-        and CurrentTarget then
-
-        local character = CurrentTarget.Character
-        local part = character and GetTargetPart(character)
-
-        if part then
-            local cameraPosition = Camera.CFrame.Position
-
-            local desired = CFrame.lookAt(
-                cameraPosition,
-                part.Position
-            )
-
-            local strength = Settings.Smoothness
-
-            if Settings.AssistIA then
-                strength = 0.38
-            end
-
-            local alpha = 1 - math.pow(
-                1 - strength,
-                deltaTime * 60
-            )
-
-            Camera.CFrame = Camera.CFrame:Lerp(
-                desired,
-                math.clamp(alpha, 0, 1)
-            )
-        end
-    end
+    PursuitValue.Value =
+        Settings.Pursuit and Settings.PursuitActive
 end)
 
---==================================================
 -- MINIMIZAR
---==================================================
 
 local minimized = false
 
@@ -723,24 +777,14 @@ Minimize.MouseButton1Click:Connect(function()
     Sidebar.Visible = not minimized
     Content.Visible = not minimized
 
-    if minimized then
-        Main.Size = UDim2.fromOffset(230, 42)
-        Title.TextSize = 15
-        Title.Size = UDim2.new(1, -45, 0, 42)
-        Title.Text = "TALES"
-        Minimize.Text = "+"
-    else
-        Main.Size = UDim2.fromOffset(460, 320)
-        Title.TextSize = 19
-        Title.Size = UDim2.new(1, -55, 0, 45)
-        Title.Text = "TALES | MOD MENU"
-        Minimize.Text = "-"
-    end
+    Main.Size = minimized
+        and UDim2.fromOffset(460, 45)
+        or UDim2.fromOffset(460, 320)
+
+    Minimize.Text = minimized and "+" or "-"
 end)
 
---==================================================
--- CRÉDITOS
---==================================================
+-- CREDITOS
 
 local Credits = Instance.new("TextLabel")
 Credits.Size = UDim2.new(1, 0, 0, 20)
