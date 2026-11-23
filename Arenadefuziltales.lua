@@ -128,10 +128,12 @@ local function CreateButton(Parent, Text, Y, Callback)
     return Button
 end
 
+-- CORREÇÃO DA FUNÇÃO DOS BOTÕES ON/OFF
 local function CreateToggle(Parent, Name, Y, Callback)
     local Enabled = false
+    local Button
 
-    local Button = CreateButton(
+    Button = CreateButton(
         Parent,
         Name .. " : OFF",
         Y,
@@ -144,7 +146,18 @@ local function CreateToggle(Parent, Name, Y, Callback)
                 and Color3.fromRGB(20, 170, 85)
                 or Color3.fromRGB(65, 70, 85)
 
-            Callback(Enabled)
+            local Success, ErrorMessage = pcall(function()
+                Callback(Enabled)
+            end)
+
+            if not Success then
+                warn(
+                    "[TALES MENU] Erro em "
+                    .. Name
+                    .. ": "
+                    .. tostring(ErrorMessage)
+                )
+            end
         end
     )
 
