@@ -4,8 +4,8 @@
     LocalScript para uso no proprio jogo, no Roblox Studio.
 
     ATUALIZACOES:
-    - ESP PLAYER + ESP NAME.
-    - ESP BOT/NPC + NOME.
+    - ESP PLAYER + ESP NAME azul.
+    - ESP BOT/NPC amarelo com nome BOT.
     - Deteccao sem exigir a peca Head.
     - Recuperacao automatica de ESP apos respawn.
     - Aimbot procura jogadores e NPCs independentemente da ESP.
@@ -24,6 +24,10 @@ local PlayerGui = Player:WaitForChild("PlayerGui")
 
 local BLUE = Color3.fromRGB(0, 170, 255)
 local BLUE_OUTLINE = Color3.fromRGB(0, 200, 255)
+
+local YELLOW = Color3.fromRGB(255, 220, 0)
+local YELLOW_OUTLINE = Color3.fromRGB(255, 235, 80)
+
 local PANEL = Color3.fromRGB(20, 22, 30)
 local PANEL_INNER = Color3.fromRGB(29, 32, 43)
 
@@ -163,7 +167,6 @@ local function IsPlayerCharacter(model)
     return Players:GetPlayerFromCharacter(model) ~= nil
 end
 
--- Atualiza a lista de NPCs/bots encontrados no Workspace.
 local function RefreshNPCs()
     local found = {}
 
@@ -527,8 +530,9 @@ local function RemoveESP(target)
     ESPObjects[target] = nil
 end
 
--- Cria ESP para qualquer Model com Humanoid.
--- Nao exige Head: usa outra BasePart se necessario.
+-- ESP PLAYER AZUL.
+-- ESP BOT AMARELO COM NOME FIXO BOT.
+-- Mesmo tamanho de texto para os dois.
 
 local function AddESP(target, character, displayName)
     if not character or not character:IsA("Model") then
@@ -545,6 +549,14 @@ local function AddESP(target, character, displayName)
         return
     end
 
+    local isBot = target:IsA("Model")
+
+    local espColor = isBot and YELLOW or BLUE
+    local outlineColor = isBot and YELLOW_OUTLINE or BLUE_OUTLINE
+
+    local finalName = isBot and "BOT"
+        or tostring(displayName or character.Name)
+
     local oldObjects = ESPObjects[target]
 
     if oldObjects
@@ -555,6 +567,19 @@ local function AddESP(target, character, displayName)
         and oldObjects.Billboard.Parent
         and oldObjects.Billboard.Adornee == anchor then
 
+        oldObjects.Highlight.FillColor = espColor
+        oldObjects.Highlight.OutlineColor = outlineColor
+
+        local existingLabel = oldObjects.Billboard:FindFirstChild("NameLabel")
+
+        if existingLabel then
+            existingLabel.Text = finalName
+            existingLabel.TextColor3 = outlineColor
+            existingLabel.TextStrokeColor3 = isBot
+                and Color3.fromRGB(100, 65, 0)
+                or Color3.fromRGB(0, 35, 90)
+        end
+
         return
     end
 
@@ -563,8 +588,8 @@ local function AddESP(target, character, displayName)
     local highlight = Instance.new("Highlight")
     highlight.Name = "TalesESP"
     highlight.Adornee = character
-    highlight.FillColor = BLUE
-    highlight.OutlineColor = BLUE_OUTLINE
+    highlight.FillColor = espColor
+    highlight.OutlineColor = outlineColor
     highlight.FillTransparency = 0.82
     highlight.OutlineTransparency = 0
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
@@ -582,9 +607,11 @@ local function AddESP(target, character, displayName)
     label.Name = "NameLabel"
     label.Size = UDim2.fromScale(1, 1)
     label.BackgroundTransparency = 1
-    label.Text = tostring(displayName or character.Name)
-    label.TextColor3 = BLUE_OUTLINE
-    label.TextStrokeColor3 = Color3.fromRGB(0, 35, 90)
+    label.Text = finalName
+    label.TextColor3 = outlineColor
+    label.TextStrokeColor3 = isBot
+        and Color3.fromRGB(100, 65, 0)
+        or Color3.fromRGB(0, 35, 90)
     label.TextStrokeTransparency = 0.15
     label.TextSize = 13
     label.Font = Enum.Font.GothamBold
@@ -597,7 +624,7 @@ local function AddESP(target, character, displayName)
         Anchor = anchor,
     }
 
-    SetAIEvent("ESP criado: " .. tostring(displayName or character.Name))
+    SetAIEvent("ESP criado: " .. finalName)
 end
 
 local function UpdateESP()
@@ -635,7 +662,7 @@ local function UpdateESP()
                 AddESP(
                     model,
                     model,
-                    model.Name
+                    "BOT"
                 )
             end
         end
@@ -1215,9 +1242,6 @@ local function IsTargetInRange(target)
     return distance <= limit
 end
 
--- Busca jogadores e NPCs.
--- A lista de alvos nao depende de ESP estar ligado.
-
 local function GetClosestTarget()
     Camera = workspace.CurrentCamera
 
@@ -1246,14 +1270,12 @@ local function GetClosestTarget()
         end
     end
 
-    -- Jogadores.
     for _, target in ipairs(Players:GetPlayers()) do
         if target ~= Player then
             CheckTarget(target)
         end
     end
 
-    -- Bots/NPCs.
     for _, model in ipairs(CachedNPCs) do
         if model and model.Parent and not IsPlayerCharacter(model) then
             CheckTarget(model)
@@ -1521,9 +1543,6 @@ RunService.RenderStepped:Connect(function(deltaTime)
         )
     end
 
-    -- Atualiza a lista de NPCs mesmo quando a ESP esta desligada,
-    -- pois o aimbot tambem pode procurar esses personagens.
-
     npcTimer += deltaTime
 
     if npcTimer >= 0.60 then
@@ -1536,7 +1555,6 @@ RunService.RenderStepped:Connect(function(deltaTime)
         end
     end
 
-    -- Recuperacao periodica da ESP.
     espTimer += deltaTime
 
     if Settings.SmartRecovery and espTimer >= 0.40 then
@@ -1592,8 +1610,6 @@ RunService.RenderStepped:Connect(function(deltaTime)
     end
 
     -- Assistencia original de camera.
-    -- 0% = sem movimento.
-    -- 100% = acompanhamento imediato.
 
     if wantsAim and targetPart and Camera then
         local cameraPosition = Camera.CFrame.Position
@@ -1626,12 +1642,12 @@ RunService.RenderStepped:Connect(function(deltaTime)
         end
     end
 
-    -- Publica o personagem, seja jogador ou NPC.
     TargetValue.Value = targetCharacter
     TargetPartValue.Value = Settings.Target or ""
     PursuitValue.Value = wantsPursuit
 
     -- IA Assist.
+
     aiTimer += deltaTime
 
     if aiTimer >= 0.25 then
@@ -1687,6 +1703,6 @@ UpdateSensor()
 UpdateCivilStatus()
 
 print("Tales Mod Menu IA Assist carregado.")
-print("ESP Player + Name: pronto.")
-print("ESP Bot/NPC: pronto.")
+print("ESP Player azul + Name: pronto.")
+print("ESP Bot amarelo com nome BOT: pronto.")
 print("Busca de alvos independente da ESP: pronta.")
