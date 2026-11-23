@@ -1,36 +1,40 @@
---==================================================
+--====================================================
 -- TALES MOD MENU
 -- Feito por Tales
--- Versão atualizada
---==================================================
+-- Versão de testes
+--====================================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
-local Camera = workspace.CurrentCamera
 
 local BLUE = Color3.fromRGB(0, 170, 255)
 
 local Settings = {
     ESP = false,
     Aimbot = false,
-    Target = nil,
-
+    AssistIA = false,
     FOV = false,
+
+    Target = nil,
     FOVSize = 120,
 
-    AssistIA = false
+    AimStrength = 24,
+    AssistStrength = 18
 }
 
 local CurrentTarget = nil
 local ESPObjects = {}
 local PlayerConnections = {}
 
---==================================================
--- LIMPAR MENU ANTIGO
---==================================================
+local LastESPUpdate = 0
+local ESPUpdateInterval = 0.35
+
+--====================================================
+-- LIMPAR VERSÃO ANTERIOR
+--====================================================
 
 local Old = PlayerGui:FindFirstChild("TalesModMenu")
 
@@ -38,9 +42,9 @@ if Old then
     Old:Destroy()
 end
 
---==================================================
+--====================================================
 -- INTERFACE
---==================================================
+--====================================================
 
 local GUI = Instance.new("ScreenGui")
 GUI.Name = "TalesModMenu"
@@ -49,13 +53,14 @@ GUI.IgnoreGuiInset = true
 GUI.Parent = PlayerGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(460, 360)
-Main.Position = UDim2.new(0.5, -230, 0.5, -180)
+Main.Size = UDim2.fromOffset(460, 370)
+Main.Position = UDim2.new(0.5, -230, 0.5, -185)
 Main.BackgroundColor3 = Color3.fromRGB(20, 22, 30)
 Main.BorderSizePixel = 0
 Main.Parent = GUI
 
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
+Instance.new("UICorner", Main).CornerRadius =
+    UDim.new(0, 12)
 
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -50, 0, 45)
@@ -87,9 +92,9 @@ Content.Parent = Main
 local Tabs = {}
 local TabButtons = {}
 
---==================================================
--- FUNÇÕES DA INTERFACE
---==================================================
+--====================================================
+-- SISTEMA DE ABAS
+--====================================================
 
 local function CreateTab(Name)
     local Page = Instance.new("Frame")
@@ -101,7 +106,10 @@ local function CreateTab(Name)
 
     local Button = Instance.new("TextButton")
     Button.Size = UDim2.new(1, -10, 0, 38)
-    Button.Position = UDim2.fromOffset(5, #Tabs * 43 + 5)
+    Button.Position = UDim2.fromOffset(
+        5,
+        #Tabs * 43 + 5
+    )
     Button.Text = Name
     Button.Parent = Sidebar
 
@@ -111,11 +119,13 @@ local function CreateTab(Name)
         end
 
         for _, B in ipairs(TabButtons) do
-            B.BackgroundColor3 = Color3.fromRGB(45, 49, 65)
+            B.BackgroundColor3 =
+                Color3.fromRGB(45, 49, 65)
         end
 
         Page.Visible = true
-        Button.BackgroundColor3 = Color3.fromRGB(25, 125, 75)
+        Button.BackgroundColor3 =
+            Color3.fromRGB(25, 125, 75)
     end)
 
     table.insert(Tabs, Page)
@@ -128,13 +138,20 @@ local function CreateTab(Name)
     return Page
 end
 
+--====================================================
+-- BOTÕES
+--====================================================
+
 local function CreateButton(Parent, Text, Y, Callback)
     local Button = Instance.new("TextButton")
+
     Button.Size = UDim2.new(1, -20, 0, 38)
     Button.Position = UDim2.fromOffset(10, Y)
     Button.Text = Text
     Button.TextColor3 = Color3.new(1, 1, 1)
-    Button.BackgroundColor3 = Color3.fromRGB(65, 70, 85)
+    Button.BackgroundColor3 =
+        Color3.fromRGB(65, 70, 85)
+
     Button.Font = Enum.Font.GothamBold
     Button.TextSize = 13
     Button.Parent = Parent
@@ -157,7 +174,8 @@ local function CreateToggle(Parent, Name, Y, Callback)
         function()
             Enabled = not Enabled
 
-            Button.Text = Name .. (Enabled and " : ON" or " : OFF")
+            Button.Text = Name ..
+                (Enabled and " : ON" or " : OFF")
 
             Button.BackgroundColor3 = Enabled
                 and Color3.fromRGB(20, 170, 85)
@@ -168,7 +186,11 @@ local function CreateToggle(Parent, Name, Y, Callback)
             end)
 
             if not Success then
-                warn("[TALES MENU] Erro em " .. Name .. ": " .. tostring(ErrorMessage))
+                warn(
+                    "[TALES] " ..
+                    Name .. ": " ..
+                    tostring(ErrorMessage)
+                )
             end
         end
     )
@@ -176,9 +198,9 @@ local function CreateToggle(Parent, Name, Y, Callback)
     return Button
 end
 
---==================================================
+--====================================================
 -- AIMBOT
---==================================================
+--====================================================
 
 local AimTab = CreateTab("AIMBOT")
 
@@ -208,6 +230,7 @@ CreateToggle(AimTab, "AIMBOT", 15, function(State)
 
     if State then
         Settings.Target = nil
+
         Prompt.Text = "Selecione a opção desejada:"
         Prompt.Visible = true
 
@@ -215,10 +238,12 @@ CreateToggle(AimTab, "AIMBOT", 15, function(State)
         ChestButton.Visible = true
     else
         Settings.Target = nil
-        Prompt.Visible = false
 
+        Prompt.Visible = false
         HeadButton.Visible = false
         ChestButton.Visible = false
+
+        CurrentTarget = nil
     end
 end)
 
@@ -243,51 +268,58 @@ ChestButton = CreateButton(
 HeadButton.Visible = false
 ChestButton.Visible = false
 
---==================================================
+--====================================================
 -- ASSISTENTE IA DE MIRA
---==================================================
+--====================================================
 
-CreateToggle(AimTab, "ASSISTENTE IA DE MIRA", 205, function(State)
-    Settings.AssistIA = State
+CreateToggle(
+    AimTab,
+    "ASSISTENTE IA DE MIRA",
+    205,
+    function(State)
+        Settings.AssistIA = State
 
-    if State then
-        Prompt.Text = "Assistente IA ativada"
-    else
-        Prompt.Text = "Assistente IA desativada"
+        if State then
+            Prompt.Text = "Assistente ativada"
+        else
+            Prompt.Text = "Assistente desativada"
+        end
     end
-end)
+)
 
 local AssistInfo = Instance.new("TextLabel")
-AssistInfo.Size = UDim2.new(1, -20, 0, 65)
+AssistInfo.Size = UDim2.new(1, -20, 0, 60)
 AssistInfo.Position = UDim2.fromOffset(10, 250)
 AssistInfo.BackgroundTransparency = 1
 AssistInfo.TextColor3 = Color3.fromRGB(180, 190, 210)
 AssistInfo.TextWrapped = true
 AssistInfo.TextSize = 11
 AssistInfo.Font = Enum.Font.Gotham
-AssistInfo.Text = "A assistência identifica alvos e disponibiliza o alvo selecionado para integração com o sistema de armas."
+AssistInfo.Text = "Assistência baseada na seleção de alvos e acompanhamento da mira."
 AssistInfo.Parent = AimTab
 
---==================================================
+--====================================================
 -- ESP PLAYER
---==================================================
+--====================================================
 
 local EspTab = CreateTab("ESP")
 
 local function RemoveESP(Target)
     local Objects = ESPObjects[Target]
 
-    if Objects then
-        if Objects.Highlight then
-            Objects.Highlight:Destroy()
-        end
-
-        if Objects.Billboard then
-            Objects.Billboard:Destroy()
-        end
-
-        ESPObjects[Target] = nil
+    if not Objects then
+        return
     end
+
+    if Objects.Highlight then
+        Objects.Highlight:Destroy()
+    end
+
+    if Objects.Billboard then
+        Objects.Billboard:Destroy()
+    end
+
+    ESPObjects[Target] = nil
 end
 
 local function AddESP(Target)
@@ -306,7 +338,8 @@ local function AddESP(Target)
     end
 
     local Head = Character:FindFirstChild("Head")
-    local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+    local Humanoid =
+        Character:FindFirstChildOfClass("Humanoid")
 
     if not Head or not Humanoid then
         return
@@ -326,16 +359,20 @@ local function AddESP(Target)
     RemoveESP(Target)
 
     local Highlight = Instance.new("Highlight")
+
     Highlight.Name = "TalesPlayerHighlight"
     Highlight.Adornee = Character
     Highlight.FillColor = BLUE
     Highlight.OutlineColor = BLUE
     Highlight.FillTransparency = 0.82
     Highlight.OutlineTransparency = 0
-    Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    Highlight.DepthMode =
+        Enum.HighlightDepthMode.AlwaysOnTop
+
     Highlight.Parent = workspace
 
     local Billboard = Instance.new("BillboardGui")
+
     Billboard.Name = "TalesPlayerName"
     Billboard.Adornee = Head
     Billboard.Size = UDim2.fromOffset(180, 30)
@@ -344,6 +381,7 @@ local function AddESP(Target)
     Billboard.Parent = PlayerGui
 
     local Name = Instance.new("TextLabel")
+
     Name.Size = UDim2.fromScale(1, 1)
     Name.BackgroundTransparency = 1
     Name.Text = Target.DisplayName
@@ -361,13 +399,13 @@ local function AddESP(Target)
 end
 
 local function UpdateESP()
+    if not Settings.ESP then
+        return
+    end
+
     for _, Target in ipairs(Players:GetPlayers()) do
         if Target ~= Player then
-            if Settings.ESP then
-                AddESP(Target)
-            else
-                RemoveESP(Target)
-            end
+            AddESP(Target)
         end
     end
 
@@ -381,18 +419,18 @@ end
 CreateToggle(EspTab, "ESP PLAYER", 15, function(State)
     Settings.ESP = State
 
-    if not State then
+    if State then
+        UpdateESP()
+    else
         for Target in pairs(ESPObjects) do
             RemoveESP(Target)
         end
-    else
-        UpdateESP()
     end
 end)
 
---==================================================
--- CONEXÕES DOS JOGADORES
---==================================================
+--====================================================
+-- ACOMPANHAR TODOS OS JOGADORES
+--====================================================
 
 local function ConnectPlayer(Target)
     if Target == Player then
@@ -403,13 +441,35 @@ local function ConnectPlayer(Target)
         return
     end
 
-    PlayerConnections[Target] = Target.CharacterAdded:Connect(function()
-        task.wait(0.5)
+    PlayerConnections[Target] = {}
 
-        if Settings.ESP then
-            AddESP(Target)
-        end
-    end)
+    table.insert(
+        PlayerConnections[Target],
+        Target.CharacterAdded:Connect(function(Character)
+            RemoveESP(Target)
+
+            task.spawn(function()
+                local Head = Character:WaitForChild(
+                    "Head",
+                    10
+                )
+
+                local Humanoid =
+                    Character:WaitForChild("Humanoid", 10)
+
+                if Head and Humanoid and Settings.ESP then
+                    AddESP(Target)
+                end
+            end)
+        end)
+    )
+
+    table.insert(
+        PlayerConnections[Target],
+        Target.CharacterRemoving:Connect(function()
+            RemoveESP(Target)
+        end)
+    )
 
     if Settings.ESP then
         task.defer(function()
@@ -422,26 +482,30 @@ for _, Target in ipairs(Players:GetPlayers()) do
     ConnectPlayer(Target)
 end
 
-Players.PlayerAdded:Connect(function(Target)
-    ConnectPlayer(Target)
-end)
+Players.PlayerAdded:Connect(ConnectPlayer)
 
 Players.PlayerRemoving:Connect(function(Target)
     RemoveESP(Target)
 
-    if PlayerConnections[Target] then
-        PlayerConnections[Target]:Disconnect()
-        PlayerConnections[Target] = nil
+    local Connections = PlayerConnections[Target]
+
+    if Connections then
+        for _, Connection in ipairs(Connections) do
+            Connection:Disconnect()
+        end
     end
+
+    PlayerConnections[Target] = nil
 end)
 
---==================================================
+--====================================================
 -- AIM FOV
---==================================================
+--====================================================
 
 local FovTab = CreateTab("AIM FOV")
 
 local Circle = Instance.new("Frame")
+
 Circle.Name = "TalesFOV"
 Circle.AnchorPoint = Vector2.new(0.5, 0.5)
 Circle.Size = UDim2.fromOffset(240, 240)
@@ -449,19 +513,17 @@ Circle.BackgroundTransparency = 1
 Circle.Visible = false
 Circle.Parent = GUI
 
-Instance.new("UICorner", Circle).CornerRadius = UDim.new(1, 0)
+Instance.new("UICorner", Circle).CornerRadius =
+    UDim.new(1, 0)
 
 local Stroke = Instance.new("UIStroke")
+
 Stroke.Color = BLUE
 Stroke.Thickness = 1.5
 Stroke.Parent = Circle
 
-CreateToggle(FovTab, "AIM FOV", 15, function(State)
-    Settings.FOV = State
-    Circle.Visible = State
-end)
-
 local SizeLabel = Instance.new("TextLabel")
+
 SizeLabel.Size = UDim2.new(1, -20, 0, 30)
 SizeLabel.Position = UDim2.fromOffset(10, 65)
 SizeLabel.BackgroundTransparency = 1
@@ -475,24 +537,40 @@ local function UpdateFOVSize()
         Settings.FOVSize * 2
     )
 
-    SizeLabel.Text = "Tamanho: " .. Settings.FOVSize
+    SizeLabel.Text =
+        "Tamanho: " .. Settings.FOVSize
 end
 
+CreateToggle(FovTab, "AIM FOV", 15, function(State)
+    Settings.FOV = State
+    Circle.Visible = State
+end)
+
 CreateButton(FovTab, "AUMENTAR +", 105, function()
-    Settings.FOVSize = math.clamp(Settings.FOVSize + 20, 40, 300)
+    Settings.FOVSize = math.clamp(
+        Settings.FOVSize + 20,
+        40,
+        300
+    )
+
     UpdateFOVSize()
 end)
 
 CreateButton(FovTab, "DIMINUIR -", 150, function()
-    Settings.FOVSize = math.clamp(Settings.FOVSize - 20, 40, 300)
+    Settings.FOVSize = math.clamp(
+        Settings.FOVSize - 20,
+        40,
+        300
+    )
+
     UpdateFOVSize()
 end)
 
 UpdateFOVSize()
 
---==================================================
--- SELEÇÃO DE PARTE DO PERSONAGEM
---==================================================
+--====================================================
+-- LOCALIZAR PARTE DO PERSONAGEM
+--====================================================
 
 local function GetTargetPart(Character)
     if not Character then
@@ -512,12 +590,12 @@ local function GetTargetPart(Character)
     return nil
 end
 
---==================================================
--- LOCALIZAR ALVO MAIS PRÓXIMO DA MIRA
---==================================================
+--====================================================
+-- SELECIONAR ALVO MAIS PRÓXIMO DO CENTRO
+--====================================================
 
 local function GetClosestTarget()
-    Camera = workspace.CurrentCamera
+    local Camera = workspace.CurrentCamera
 
     if not Camera or not Settings.Target then
         return nil
@@ -538,19 +616,26 @@ local function GetClosestTarget()
             local Character = Target.Character
 
             if Character then
-                local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+                local Humanoid =
+                    Character:FindFirstChildOfClass("Humanoid")
+
                 local Part = GetTargetPart(Character)
 
                 if Humanoid and Humanoid.Health > 0 and Part then
                     local Position, OnScreen =
-                        Camera:WorldToViewportPoint(Part.Position)
+                        Camera:WorldToViewportPoint(
+                            Part.Position
+                        )
 
                     if OnScreen and Position.Z > 0 then
                         local Distance = (
-                            Vector2.new(Position.X, Position.Y) - Center
+                            Vector2.new(
+                                Position.X,
+                                Position.Y
+                            ) - Center
                         ).Magnitude
 
-                        if Distance <= BestDistance then
+                        if Distance < BestDistance then
                             BestDistance = Distance
                             BestTarget = Target
                         end
@@ -563,52 +648,63 @@ local function GetClosestTarget()
     return BestTarget
 end
 
---==================================================
--- VALORES PARA INTEGRAÇÃO COM O SISTEMA DE ARMAS
---==================================================
+--====================================================
+-- VALORES DE INTEGRAÇÃO
+--====================================================
 
 local TargetValue = Instance.new("ObjectValue")
+
 TargetValue.Name = "TalesCurrentTarget"
 TargetValue.Parent = GUI
 
 local TargetPartValue = Instance.new("StringValue")
+
 TargetPartValue.Name = "TalesTargetPart"
 TargetPartValue.Parent = GUI
 
 local AssistValue = Instance.new("BoolValue")
+
 AssistValue.Name = "TalesAssistIA"
-AssistValue.Value = false
 AssistValue.Parent = GUI
 
 local FOVValue = Instance.new("BoolValue")
+
 FOVValue.Name = "TalesFOVEnabled"
-FOVValue.Value = false
 FOVValue.Parent = GUI
 
---==================================================
--- ATUALIZAÇÃO PRINCIPAL
---==================================================
+--====================================================
+-- ATUALIZAÇÃO DO MENU
+--====================================================
 
 RunService.RenderStepped:Connect(function()
-    Camera = workspace.CurrentCamera
+    local Camera = workspace.CurrentCamera
 
-    if Camera then
-        local Viewport = Camera.ViewportSize
-
-        Circle.Position = UDim2.fromOffset(
-            Viewport.X / 2,
-            Viewport.Y / 2
-        )
+    if not Camera then
+        return
     end
+
+    local Viewport = Camera.ViewportSize
+
+    Circle.Position = UDim2.fromOffset(
+        Viewport.X / 2,
+        Viewport.Y / 2
+    )
 
     if Settings.ESP then
-        UpdateESP()
+        local Now = os.clock()
+
+        if Now - LastESPUpdate >= ESPUpdateInterval then
+            LastESPUpdate = Now
+            UpdateESP()
+        end
     end
 
-    if Settings.Aimbot and Settings.FOV and Settings.Target then
-        CurrentTarget = GetClosestTarget()
-    elseif Settings.AssistIA and Settings.FOV and Settings.Target then
-        CurrentTarget = GetClosestTarget()
+    if Settings.Aimbot or Settings.AssistIA then
+        if Settings.FOV and Settings.Target then
+            CurrentTarget = GetClosestTarget()
+        else
+            CurrentTarget = nil
+        end
     else
         CurrentTarget = nil
     end
@@ -623,9 +719,9 @@ RunService.RenderStepped:Connect(function()
     FOVValue.Value = Settings.FOV
 end)
 
---==================================================
+--====================================================
 -- MINIMIZAR
---==================================================
+--====================================================
 
 local Minimized = false
 
@@ -637,16 +733,17 @@ Minimize.MouseButton1Click:Connect(function()
 
     Main.Size = Minimized
         and UDim2.fromOffset(460, 45)
-        or UDim2.fromOffset(460, 360)
+        or UDim2.fromOffset(460, 370)
 
     Minimize.Text = Minimized and "+" or "-"
 end)
 
---==================================================
+--====================================================
 -- CRÉDITOS
---==================================================
+--====================================================
 
 local Credits = Instance.new("TextLabel")
+
 Credits.Size = UDim2.new(1, 0, 0, 20)
 Credits.Position = UDim2.new(0, 0, 1, -23)
 Credits.BackgroundTransparency = 1
@@ -655,4 +752,12 @@ Credits.TextColor3 = Color3.fromRGB(130, 140, 160)
 Credits.TextSize = 12
 Credits.Parent = Main
 
-print("Tales Mod Menu atualizado e carregado!")
+--====================================================
+-- FINALIZAÇÃO
+--====================================================
+
+print("TALES MOD MENU carregado!")
+print("ESP Player: pronto")
+print("Aim FOV: pronto")
+print("Seleção de alvo: pronta")
+print("Assistente IA: seleção experimental pronta")
