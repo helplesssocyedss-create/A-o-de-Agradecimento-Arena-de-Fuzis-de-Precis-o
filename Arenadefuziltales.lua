@@ -1,4 +1,3 @@
-```lua
 --[[
     TALES MOD MENU
     Feito por Tales
@@ -7,10 +6,15 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
+
+-- LIMPAR VERSÃO ANTERIOR
+local OldGUI = PlayerGui:FindFirstChild("TalesModMenu")
+if OldGUI then
+    OldGUI:Destroy()
+end
 
 -- CONFIGURAÇÕES
 local Settings = {
@@ -35,8 +39,7 @@ Main.BackgroundColor3 = Color3.fromRGB(20, 22, 30)
 Main.BorderSizePixel = 0
 Main.Parent = GUI
 
-Instance.new("UICorner", Main).CornerRadius =
-    UDim.new(0, 12)
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 
 -- TÍTULO
 local Title = Instance.new("TextLabel")
@@ -44,7 +47,7 @@ Title.Size = UDim2.new(1, -55, 0, 45)
 Title.Position = UDim2.fromOffset(10, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "TALES | MOD MENU"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 19
 Title.Font = Enum.Font.GothamBold
 Title.Parent = Main
@@ -95,14 +98,8 @@ local function CreateTab(Name)
 
     local Button = Instance.new("TextButton")
     Button.Size = UDim2.new(1, -10, 0, 38)
-    Button.Position = UDim2.fromOffset(
-        5,
-        (#Tabs * 43) + 5
-    )
-
-    Button.BackgroundColor3 =
-        Color3.fromRGB(45, 49, 65)
-
+    Button.Position = UDim2.fromOffset(5, (#Tabs * 43) + 5)
+    Button.BackgroundColor3 = Color3.fromRGB(45, 49, 65)
     Button.TextColor3 = Color3.new(1, 1, 1)
     Button.Text = Name
     Button.TextSize = 13
@@ -112,19 +109,17 @@ local function CreateTab(Name)
     Instance.new("UICorner", Button)
 
     Button.MouseButton1Click:Connect(function()
-        for _, Tab in pairs(Tabs) do
+        for _, Tab in ipairs(Tabs) do
             Tab.Visible = false
         end
 
-        for _, TabButton in pairs(TabButtons) do
+        for _, TabButton in ipairs(TabButtons) do
             TabButton.BackgroundColor3 =
                 Color3.fromRGB(45, 49, 65)
         end
 
         Page.Visible = true
-
-        Button.BackgroundColor3 =
-            Color3.fromRGB(25, 125, 75)
+        Button.BackgroundColor3 = Color3.fromRGB(25, 125, 75)
     end)
 
     table.insert(Tabs, Page)
@@ -132,8 +127,7 @@ local function CreateTab(Name)
 
     if #Tabs == 1 then
         Page.Visible = true
-        Button.BackgroundColor3 =
-            Color3.fromRGB(25, 125, 75)
+        Button.BackgroundColor3 = Color3.fromRGB(25, 125, 75)
     end
 
     return Page
@@ -142,13 +136,9 @@ end
 -- SISTEMA ON/OFF
 local function CreateToggle(Parent, Name, Callback, Y)
     local Button = Instance.new("TextButton")
-
     Button.Size = UDim2.new(1, -20, 0, 38)
     Button.Position = UDim2.fromOffset(10, Y)
-
-    Button.BackgroundColor3 =
-        Color3.fromRGB(75, 78, 90)
-
+    Button.BackgroundColor3 = Color3.fromRGB(75, 78, 90)
     Button.TextColor3 = Color3.new(1, 1, 1)
     Button.TextSize = 14
     Button.Font = Enum.Font.GothamBold
@@ -175,16 +165,12 @@ local function CreateToggle(Parent, Name, Callback, Y)
     return Button
 end
 
--- BOTÕES DE SELEÇÃO
+-- BOTÕES DE OPÇÃO
 local function CreateOption(Parent, Name, Y, Callback)
     local Button = Instance.new("TextButton")
-
     Button.Size = UDim2.new(1, -20, 0, 35)
     Button.Position = UDim2.fromOffset(10, Y)
-
-    Button.BackgroundColor3 =
-        Color3.fromRGB(45, 95, 150)
-
+    Button.BackgroundColor3 = Color3.fromRGB(45, 95, 150)
     Button.TextColor3 = Color3.new(1, 1, 1)
     Button.Text = Name
     Button.TextSize = 13
@@ -193,50 +179,36 @@ local function CreateOption(Parent, Name, Y, Callback)
 
     Instance.new("UICorner", Button)
 
-    Button.MouseButton1Click:Connect(function()
-        Callback()
-    end)
+    Button.MouseButton1Click:Connect(Callback)
 
     return Button
 end
 
--- CATEGORIA AIMBOT
+-- AIMBOT
 local AimTab = CreateTab("AIMBOT")
 
 CreateToggle(AimTab, "AIMBOT", function(State)
     Settings.Aimbot = State
 end, 15)
 
-local HeadButton = CreateOption(
-    AimTab,
-    "ALVO: CABEÇA",
-    65,
-    function()
-        Settings.Target = "Cabeça"
-    end
-)
+CreateOption(AimTab, "ALVO: CABEÇA", 65, function()
+    Settings.Target = "Cabeça"
+end)
 
-local ChestButton = CreateOption(
-    AimTab,
-    "ALVO: PEITO",
-    110,
-    function()
-        Settings.Target = "Peito"
-    end
-)
+CreateOption(AimTab, "ALVO: PEITO", 110, function()
+    Settings.Target = "Peito"
+end)
 
--- A seleção de alvo fica disponível para
--- integração com a assistência de mira
--- autorizada no sistema de armas do jogo.
-
--- CATEGORIA ESP
+-- ESP
 local EspTab = CreateTab("ESP")
 
 local ESPObjects = {}
 
 local function RemoveESP(Target)
-    if ESPObjects[Target] then
-        ESPObjects[Target]:Destroy()
+    local Object = ESPObjects[Target]
+
+    if Object then
+        Object:Destroy()
         ESPObjects[Target] = nil
     end
 end
@@ -254,8 +226,11 @@ local function AddESP(Target)
 
     RemoveESP(Target)
 
-    local Highlight = Instance.new("Highlight")
+    local Folder = Instance.new("Folder")
+    Folder.Name = "TalesESP_" .. Target.UserId
+    Folder.Parent = GUI
 
+    local Highlight = Instance.new("Highlight")
     Highlight.Name = "TalesESP"
     Highlight.Adornee = Character
     Highlight.FillColor = Color3.fromRGB(0, 100, 255)
@@ -263,7 +238,7 @@ local function AddESP(Target)
     Highlight.FillTransparency = 0.85
     Highlight.OutlineTransparency = 0
     Highlight.DepthMode = Enum.HighlightDepthMode.Occluded
-    Highlight.Parent = GUI
+    Highlight.Parent = Folder
 
     local Head = Character:FindFirstChild("Head")
 
@@ -271,32 +246,22 @@ local function AddESP(Target)
         local Billboard = Instance.new("BillboardGui")
         Billboard.Name = "TalesESPName"
         Billboard.Adornee = Head
-        Billboard.Size = UDim2.fromOffset(100, 20)
+        Billboard.Size = UDim2.fromOffset(120, 25)
         Billboard.StudsOffset = Vector3.new(0, 2.5, 0)
         Billboard.AlwaysOnTop = true
-        Billboard.Parent = GUI
+        Billboard.Parent = Folder
 
         local NameLabel = Instance.new("TextLabel")
         NameLabel.Size = UDim2.fromScale(1, 1)
         NameLabel.BackgroundTransparency = 1
         NameLabel.Text = Target.DisplayName
-        NameLabel.TextColor3 =
-            Color3.fromRGB(255, 255, 255)
+        NameLabel.TextColor3 = Color3.new(1, 1, 1)
         NameLabel.TextSize = 11
         NameLabel.Font = Enum.Font.GothamBold
         NameLabel.Parent = Billboard
-
-        local Folder = Instance.new("Folder")
-        Folder.Name = "TalesESPObjects"
-        Folder.Parent = GUI
-
-        Highlight.Parent = Folder
-        Billboard.Parent = Folder
-
-        ESPObjects[Target] = Folder
-    else
-        ESPObjects[Target] = Highlight
     end
+
+    ESPObjects[Target] = Folder
 end
 
 local function UpdateESP()
@@ -314,16 +279,21 @@ end
 CreateToggle(EspTab, "ESP PLAYER", function(State)
     Settings.ESP = State
 
-    if not State then
+    if State then
+        UpdateESP()
+    else
         for Target in pairs(ESPObjects) do
             RemoveESP(Target)
         end
-    else
-        UpdateESP()
     end
 end, 15)
 
-Players.PlayerAdded:Connect(function(Target)
+-- JOGADORES EXISTENTES E NOVOS
+local function SetupPlayer(Target)
+    if Target == Player then
+        return
+    end
+
     Target.CharacterAdded:Connect(function()
         task.wait(1)
 
@@ -331,26 +301,30 @@ Players.PlayerAdded:Connect(function(Target)
             AddESP(Target)
         end
     end)
-end)
+
+    if Settings.ESP and Target.Character then
+        AddESP(Target)
+    end
+end
+
+for _, Target in ipairs(Players:GetPlayers()) do
+    SetupPlayer(Target)
+end
+
+Players.PlayerAdded:Connect(SetupPlayer)
 
 Players.PlayerRemoving:Connect(function(Target)
     RemoveESP(Target)
 end)
 
--- CATEGORIA AIM FOV
+-- AIM FOV
 local FovTab = CreateTab("AIM FOV")
 
 local FOVCircle = Instance.new("Frame")
-
 FOVCircle.Name = "TalesFOV"
 FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
-
-FOVCircle.Size = UDim2.fromOffset(
-    Settings.FOVSize * 2,
-    Settings.FOVSize * 2
-)
-
+FOVCircle.Size = UDim2.fromOffset(240, 240)
 FOVCircle.BackgroundTransparency = 1
 FOVCircle.Visible = false
 FOVCircle.Parent = GUI
@@ -361,7 +335,7 @@ CircleCorner.Parent = FOVCircle
 
 local CircleStroke = Instance.new("UIStroke")
 CircleStroke.Thickness = 1
-CircleStroke.Color = Color3.fromRGB(255, 255, 255)
+CircleStroke.Color = Color3.new(1, 1, 1)
 CircleStroke.Parent = FOVCircle
 
 CreateToggle(FovTab, "AIM FOV", function(State)
@@ -370,7 +344,6 @@ CreateToggle(FovTab, "AIM FOV", function(State)
 end, 15)
 
 local SizeLabel = Instance.new("TextLabel")
-
 SizeLabel.Size = UDim2.new(1, -20, 0, 30)
 SizeLabel.Position = UDim2.fromOffset(10, 65)
 SizeLabel.BackgroundTransparency = 1
@@ -392,8 +365,7 @@ local function ChangeFOV(Value)
         Settings.FOVSize * 2
     )
 
-    SizeLabel.Text =
-        "Tamanho: " .. Settings.FOVSize
+    SizeLabel.Text = "Tamanho: " .. Settings.FOVSize
 end
 
 CreateOption(FovTab, "AUMENTAR +", 105, function()
@@ -404,12 +376,7 @@ CreateOption(FovTab, "DIMINUIR -", 150, function()
     ChangeFOV(-20)
 end)
 
--- ATUALIZAÇÃO
-RunService.RenderStepped:Connect(function()
-    FOVCircle.Visible = Settings.FOV
-end)
-
--- MINIMIZAR E RESTAURAR
+-- MINIMIZAR
 local Minimized = false
 
 Minimize.MouseButton1Click:Connect(function()
@@ -427,16 +394,13 @@ end)
 
 -- CRÉDITOS
 local Credits = Instance.new("TextLabel")
-
 Credits.Size = UDim2.new(1, 0, 0, 20)
 Credits.Position = UDim2.new(0, 0, 1, -23)
 Credits.BackgroundTransparency = 1
 Credits.Text = "Feito por Tales"
-Credits.TextColor3 =
-    Color3.fromRGB(130, 140, 160)
+Credits.TextColor3 = Color3.fromRGB(130, 140, 160)
 Credits.TextSize = 12
 Credits.Font = Enum.Font.Gotham
 Credits.Parent = Main
 
 print("Tales Mod Menu carregado com sucesso!")
-```
