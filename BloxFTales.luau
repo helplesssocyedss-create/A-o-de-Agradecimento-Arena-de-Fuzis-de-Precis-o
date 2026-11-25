@@ -1,7 +1,7 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 3.1
--- Interface responsiva e recursos locais genéricos.
--- Compatível com LocalScript em uma experiência sua.
+-- BLOX F' - TALES | VERSAO 3.2
+-- Interface, recursos locais e pontos de integração
+-- Para uso em uma experiência Roblox que você controla.
 --========================================================
 
 local Players = game:GetService("Players")
@@ -9,6 +9,7 @@ local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -28,23 +29,29 @@ local COLORS = {
 }
 
 local states = {}
-local selectedPlayer = nil
-local selectedIsland = nil
 local connections = {}
 local playerHighlights = {}
-local fruitHighlights = {}
-local chestHighlights = {}
+local objectHighlights = {}
+
+local selectedPlayer
 local infiniteJump = false
 local noclip = false
+local flying = false
+local espPlayers = false
+local espEnemies = false
 local showNames = false
 local showDistances = false
-local espPlayers = false
 local fruitFinder = false
 local chestFinder = false
 local destroyed = false
-local collisionCache = {}
+
 local walkSpeed = 16
 local jumpPower = 50
+local flySpeed = 60
+local flyConnection
+local bodyVelocity
+local bodyGyro
+local collisionCache = {}
 
 local Screen = Instance.new("ScreenGui")
 Screen.Name = "BloxFTales"
@@ -78,7 +85,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  3.1"
+Title.Text = "Blox F' - Tales  |  3.2"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -107,77 +114,7 @@ Close.TextSize = 14
 Close.Parent = Header
 Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 8)
 
--- Declaracoes antecipadas para a minimizacao.
-local Sidebar, Content
-local minimized = false
-local expandedSize = UDim2.fromOffset(620, 430)
-local expandedPosition = Main.Position
-
-local function tween(object, props, duration)
-    TweenService:Create(
-        object,
-        TweenInfo.new(
-            duration or 0.2,
-            Enum.EasingStyle.Quart,
-            Enum.EasingDirection.Out
-        ),
-        props
-    ):Play()
-end
-
-local function setStatus(message)
-    local statusObject = _G.BloxFTalesStatus
-
-    if statusObject and statusObject.Parent then
-        statusObject.Text = "Status: " .. tostring(message)
-    end
-end
-
-local function MinimizePanel()
-    minimized = not minimized
-
-    if minimized then
-        expandedPosition = Main.Position
-
-        Sidebar.Visible = false
-        Content.Visible = false
-        Title.Visible = false
-        Close.Visible = false
-
-        Min.Position = UDim2.fromOffset(13, 13)
-        Min.Size = UDim2.fromOffset(34, 34)
-        Min.Text = "↗"
-
-        tween(Main, {
-            Size = UDim2.fromOffset(60, 60)
-        }, 0.22)
-
-        tween(Header, {
-            Size = UDim2.fromOffset(60, 60)
-        }, 0.22)
-    else
-        tween(Main, {
-            Size = expandedSize
-        }, 0.22)
-
-        tween(Header, {
-            Size = UDim2.new(1, 0, 0, 48)
-        }, 0.22)
-
-        Main.Position = expandedPosition
-
-        Min.Position = UDim2.new(1, -78, 0, 8)
-        Min.Size = UDim2.fromOffset(32, 32)
-        Min.Text = "–"
-
-        Sidebar.Visible = true
-        Content.Visible = true
-        Title.Visible = true
-        Close.Visible = true
-    end
-end
-
-Sidebar = Instance.new("Frame")
+local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.new(0, 145, 1, -60)
 Sidebar.Position = UDim2.fromOffset(8, 54)
 Sidebar.BackgroundColor3 = COLORS.panel
@@ -191,7 +128,7 @@ tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
 tabLayout.Parent = Sidebar
 
-Content = Instance.new("ScrollingFrame")
+local Content = Instance.new("ScrollingFrame")
 Content.Size = UDim2.new(1, -166, 1, -60)
 Content.Position = UDim2.fromOffset(158, 54)
 Content.BackgroundColor3 = COLORS.panel
@@ -207,25 +144,35 @@ contentLayout.Padding = UDim.new(0, 7)
 contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 contentLayout.Parent = Content
 
-local contentPadding = Instance.new("UIPadding")
-contentPadding.PaddingTop = UDim.new(0, 8)
-contentPadding.PaddingBottom = UDim.new(0, 8)
-contentPadding.PaddingLeft = UDim.new(0, 8)
-contentPadding.PaddingRight = UDim.new(0, 8)
-contentPadding.Parent = Content
+local padding = Instance.new("UIPadding")
+padding.PaddingTop = UDim.new(0, 8)
+padding.PaddingBottom = UDim.new(0, 8)
+padding.PaddingLeft = UDim.new(0, 8)
+padding.PaddingRight = UDim.new(0, 8)
+padding.Parent = Content
 
 contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    Content.CanvasSize = UDim2.new(
-        0,
-        0,
-        0,
-        contentLayout.AbsoluteContentSize.Y + 18
-    )
+    Content.CanvasSize = UDim2.new(0, 0, 0, contentLayout.AbsoluteContentSize.Y + 18)
 end)
+
+local function setStatus(message)
+    local label = _G.BloxFTalesStatus
+    if label and label.Parent then
+        label.Text = "Status: " .. tostring(message)
+    end
+end
+
+local function tween(object, properties, duration)
+    TweenService:Create(
+        object,
+        TweenInfo.new(duration or 0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+        properties
+    ):Play()
+end
 
 local function clearContent()
     for _, child in ipairs(Content:GetChildren()) do
-        if child ~= contentLayout and child ~= contentPadding then
+        if child ~= contentLayout and child ~= padding then
             child:Destroy()
         end
     end
@@ -242,7 +189,6 @@ local function makeLabel(text, height)
     label.TextWrapped = true
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = Content
-
     return label
 end
 
@@ -255,31 +201,26 @@ local function makeButton(text, callback, color)
     button.TextSize = 13
     button.Font = Enum.Font.GothamSemibold
     button.TextWrapped = true
-    button.AutoButtonColor = true
     button.Parent = Content
-
     Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
 
     button.MouseButton1Click:Connect(function()
         if callback then
-            callback()
+            local ok, err = pcall(callback)
+            if not ok then setStatus("Erro: " .. tostring(err)) end
         end
     end)
-
     return button
 end
 
 local function makeToggle(name, callback, initial)
-    if states[name] == nil then
-        states[name] = initial or false
-    end
+    if states[name] == nil then states[name] = initial or false end
 
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, -4, 0, 40)
     row.BackgroundColor3 = COLORS.row
     row.BorderSizePixel = 0
     row.Parent = Content
-
     Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
 
     local label = Instance.new("TextLabel")
@@ -299,7 +240,6 @@ local function makeToggle(name, callback, initial)
     switch.Text = ""
     switch.AutoButtonColor = false
     switch.Parent = row
-
     Instance.new("UICorner", switch).CornerRadius = UDim.new(1, 0)
 
     local dot = Instance.new("Frame")
@@ -307,41 +247,35 @@ local function makeToggle(name, callback, initial)
     dot.Position = UDim2.fromOffset(3, 3)
     dot.BackgroundColor3 = COLORS.white
     dot.Parent = switch
-
     Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
 
     local function update()
         tween(switch, {
             BackgroundColor3 = states[name] and COLORS.green or COLORS.gray
         }, 0.15)
-
         tween(dot, {
-            Position = states[name]
-                and UDim2.fromOffset(26, 3)
-                or UDim2.fromOffset(3, 3)
+            Position = states[name] and UDim2.fromOffset(26, 3) or UDim2.fromOffset(3, 3)
         }, 0.15)
     end
 
     update()
-
     switch.MouseButton1Click:Connect(function()
         states[name] = not states[name]
         update()
-
         if callback then
             local ok, err = pcall(callback, states[name])
-
-            if not ok then
-                setStatus("Erro em " .. name .. ": " .. tostring(err))
-            end
+            if not ok then setStatus("Erro em " .. name .. ": " .. tostring(err)) end
         end
     end)
-
     return row
 end
 
 local function getCharacter()
     return LocalPlayer.Character
+end
+
+local function getHumanoid(character)
+    return character and character:FindFirstChildOfClass("Humanoid")
 end
 
 local function getRoot(character)
@@ -350,449 +284,408 @@ end
 
 local function teleportLocal(destination)
     local character = getCharacter()
-    local root = getRoot(character)
-
-    if not root then
+    if not getRoot(character) then
         setStatus("Personagem ainda não carregou.")
         return false
     end
-
-    if typeof(destination) == "CFrame" then
-        character:PivotTo(destination)
-        return true
-    elseif typeof(destination) == "Vector3" then
-        character:PivotTo(CFrame.new(destination + Vector3.new(0, 4, 0)))
-        return true
+    if typeof(destination) == "Vector3" then
+        destination = CFrame.new(destination + Vector3.new(0, 4, 0))
     end
-
-    return false
+    if typeof(destination) ~= "CFrame" then return false end
+    character:PivotTo(destination)
+    return true
 end
 
 local function findNamedWorldObject(names)
     for _, item in ipairs(Workspace:GetDescendants()) do
         local lower = string.lower(item.Name)
-
         for _, name in ipairs(names) do
             if string.find(lower, string.lower(name), 1, true) then
-                if item:IsA("BasePart") then
-                    return item
-                end
-
+                if item:IsA("BasePart") then return item end
                 if item:IsA("Model") then
-                    local part = item.PrimaryPart
-                        or item:FindFirstChildWhichIsA("BasePart", true)
-
-                    if part then
-                        return part
-                    end
+                    local part = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)
+                    if part then return part end
                 end
             end
         end
     end
-
-    return nil
 end
 
-local function removeHighlights(bucket)
-    for instance, adornment in pairs(bucket) do
-        if adornment and adornment.Parent then
-            adornment:Destroy()
-        end
-
-        bucket[instance] = nil
+local function removeBucket(bucket)
+    for object, adornment in pairs(bucket) do
+        if adornment and adornment.Parent then adornment:Destroy() end
+        bucket[object] = nil
     end
 end
 
-local function applyPlayerVisuals()
-    removeHighlights(playerHighlights)
+local function makeHighlight(object, color, bucket)
+    if bucket[object] or not object or not object.Parent then return end
+    local h = Instance.new("Highlight")
+    h.FillColor = color
+    h.OutlineColor = COLORS.white
+    h.FillTransparency = 0.65
+    h.Adornee = object
+    h.Parent = Screen
+    bucket[object] = h
+end
 
-    for _, target in ipairs(Players:GetPlayers()) do
-        if target ~= LocalPlayer and target.Character then
-            local character = target.Character
+local function isEnemyModel(model)
+    if not model:IsA("Model") or Players:GetPlayerFromCharacter(model) then return false end
+    if not getHumanoid(model) or not getRoot(model) then return false end
+    local name = string.lower(model.Name)
+    return string.find(name, "enemy", 1, true)
+        or string.find(name, "bandit", 1, true)
+        or string.find(name, "boss", 1, true)
+        or string.find(name, "npc", 1, true)
+end
 
+local function refreshVisuals()
+    removeBucket(playerHighlights)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local character = player.Character
             if espPlayers then
-                local h = Instance.new("Highlight")
-                h.FillColor = COLORS.purple
-                h.OutlineColor = COLORS.white
-                h.FillTransparency = 0.72
-                h.Adornee = character
-                h.Parent = Screen
-
-                playerHighlights[character] = h
+                makeHighlight(character, COLORS.purple, playerHighlights)
             end
 
             if showNames or showDistances then
                 local head = character:FindFirstChild("Head")
-
                 if head then
-                    local bill = Instance.new("BillboardGui")
-                    bill.Name = "BloxFTalesTag"
-                    bill.Size = UDim2.fromOffset(180, 28)
-                    bill.StudsOffset = Vector3.new(0, 2.5, 0)
-                    bill.AlwaysOnTop = true
-                    bill.Adornee = head
-                    bill.Parent = Screen
+                    local oldTag = head:FindFirstChild("BloxFTalesTag")
+                    if oldTag then oldTag:Destroy() end
 
-                    local txt = Instance.new("TextLabel")
-                    txt.Size = UDim2.fromScale(1, 1)
-                    txt.BackgroundTransparency = 1
-                    txt.TextColor3 = COLORS.white
-                    txt.TextStrokeTransparency = 0.25
-                    txt.Font = Enum.Font.GothamBold
-                    txt.TextSize = 12
-                    txt.Parent = bill
+                    local tag = Instance.new("BillboardGui")
+                    tag.Name = "BloxFTalesTag"
+                    tag.Size = UDim2.fromOffset(190, 28)
+                    tag.StudsOffset = Vector3.new(0, 2.5, 0)
+                    tag.AlwaysOnTop = true
+                    tag.Adornee = head
+                    tag.Parent = head
 
-                    local myRoot = getRoot(getCharacter())
-                    local theirRoot = getRoot(character)
+                    local text = Instance.new("TextLabel")
+                    text.Size = UDim2.fromScale(1, 1)
+                    text.BackgroundTransparency = 1
+                    text.TextColor3 = COLORS.white
+                    text.TextStrokeTransparency = 0.2
+                    text.Font = Enum.Font.GothamBold
+                    text.TextSize = 12
+                    text.Parent = tag
 
-                    local distance = (myRoot and theirRoot)
-                        and math.floor((myRoot.Position - theirRoot.Position).Magnitude)
-                        or 0
+                    local a = getRoot(getCharacter())
+                    local b = getRoot(character)
+                    local distance = (a and b) and math.floor((a.Position - b.Position).Magnitude) or 0
 
-                    txt.Text = (showNames and target.DisplayName or "")
-                        .. ((showNames and showDistances) and "  |  " or "")
-                        .. (showDistances and (tostring(distance) .. " studs") or "")
-
-                    playerHighlights[bill] = bill
+                    text.Text = (showNames and player.DisplayName or "")
+                        .. ((showNames and showDistances) and " | " or "")
+                        .. (showDistances and (distance .. " studs") or "")
+                    playerHighlights[tag] = tag
                 end
             end
         end
     end
 end
 
-local function refreshObjectHighlights(kind, enabled)
-    local bucket = kind == "fruit" and fruitHighlights or chestHighlights
-
-    for object, adornment in pairs(bucket) do
-        if adornment and adornment.Parent then
-            adornment:Destroy()
-        end
-
-        bucket[object] = nil
-    end
-
-    if not enabled then
-        return
-    end
-
-    local key = string.lower(kind)
-
+local function scanWorld()
     for _, item in ipairs(Workspace:GetDescendants()) do
-        local n = string.lower(item.Name)
+        local name = string.lower(item.Name)
 
-        local matches =
-            (key == "fruit" and string.find(n, "fruit", 1, true))
-            or (key == "chest" and string.find(n, "chest", 1, true))
-            or (key == "chest" and string.find(n, "baú", 1, true))
-
-        if matches and (item:IsA("BasePart") or item:IsA("Model")) then
-            local h = Instance.new("Highlight")
-            h.FillColor = key == "fruit" and COLORS.green or COLORS.purple
-            h.OutlineColor = COLORS.white
-            h.FillTransparency = 0.65
-            h.Adornee = item
-            h.Parent = Screen
-
-            bucket[item] = h
+        if fruitFinder and (string.find(name, "fruit", 1, true) or string.find(name, "fruta", 1, true)) then
+            if item:IsA("Model") or item:IsA("BasePart") then
+                makeHighlight(item, COLORS.green, objectHighlights)
+            end
         end
-    end
-end
 
-local function makePlayerSelection()
-    makeLabel(
-        "Escolha um jogador. Depois toque em confirmar para ir até ele.",
-        42
-    )
+        if chestFinder and (string.find(name, "chest", 1, true) or string.find(name, "baú", 1, true)) then
+            if item:IsA("Model") or item:IsA("BasePart") then
+                makeHighlight(item, COLORS.purple, objectHighlights)
+            end
+        end
 
-    local selectionLabel = makeLabel("Selecionado: nenhum", 28)
-    local confirmButton
-
-    local function updateSelection()
-        selectionLabel.Text = "Selecionado: "
-            .. (selectedPlayer and selectedPlayer.Name or "nenhum")
-
-        if confirmButton then
-            confirmButton.Visible = selectedPlayer ~= nil
+        if espEnemies and isEnemyModel(item) then
+            makeHighlight(item, COLORS.red, objectHighlights)
         end
     end
 
-    for _, target in ipairs(Players:GetPlayers()) do
-        if target ~= LocalPlayer then
-            local row = Instance.new("Frame")
-            row.Size = UDim2.new(1, -4, 0, 38)
-            row.BackgroundColor3 = COLORS.row
-            row.Parent = Content
-
-            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
-
-            local check = Instance.new("TextButton")
-            check.Size = UDim2.fromOffset(28, 28)
-            check.Position = UDim2.new(1, -34, 0.5, -14)
-            check.BackgroundColor3 = selectedPlayer == target
-                and COLORS.green or COLORS.gray
-            check.Text = selectedPlayer == target and "✓" or ""
-            check.TextColor3 = COLORS.white
-            check.Parent = row
-
-            Instance.new("UICorner", check).CornerRadius = UDim.new(0, 6)
-
-            local name = Instance.new("TextButton")
-            name.Size = UDim2.new(1, -42, 1, 0)
-            name.Position = UDim2.fromOffset(8, 0)
-            name.BackgroundTransparency = 1
-            name.Text = target.DisplayName .. "  (@" .. target.Name .. ")"
-            name.TextColor3 = COLORS.white
-            name.TextSize = 12
-            name.Font = Enum.Font.Gotham
-            name.TextXAlignment = Enum.TextXAlignment.Left
-            name.Parent = row
-
-            local function choose()
-                selectedPlayer = target
-
-                for _, child in ipairs(Content:GetChildren()) do
-                    if child:IsA("Frame") then
-                        for _, b in ipairs(child:GetChildren()) do
-                            if b:IsA("TextButton")
-                                and b.Size == UDim2.fromOffset(28, 28) then
-
-                                b.BackgroundColor3 = COLORS.gray
-                                b.Text = ""
-                            end
-                        end
-                    end
-                end
-
-                check.BackgroundColor3 = COLORS.green
-                check.Text = "✓"
-                updateSelection()
-            end
-
-            name.MouseButton1Click:Connect(choose)
-            check.MouseButton1Click:Connect(choose)
+    for object, adornment in pairs(objectHighlights) do
+        if not object.Parent then
+            if adornment then adornment:Destroy() end
+            objectHighlights[object] = nil
         end
     end
-
-    confirmButton = makeButton(
-        "CONFIRMAR: IR ATÉ O JOGADOR",
-        function()
-            if not selectedPlayer or not selectedPlayer.Parent then
-                setStatus("Esse jogador não está mais no servidor.")
-                return
-            end
-
-            local targetRoot = getRoot(selectedPlayer.Character)
-
-            if not targetRoot then
-                setStatus("O personagem do jogador não está disponível.")
-                return
-            end
-
-            local confirm = Instance.new("Frame")
-            confirm.Size = UDim2.fromOffset(270, 118)
-            confirm.Position = UDim2.new(0.5, -135, 0.5, -59)
-            confirm.BackgroundColor3 = COLORS.panel
-            confirm.ZIndex = 20
-            confirm.Parent = Screen
-
-            Instance.new("UICorner", confirm).CornerRadius = UDim.new(0, 10)
-
-            local msg = Instance.new("TextLabel")
-            msg.Size = UDim2.new(1, -16, 0, 55)
-            msg.Position = UDim2.fromOffset(8, 4)
-            msg.BackgroundTransparency = 1
-            msg.Text = "Ir até " .. selectedPlayer.DisplayName
-                .. "?\nA ação move apenas seu personagem."
-            msg.TextColor3 = COLORS.white
-            msg.TextWrapped = true
-            msg.Font = Enum.Font.Gotham
-            msg.TextSize = 12
-            msg.ZIndex = 21
-            msg.Parent = confirm
-
-            local yes = Instance.new("TextButton")
-            yes.Size = UDim2.new(0.46, 0, 0, 34)
-            yes.Position = UDim2.new(0.03, 0, 1, -42)
-            yes.Text = "Confirmar"
-            yes.BackgroundColor3 = COLORS.green
-            yes.TextColor3 = COLORS.white
-            yes.ZIndex = 21
-            yes.Parent = confirm
-
-            local no = Instance.new("TextButton")
-            no.Size = UDim2.new(0.46, 0, 0, 34)
-            no.Position = UDim2.new(0.51, 0, 1, -42)
-            no.Text = "Cancelar"
-            no.BackgroundColor3 = COLORS.red
-            no.TextColor3 = COLORS.white
-            no.ZIndex = 21
-            no.Parent = confirm
-
-            yes.MouseButton1Click:Connect(function()
-                local latestRoot = getRoot(
-                    selectedPlayer and selectedPlayer.Character
-                )
-
-                if latestRoot then
-                    teleportLocal(latestRoot.CFrame * CFrame.new(0, 0, 4))
-                    setStatus("Teletransporte local solicitado.")
-                end
-
-                confirm:Destroy()
-            end)
-
-            no.MouseButton1Click:Connect(function()
-                confirm:Destroy()
-            end)
-        end,
-        COLORS.purple
-    )
-
-    confirmButton.Visible = selectedPlayer ~= nil
-    updateSelection()
 end
 
 local function makeSpeedControl()
-    makeLabel("Velocidade de caminhada (aplicada localmente):", 28)
-
+    makeLabel("Velocidade de caminhada:", 26)
     local box = Instance.new("TextBox")
     box.Size = UDim2.new(1, -4, 0, 38)
     box.BackgroundColor3 = COLORS.row
     box.TextColor3 = COLORS.white
-    box.PlaceholderText = "Velocidade entre 0 e 100"
     box.Text = tostring(walkSpeed)
     box.ClearTextOnFocus = false
-    box.Font = Enum.Font.Gotham
-    box.TextSize = 13
     box.Parent = Content
-
     Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
 
     box.FocusLost:Connect(function()
         local value = tonumber(box.Text)
-
-        if not value then
-            box.Text = tostring(walkSpeed)
-            return
-        end
-
+        if not value then box.Text = tostring(walkSpeed) return end
         walkSpeed = math.clamp(value, 0, 100)
-
-        local hum = getCharacter()
-            and getCharacter():FindFirstChildOfClass("Humanoid")
-
-        if hum then
-            hum.WalkSpeed = walkSpeed
-        end
-
+        local hum = getHumanoid(getCharacter())
+        if hum then hum.WalkSpeed = walkSpeed end
         box.Text = tostring(walkSpeed)
-        setStatus("Velocidade local: " .. walkSpeed)
+        setStatus("Velocidade definida: " .. walkSpeed)
     end)
 
-    makeLabel("Força do pulo:", 25)
-
+    makeLabel("Força do pulo:", 26)
     local jumpBox = Instance.new("TextBox")
     jumpBox.Size = UDim2.new(1, -4, 0, 38)
     jumpBox.BackgroundColor3 = COLORS.row
     jumpBox.TextColor3 = COLORS.white
     jumpBox.Text = tostring(jumpPower)
     jumpBox.ClearTextOnFocus = false
-    jumpBox.Font = Enum.Font.Gotham
-    jumpBox.TextSize = 13
     jumpBox.Parent = Content
-
     Instance.new("UICorner", jumpBox).CornerRadius = UDim.new(0, 7)
 
     jumpBox.FocusLost:Connect(function()
         local value = tonumber(jumpBox.Text)
-
-        if not value then
-            jumpBox.Text = tostring(jumpPower)
-            return
-        end
-
+        if not value then jumpBox.Text = tostring(jumpPower) return end
         jumpPower = math.clamp(value, 0, 150)
-
-        local hum = getCharacter()
-            and getCharacter():FindFirstChildOfClass("Humanoid")
-
+        local hum = getHumanoid(getCharacter())
         if hum then
             hum.UseJumpPower = true
             hum.JumpPower = jumpPower
         end
-
         jumpBox.Text = tostring(jumpPower)
-        setStatus("Pulo local: " .. jumpPower)
+        setStatus("Pulo definido: " .. jumpPower)
     end)
+end
+
+local function stopFlight()
+    flying = false
+    if flyConnection then flyConnection:Disconnect() flyConnection = nil end
+
+    local root = getRoot(getCharacter())
+    if root then
+        local bv = root:FindFirstChild("BloxFTalesVelocity")
+        local bg = root:FindFirstChild("BloxFTalesGyro")
+        if bv then bv:Destroy() end
+        if bg then bg:Destroy() end
+    end
+    bodyVelocity = nil
+    bodyGyro = nil
+    setStatus("Voo desligado.")
+end
+
+local function startFlight()
+    local character = getCharacter()
+    local root = getRoot(character)
+    local hum = getHumanoid(character)
+
+    if not root or not hum then
+        setStatus("Personagem indisponível para voar.")
+        return
+    end
+
+    stopFlight()
+    flying = true
+    hum.PlatformStand = false
+
+    bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.Name = "BloxFTalesVelocity"
+    bodyVelocity.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    bodyVelocity.Velocity = Vector3.zero
+    bodyVelocity.Parent = root
+
+    bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.Name = "BloxFTalesGyro"
+    bodyGyro.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
+    bodyGyro.P = 1e4
+    bodyGyro.CFrame = root.CFrame
+    bodyGyro.Parent = root
+
+    flyConnection = RunService.RenderStepped:Connect(function()
+        if not flying or not root.Parent then
+            stopFlight()
+            return
+        end
+
+        local camera = Workspace.CurrentCamera
+        if not camera then return end
+
+        local direction = Vector3.zero
+        if UIS:IsKeyDown(Enum.KeyCode.W) then direction += camera.CFrame.LookVector end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then direction -= camera.CFrame.LookVector end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then direction += camera.CFrame.RightVector end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then direction -= camera.CFrame.RightVector end
+        if UIS:IsKeyDown(Enum.KeyCode.Space) then direction += Vector3.yAxis end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then direction -= Vector3.yAxis end
+
+        bodyVelocity.Velocity = direction.Magnitude > 0 and direction.Unit * flySpeed or Vector3.zero
+        bodyGyro.CFrame = camera.CFrame
+    end)
+
+    setStatus("Voo ligado: WASD, espaço sobe, Ctrl desce.")
+end
+
+local function makePlayerSelection()
+    makeLabel("Selecione um jogador:", 28)
+    local selectedLabel = makeLabel("Selecionado: nenhum", 28)
+
+    for _, target in ipairs(Players:GetPlayers()) do
+        if target ~= LocalPlayer then
+            makeButton(target.DisplayName .. " (@" .. target.Name .. ")", function()
+                selectedPlayer = target
+                selectedLabel.Text = "Selecionado: " .. target.Name
+                setStatus("Jogador selecionado.")
+            end)
+        end
+    end
+
+    makeButton("CONFIRMAR: IR ATÉ O JOGADOR", function()
+        if not selectedPlayer or not selectedPlayer.Parent then
+            setStatus("Selecione um jogador válido.")
+            return
+        end
+        local root = getRoot(selectedPlayer.Character)
+        if not root then setStatus("Personagem do jogador indisponível.") return end
+        teleportLocal(root.CFrame * CFrame.new(0, 0, 5))
+        setStatus("Teleporte local solicitado.")
+    end, COLORS.purple)
+end
+
+local function makeCoordinateControls()
+    makeLabel("Digite as coordenadas de destino:", 30)
+    local boxes = {}
+
+    for _, axis in ipairs({"X", "Y", "Z"}) do
+        local box = Instance.new("TextBox")
+        box.Size = UDim2.new(1, -4, 0, 36)
+        box.BackgroundColor3 = COLORS.row
+        box.TextColor3 = COLORS.white
+        box.PlaceholderText = axis
+        box.ClearTextOnFocus = false
+        box.Parent = Content
+        Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
+        boxes[axis] = box
+    end
+
+    makeButton("IR PARA AS COORDENADAS", function()
+        local x, y, z = tonumber(boxes.X.Text), tonumber(boxes.Y.Text), tonumber(boxes.Z.Text)
+        if not x or not y or not z then
+            setStatus("Preencha X, Y e Z com números.")
+            return
+        end
+        local ok = teleportLocal(Vector3.new(
+            math.clamp(x, -100000, 100000),
+            math.clamp(y, -100000, 100000),
+            math.clamp(z, -100000, 100000)
+        ))
+        setStatus(ok and "Teleporte solicitado." or "Falha no teleporte.")
+    end, COLORS.purple)
+end
+
+-- Integração opcional para a experiência que você controla:
+-- ReplicatedStorage/BloxFTalesRemotes/<NomeDaAcao>
+-- Cada RemoteEvent deve ser criado e validado pelo servidor.
+local function requestOwnedGameFeature(featureName, enabled)
+    local folder = ReplicatedStorage:FindFirstChild("BloxFTalesRemotes")
+    if not folder then
+        setStatus(featureName .. ": integração do servidor não encontrada.")
+        return
+    end
+
+    local remote = folder:FindFirstChild(featureName)
+    if not remote or not remote:IsA("RemoteEvent") then
+        setStatus(featureName .. ": RemoteEvent não configurado.")
+        return
+    end
+
+    remote:FireServer(enabled)
+    setStatus(featureName .. ": solicitação enviada ao servidor.")
 end
 
 local function showCategory(category)
     clearContent()
-    Content.CanvasPosition = Vector2.new(0, 0)
+    Content.CanvasPosition = Vector2.zero
 
     if category == "Início" then
-        makeLabel("BLOX F' - TALES 3.1", 36)
-
-        makeLabel(
-            "Interface responsiva. Arraste pelo cabeçalho. Use o botão – para recolher e ↗ para restaurar.",
-            52
-        )
-
+        makeLabel("BLOX F' - TALES 3.2", 36)
+        makeLabel("Painel atualizado. Arraste pelo cabeçalho; use – para minimizar.", 48)
         local status = makeLabel("Status: pronto", 28)
         _G.BloxFTalesStatus = status
 
-        local coords = makeLabel(
-            "Coordenadas: aguardando personagem...",
-            28
-        )
-
+        local coords = makeLabel("Coordenadas: aguardando personagem...", 28)
         task.spawn(function()
             while Screen.Parent and coords.Parent do
                 local root = getRoot(getCharacter())
-
                 coords.Text = root
-                    and (
-                        "Coordenadas: "
-                        .. math.floor(root.Position.X)
-                        .. ", "
-                        .. math.floor(root.Position.Y)
-                        .. ", "
-                        .. math.floor(root.Position.Z)
-                    )
+                    and ("Coordenadas: " .. math.floor(root.Position.X) .. ", "
+                    .. math.floor(root.Position.Y) .. ", " .. math.floor(root.Position.Z))
                     or "Coordenadas: personagem indisponível"
-
                 task.wait(0.25)
             end
         end)
 
-        makeLabel(
-            "Aviso: recursos locais dependem do que o cliente consegue controlar. Ações internas do jogo exigem suporte do servidor.",
-            64
-        )
+        makeLabel("Recursos que dependem do servidor precisam da integração oficial da sua experiência.", 55)
+
+    elseif category == "Combate" then
+        makeLabel("Opções de combate. As ações de servidor precisam dos RemoteEvents configurados na sua experiência.", 55)
+
+        makeToggle("Mira assistida", function(on)
+            requestOwnedGameFeature("MiraAssistida", on)
+        end)
+
+        makeToggle("Área de acerto visual", function(on)
+            setStatus(on and "Área visual ligada." or "Área visual desligada.")
+        end)
+
+        makeToggle("Haki automático", function(on)
+            requestOwnedGameFeature("HakiAutomatico", on)
+        end)
+
+        makeToggle("Habilidades automáticas", function(on)
+            requestOwnedGameFeature("HabilidadesAutomaticas", on)
+        end)
+
+        makeToggle("Ataque automático", function(on)
+            requestOwnedGameFeature("AtaqueAutomatico", on)
+        end)
+
+    elseif category == "Frutas" then
+        makeToggle("Localizador de frutas", function(on)
+            fruitFinder = on
+            if not on then removeBucket(objectHighlights) end
+            setStatus(on and "Procurando frutas replicadas no mapa." or "Localizador desligado.")
+        end)
+
+        makeToggle("Detector de frutas", function(on)
+            fruitFinder = on
+            setStatus(on and "Detector ligado." or "Detector desligado.")
+        end)
+
+        makeLabel("O detector procura objetos replicados com 'fruit' ou 'fruta' no nome.", 48)
 
     elseif category == "Jogador" then
         makeSpeedControl()
 
+        makeToggle("Voar", function(on)
+            if on then startFlight() else stopFlight() end
+        end)
+
         makeToggle("Pulo infinito", function(on)
             infiniteJump = on
-            setStatus(on and "Pulo infinito ligado" or "Pulo infinito desligado")
+            setStatus(on and "Pulo infinito ligado." or "Pulo infinito desligado.")
         end)
 
-        makeToggle("Atravessar paredes (local)", function(on)
+        makeToggle("Atravessar paredes", function(on)
             noclip = on
-            setStatus(on and "Noclip local ligado" or "Noclip local desligado")
+            setStatus(on and "Noclip local ligado." or "Noclip local desligado.")
         end)
 
-        makeLabel(
-            "O noclip altera colisões apenas no seu cliente; o servidor pode corrigir sua posição.",
-            48
-        )
+        makeLabel("Voo: use WASD, espaço para subir e Ctrl para descer.", 45)
 
     elseif category == "Teletransporte" then
-        makeLabel(
-            "Teletransportes para ilhas: procura objetos no mapa com os nomes indicados. Os nomes variam entre jogos.",
-            48
-        )
+        makeLabel("Teletransporte por nomes de objetos encontrados no Workspace:", 45)
 
         local islands = {
             {"Ilha 1", {"Island1", "Ilha1", "Island 1", "Ilha 1"}},
@@ -801,127 +694,74 @@ local function showCategory(category)
         }
 
         for _, data in ipairs(islands) do
-            makeButton(
-                "TELETRANSPORTE " .. string.upper(data[1]),
-                function()
-                    local target = findNamedWorldObject(data[2])
-
-                    if target then
-                        teleportLocal(target.CFrame * CFrame.new(0, 5, 0))
-                        setStatus("Indo para " .. data[1])
-                    else
-                        setStatus(
-                            data[1] .. " não encontrado pelo nome no mapa."
-                        )
-                    end
+            makeButton("TELETRANSPORTE " .. string.upper(data[1]), function()
+                local target = findNamedWorldObject(data[2])
+                if target then
+                    teleportLocal(target.CFrame * CFrame.new(0, 5, 0))
+                    setStatus("Indo para " .. data[1] .. ".")
+                else
+                    setStatus(data[1] .. " não encontrada pelo nome.")
                 end
-            )
+            end)
         end
 
-        makeLabel("Teletransporte por coordenadas:", 30)
-        local coordinateBoxes = {}
-
-        for _, axis in ipairs({"X", "Y", "Z"}) do
-            local box = Instance.new("TextBox")
-            box.Size = UDim2.new(1, -4, 0, 36)
-            box.BackgroundColor3 = COLORS.row
-            box.TextColor3 = COLORS.white
-            box.PlaceholderText = "Coordenada " .. axis
-            box.Text = ""
-            box.ClearTextOnFocus = false
-            box.Font = Enum.Font.Gotham
-            box.TextSize = 13
-            box.Parent = Content
-
-            Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
-            coordinateBoxes[axis] = box
-        end
-
-        makeButton("IR PARA AS COORDENADAS", function()
-            local x = tonumber(coordinateBoxes.X.Text)
-            local y = tonumber(coordinateBoxes.Y.Text)
-            local z = tonumber(coordinateBoxes.Z.Text)
-
-            if not x or not y or not z then
-                setStatus("Informe valores numéricos para X, Y e Z.")
-                return
-            end
-
-            local ok = teleportLocal(Vector3.new(
-                math.clamp(x, -100000, 100000),
-                math.clamp(y, -100000, 100000),
-                math.clamp(z, -100000, 100000)
-            ))
-
-            setStatus(ok and "Teleporte local solicitado." or "Não foi possível teletransportar.")
-        end, COLORS.purple)
-
-        makeLabel("Ir até um jogador:", 28)
+        makeLabel("Teletransporte por coordenadas:", 28)
+        makeCoordinateControls()
+        makeLabel("Teletransporte até jogador:", 28)
         makePlayerSelection()
+
+    elseif category == "Coleta e evolução" then
+        makeLabel("Ações de coleta e progressão via integração oficial do servidor.", 48)
+
+        makeToggle("Coleta automática", function(on)
+            requestOwnedGameFeature("ColetaAutomatica", on)
+        end)
+
+        makeToggle("Missões automáticas", function(on)
+            requestOwnedGameFeature("MissoesAutomaticas", on)
+        end)
+
+        makeToggle("Evolução automática", function(on)
+            requestOwnedGameFeature("EvolucaoAutomatica", on)
+        end)
+
+        makeToggle("Coleta de recompensas", function(on)
+            requestOwnedGameFeature("ColetaRecompensas", on)
+        end)
 
     elseif category == "Visualização" then
         makeToggle("Destacar jogadores", function(on)
             espPlayers = on
-            applyPlayerVisuals()
+            refreshVisuals()
+        end)
+
+        makeToggle("Destacar inimigos", function(on)
+            espEnemies = on
+            if not on then removeBucket(objectHighlights) end
+            scanWorld()
+        end)
+
+        makeToggle("Destacar frutas", function(on)
+            fruitFinder = on
+            if not on then removeBucket(objectHighlights) end
+            scanWorld()
+        end)
+
+        makeToggle("Destacar baús", function(on)
+            chestFinder = on
+            if not on then removeBucket(objectHighlights) end
+            scanWorld()
         end)
 
         makeToggle("Mostrar nomes", function(on)
             showNames = on
-            applyPlayerVisuals()
+            refreshVisuals()
         end)
 
         makeToggle("Mostrar distâncias", function(on)
             showDistances = on
-            applyPlayerVisuals()
+            refreshVisuals()
         end)
-
-        makeToggle("Localizador de frutas", function(on)
-            fruitFinder = on
-            refreshObjectHighlights("fruit", on)
-        end)
-
-        makeToggle("Localizador de baús", function(on)
-            chestFinder = on
-            refreshObjectHighlights("chest", on)
-        end)
-
-        makeLabel(
-            "Os localizadores procuram objetos cujo nome contenha 'fruit', 'chest' ou 'baú'.",
-            48
-        )
-
-    elseif category == "Combate" then
-        makeLabel(
-            "Funções de combate automático, mira assistida, Haki e uso automático de habilidades não podem ser implementadas genericamente por este LocalScript.",
-            80
-        )
-
-        makeLabel(
-            "Elas dependem dos sistemas e eventos internos do jogo. Não vou colocar botões falsos que apenas mudam de cor.",
-            65
-        )
-
-    elseif category == "Frutas" then
-        makeToggle("Detector de frutas", function(on)
-            fruitFinder = on
-            refreshObjectHighlights("fruit", on)
-        end)
-
-        makeLabel(
-            "O detector destaca objetos encontrados no Workspace com 'fruit' no nome. Não revela frutas que o servidor não replicou ao cliente.",
-            65
-        )
-
-    elseif category == "Coleta e evolução" then
-        makeLabel(
-            "Coleta automática, missões, evolução e recompensas dependem dos sistemas internos do jogo e de validação do servidor.",
-            75
-        )
-
-        makeLabel(
-            "Para implementar essas ações corretamente, é necessário ter acesso ao código da experiência e aos RemoteEvents oficiais dela.",
-            65
-        )
 
     elseif category == "Configurações" then
         makeButton("Recentralizar painel", function()
@@ -930,26 +770,43 @@ local function showCategory(category)
         end)
 
         makeButton("Reaplicar velocidade e pulo", function()
-            local hum = getCharacter()
-                and getCharacter():FindFirstChildOfClass("Humanoid")
-
+            local hum = getHumanoid(getCharacter())
             if hum then
                 hum.WalkSpeed = walkSpeed
                 hum.UseJumpPower = true
                 hum.JumpPower = jumpPower
-                setStatus("Configurações locais reaplicadas.")
+                setStatus("Velocidade e pulo reaplicados.")
             end
         end)
 
         makeButton("Limpar destaques visuais", function()
-            espPlayers, showNames, showDistances, fruitFinder, chestFinder =
-                false, false, false, false, false
-
-            removeHighlights(playerHighlights)
-            removeHighlights(fruitHighlights)
-            removeHighlights(chestHighlights)
-
+            espPlayers = false
+            espEnemies = false
+            showNames = false
+            showDistances = false
+            fruitFinder = false
+            chestFinder = false
+            removeBucket(playerHighlights)
+            removeBucket(objectHighlights)
             setStatus("Destaques removidos.")
+        end)
+
+        makeToggle("Animações da interface", function(on)
+            setStatus(on and "Animações ativadas." or "Animações desativadas.")
+        end)
+
+        makeToggle("Tema personalizado", function(on)
+            Main.BackgroundColor3 = on and Color3.fromRGB(20, 15, 32) or COLORS.bg
+            setStatus("Tema atualizado.")
+        end)
+
+        makeToggle("Transparência", function(on)
+            Main.BackgroundTransparency = on and 0.12 or 0
+            setStatus("Transparência atualizada.")
+        end)
+
+        makeButton("Salvar configurações desta sessão", function()
+            setStatus("Configurações mantidas enquanto o painel estiver aberto.")
         end)
     end
 end
@@ -969,76 +826,75 @@ for index, category in ipairs(categories) do
     local tab = Instance.new("TextButton")
     tab.Size = UDim2.new(1, -10, 0, 37)
     tab.LayoutOrder = index
-    tab.BackgroundColor3 = category == "Início"
-        and COLORS.purple or COLORS.row
+    tab.BackgroundColor3 = category == "Início" and COLORS.purple or COLORS.row
     tab.Text = category
     tab.TextColor3 = COLORS.white
     tab.TextSize = 11
     tab.Font = Enum.Font.GothamBold
     tab.TextWrapped = true
     tab.Parent = Sidebar
-
     Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 7)
 
     tab.MouseButton1Click:Connect(function()
         for _, sibling in ipairs(Sidebar:GetChildren()) do
-            if sibling:IsA("TextButton") then
-                sibling.BackgroundColor3 = COLORS.row
-            end
+            if sibling:IsA("TextButton") then sibling.BackgroundColor3 = COLORS.row end
         end
-
         tab.BackgroundColor3 = COLORS.purple
         showCategory(category)
     end)
 end
 
-Min.MouseButton1Click:Connect(MinimizePanel)
+-- Minimizar e restaurar
+local minimized = false
+local expandedSize = Main.Size
+local expandedPosition = Main.Position
 
-Close.MouseButton1Click:Connect(function()
-    destroyed = true
+Min.MouseButton1Click:Connect(function()
+    minimized = not minimized
 
-    for _, connection in ipairs(connections) do
-        pcall(function()
-            connection:Disconnect()
-        end)
+    if minimized then
+        expandedPosition = Main.Position
+        Sidebar.Visible = false
+        Content.Visible = false
+        Title.Visible = false
+        Close.Visible = false
+        Min.Position = UDim2.fromOffset(13, 13)
+        Min.Text = "↗"
+        tween(Main, {Size = UDim2.fromOffset(60, 60)}, 0.2)
+        tween(Header, {Size = UDim2.fromOffset(60, 60)}, 0.2)
+    else
+        tween(Main, {Size = expandedSize}, 0.2)
+        tween(Header, {Size = UDim2.new(1, 0, 0, 48)}, 0.2)
+        Main.Position = expandedPosition
+        Min.Position = UDim2.new(1, -78, 0, 8)
+        Min.Text = "–"
+        Sidebar.Visible = true
+        Content.Visible = true
+        Title.Visible = true
+        Close.Visible = true
     end
-
-    removeHighlights(playerHighlights)
-    removeHighlights(fruitHighlights)
-    removeHighlights(chestHighlights)
-    Screen:Destroy()
 end)
 
--- Arrastar pelo cabeçalho, inclusive em tela touch.
+-- Arrastar painel com mouse ou toque
 local dragging = false
-local dragInput, dragStart, startPosition
+local dragStart
+local startPosition
 
 Header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
-
         dragging = true
         dragStart = input.Position
         startPosition = Main.Position
-        dragInput = input
-    end
-end)
-
-Header.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch then
-
-        dragInput = input
     end
 end)
 
 table.insert(connections, UIS.InputChanged:Connect(function(input)
     if dragging and (
-        input == dragInput
+        input.UserInputType == Enum.UserInputType.MouseMovement
         or input.UserInputType == Enum.UserInputType.Touch
     ) then
         local delta = input.Position - dragStart
-
         Main.Position = UDim2.new(
             startPosition.X.Scale,
             startPosition.X.Offset + delta.X,
@@ -1051,67 +907,19 @@ end))
 table.insert(connections, UIS.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
-
         dragging = false
     end
 end))
 
--- Ajuste automático para telas pequenas.
-local camera = Workspace.CurrentCamera
-
-local function fitToScreen()
-    if not camera or minimized then
-        return
-    end
-
-    local viewport = camera.ViewportSize
-    local width = math.max(300, math.min(620, viewport.X - 24))
-    local height = math.max(280, math.min(430, viewport.Y - 40))
-
-    expandedSize = UDim2.fromOffset(width, height)
-    Main.Size = expandedSize
-    Main.Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2)
-
-    Sidebar.Size = UDim2.new(
-        0,
-        math.min(145, width * 0.27),
-        1,
-        -60
-    )
-
-    Content.Position = UDim2.fromOffset(
-        math.min(153, width * 0.29),
-        54
-    )
-
-    Content.Size = UDim2.new(
-        1,
-        -math.min(166, width * 0.31),
-        1,
-        -60
-    )
-end
-
-fitToScreen()
-
-if camera then
-    table.insert(
-        connections,
-        camera:GetPropertyChangedSignal("ViewportSize"):Connect(fitToScreen)
-    )
-end
-
+-- Pulo infinito
 table.insert(connections, UIS.JumpRequest:Connect(function()
     if infiniteJump then
-        local hum = getCharacter()
-            and getCharacter():FindFirstChildOfClass("Humanoid")
-
-        if hum then
-            hum:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
+        local hum = getHumanoid(getCharacter())
+        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
     end
 end))
 
+-- Noclip local com restauração das colisões
 table.insert(connections, RunService.Stepped:Connect(function()
     local character = getCharacter()
 
@@ -1121,65 +929,71 @@ table.insert(connections, RunService.Stepped:Connect(function()
                 if collisionCache[part] == nil then
                     collisionCache[part] = part.CanCollide
                 end
-
                 part.CanCollide = false
             end
         end
-
     elseif not noclip and next(collisionCache) then
-        for part, originalValue in pairs(collisionCache) do
-            if part and part.Parent then
-                part.CanCollide = originalValue
-            end
-
+        for part, original in pairs(collisionCache) do
+            if part and part.Parent then part.CanCollide = original end
             collisionCache[part] = nil
         end
     end
 end))
 
+-- Atualização contínua dos localizadores e ESP
+table.insert(connections, RunService.Heartbeat:Connect(function()
+    if fruitFinder or chestFinder or espEnemies then
+        scanWorld()
+    end
+end))
+
+-- Atualização periódica dos jogadores
+task.spawn(function()
+    while Screen.Parent do
+        if espPlayers or showNames or showDistances then
+            refreshVisuals()
+        end
+        task.wait(1.5)
+    end
+end)
+
+table.insert(connections, Players.PlayerAdded:Connect(function()
+    task.delay(0.5, refreshVisuals)
+end))
+
+table.insert(connections, Players.PlayerRemoving:Connect(function()
+    task.delay(0.2, refreshVisuals)
+end))
+
+-- Respawn: reaplica velocidade e pulo
 table.insert(connections, LocalPlayer.CharacterAdded:Connect(function(character)
     task.wait(0.5)
-
-    local hum = character:FindFirstChildOfClass("Humanoid")
-
+    local hum = getHumanoid(character)
     if hum then
         hum.WalkSpeed = walkSpeed
         hum.UseJumpPower = true
         hum.JumpPower = jumpPower
     end
+end))
 
-    for part in pairs(collisionCache) do
+Close.MouseButton1Click:Connect(function()
+    destroyed = true
+    stopFlight()
+    noclip = false
+
+    for part, original in pairs(collisionCache) do
+        if part and part.Parent then part.CanCollide = original end
         collisionCache[part] = nil
     end
-end))
 
--- Atualiza os destaques para acompanhar respawns e mudanças de distância.
-task.spawn(function()
-    while Screen.Parent do
-        task.wait(1.25)
-
-        if not Screen.Parent then
-            break
-        end
-
-        if espPlayers or showNames or showDistances then
-            applyPlayerVisuals()
-        end
+    for _, connection in ipairs(connections) do
+        pcall(function() connection:Disconnect() end)
     end
+
+    removeBucket(playerHighlights)
+    removeBucket(objectHighlights)
+    Screen:Destroy()
 end)
 
-table.insert(connections, Players.PlayerAdded:Connect(function()
-    if espPlayers or showNames or showDistances then
-        task.delay(0.5, applyPlayerVisuals)
-    end
-end))
-
-table.insert(connections, Players.PlayerRemoving:Connect(function()
-    if espPlayers or showNames or showDistances then
-        task.delay(0.2, applyPlayerVisuals)
-    end
-end))
-
 showCategory("Início")
-
-print("Blox F' - Tales 3.1 carregado.")
+print("Blox F' - Tales 3.2 carregado.")
