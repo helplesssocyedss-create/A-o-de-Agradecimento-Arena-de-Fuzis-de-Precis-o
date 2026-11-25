@@ -4,21 +4,29 @@
     LocalScript para uso no proprio jogo, no Roblox Studio.
 
     ATUALIZACOES:
-    - ESP PLAYER + ESP NAME azul.
-    - ESP BOT/NPC amarelo com nome BOT.
-    - Deteccao sem exigir a peca Head.
+    - ESP PLAYER azul + nome.
+    - ESP BOT/NPC amarelo + nome BOT.
+    - Deteccao de personagens sem exigir Head.
     - Recuperacao automatica de ESP apos respawn.
-    - Aimbot procura jogadores e NPCs independentemente da ESP.
-    - Assistencia original de camera.
+    - Assistencia de mira com CABECA/PEITO.
     - Suavidade de 0% a 100%.
-    - Selecao estavel de alvo.
-    - FOV, perseguicao, IA Assist e minimizacao.
-    - Indicador verde na cabeca e no nick quando ha linha de visao livre.
+    - Selecao de players por checkbox.
+    - Quando a selecao estiver ativa, somente os players
+      marcados serao considerados pelo rastreamento.
+    - FOV, perseguicao e IA Assist.
+    - Indicador verde quando existe linha de visao livre.
     - Categoria exclusiva de TIRO AUTOMATICO.
-    - Sensor exclusivo do AutoFire.
-    - Sensor AutoFire arrastavel, redimensionavel e travavel.
     - Sensor AutoFire independente da perseguicao.
-    - Disparo por Tool:Activate() quando a cabeca do jogador esta visivel.
+    - Sensor arrastavel, redimensionavel e travavel.
+    - Sensor verde somente quando todas as condicoes
+      locais de prontidao forem atendidas.
+    - Painel principal reduzido.
+    - Botao minimizado pequeno e arrastavel.
+
+    OBSERVACAO:
+    Tool:Activate() solicita a ativacao da ferramenta.
+    Isso nao garante que o servidor registrou um disparo.
+    O sensor e visual e nao clica no botao do HUD.
 ]]
 
 local Players = game:GetService("Players")
@@ -27,15 +35,18 @@ local UserInputService = game:GetService("UserInputService")
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
+local Camera = workspace.CurrentCamera
 
 local BLUE = Color3.fromRGB(0, 170, 255)
 local BLUE_OUTLINE = Color3.fromRGB(0, 200, 255)
-
 local YELLOW = Color3.fromRGB(255, 220, 0)
 local YELLOW_OUTLINE = Color3.fromRGB(255, 235, 80)
 
 local PANEL = Color3.fromRGB(20, 22, 30)
 local PANEL_INNER = Color3.fromRGB(29, 32, 43)
+local RED = Color3.fromRGB(220, 65, 45)
+local GREEN = Color3.fromRGB(20, 190, 85)
+local AMBER = Color3.fromRGB(220, 150, 35)
 
 local old = PlayerGui:FindFirstChild("TalesModMenu")
 if old then
@@ -47,6 +58,9 @@ local Settings = {
     Target = nil,
     AimSmoothness = 0.20,
     SmoothStep = 5,
+
+    PlayerSelectionEnabled = false,
+    SelectedPlayers = {},
 
     ESPPlayers = false,
     ESPBots = false,
@@ -74,7 +88,6 @@ local ESPObjects = {}
 local PlayerConnections = {}
 local CachedNPCs = {}
 
-local Camera = workspace.CurrentCamera
 local IsCivil = false
 local LastAIStatus = "AGUARDANDO"
 local AIEventStatus = nil
@@ -94,14 +107,11 @@ local function IsAlive(character)
     end
 
     local humanoid = character:FindFirstChildOfClass("Humanoid")
-
     return humanoid ~= nil and humanoid.Health > 0
 end
 
 local function IsLocalPlayerCivil()
-    local teamName = Player.Team
-        and string.lower(Player.Team.Name)
-        or ""
+    local teamName = Player.Team and string.lower(Player.Team.Name) or ""
 
     local role = Player:GetAttribute("Role")
         or Player:GetAttribute("Class")
@@ -120,10 +130,6 @@ end
 local function CombatAllowed()
     return not (Settings.CivilProtection and IsCivil)
 end
-
---==================================================
--- IDENTIFICACAO DE PERSONAGENS E NPCS
---==================================================
 
 local function GetCharacter(target)
     if not target then
@@ -171,11 +177,7 @@ local function GetCharacterAnchor(character)
 end
 
 local function IsPlayerCharacter(model)
-    if not model then
-        return false
-    end
-
-    return Players:GetPlayerFromCharacter(model) ~= nil
+    return model and Players:GetPlayerFromCharacter(model) ~= nil
 end
 
 local function RefreshNPCs()
@@ -190,9 +192,7 @@ local function RefreshNPCs()
                 and object ~= Player.Character
                 and not IsPlayerCharacter(object) then
 
-                local anchor = GetCharacterAnchor(object)
-
-                if anchor then
+                if GetCharacterAnchor(object) then
                     found[object] = true
                 end
             end
@@ -206,12 +206,11 @@ local function RefreshNPCs()
     end
 
     CachedNPCs = newList
-
     return newList
 end
 
 --==================================================
--- GUI PRINCIPAL
+-- GUI PRINCIPAL REDUZIDA
 --==================================================
 
 local GUI = Instance.new("ScreenGui")
@@ -223,8 +222,8 @@ GUI.Parent = PlayerGui
 
 local Main = Instance.new("Frame")
 Main.Name = "Main"
-Main.Size = UDim2.fromOffset(460, 460)
-Main.Position = UDim2.new(0.5, -230, 0.5, -230)
+Main.Size = UDim2.fromOffset(390, 430)
+Main.Position = UDim2.new(0.5, -195, 0.5, -215)
 Main.BackgroundColor3 = PANEL
 Main.BorderSizePixel = 0
 Main.Parent = GUI
@@ -232,30 +231,30 @@ Main.Parent = GUI
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -55, 0, 45)
+Title.Size = UDim2.new(1, -55, 0, 42)
 Title.Position = UDim2.fromOffset(10, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "TALES | MOD MENU"
 Title.TextColor3 = Color3.new(1, 1, 1)
-Title.TextSize = 19
+Title.TextSize = 17
 Title.Font = Enum.Font.GothamBold
 Title.Parent = Main
 
 local Minimize = Instance.new("TextButton")
-Minimize.Size = UDim2.fromOffset(35, 30)
-Minimize.Position = UDim2.new(1, -42, 0, 7)
+Minimize.Size = UDim2.fromOffset(32, 28)
+Minimize.Position = UDim2.new(1, -39, 0, 7)
 Minimize.BackgroundColor3 = Color3.fromRGB(50, 55, 70)
 Minimize.Text = "-"
 Minimize.TextColor3 = Color3.new(1, 1, 1)
-Minimize.TextSize = 22
+Minimize.TextSize = 21
 Minimize.Font = Enum.Font.GothamBold
 Minimize.Parent = Main
 
 Instance.new("UICorner", Minimize)
 
 local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0, 125, 1, -85)
-Sidebar.Position = UDim2.fromOffset(10, 50)
+Sidebar.Size = UDim2.new(0, 105, 1, -75)
+Sidebar.Position = UDim2.fromOffset(8, 45)
 Sidebar.BackgroundColor3 = PANEL_INNER
 Sidebar.BorderSizePixel = 0
 Sidebar.Parent = Main
@@ -263,8 +262,8 @@ Sidebar.Parent = Main
 Instance.new("UICorner", Sidebar)
 
 local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1, -150, 1, -85)
-Content.Position = UDim2.fromOffset(140, 50)
+Content.Size = UDim2.new(1, -125, 1, -75)
+Content.Position = UDim2.fromOffset(118, 45)
 Content.BackgroundColor3 = PANEL_INNER
 Content.BorderSizePixel = 0
 Content.Parent = Main
@@ -272,32 +271,30 @@ Content.Parent = Main
 Instance.new("UICorner", Content)
 
 local Credits = Instance.new("TextLabel")
-Credits.Size = UDim2.new(1, 0, 0, 20)
-Credits.Position = UDim2.new(0, 0, 1, -23)
+Credits.Size = UDim2.new(1, 0, 0, 18)
+Credits.Position = UDim2.new(0, 0, 1, -20)
 Credits.BackgroundTransparency = 1
 Credits.Text = "Feito por Tales"
 Credits.TextColor3 = Color3.fromRGB(130, 140, 160)
-Credits.TextSize = 12
+Credits.TextSize = 11
 Credits.Font = Enum.Font.Gotham
 Credits.Parent = Main
 
--- Botao minimizado.
-
 local MiniButton = Instance.new("TextButton")
 MiniButton.Name = "TalesMiniButton"
-MiniButton.Size = UDim2.fromOffset(58, 58)
+MiniButton.Size = UDim2.fromOffset(48, 48)
 MiniButton.Position = UDim2.new(0.82, 0, 0.72, 0)
 MiniButton.BackgroundColor3 = Color3.fromRGB(15, 115, 185)
 MiniButton.Text = "T"
 MiniButton.TextColor3 = Color3.new(1, 1, 1)
-MiniButton.TextSize = 25
+MiniButton.TextSize = 23
 MiniButton.Font = Enum.Font.GothamBlack
 MiniButton.Visible = false
 MiniButton.Active = true
 MiniButton.Parent = GUI
 MiniButton.ZIndex = 100
 
-Instance.new("UICorner", MiniButton).CornerRadius = UDim.new(0, 17)
+Instance.new("UICorner", MiniButton).CornerRadius = UDim.new(0, 15)
 
 local miniStroke = Instance.new("UIStroke")
 miniStroke.Color = BLUE_OUTLINE
@@ -317,12 +314,13 @@ local function CreateTab(name, index)
     page.Parent = Content
 
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, -10, 0, 38)
-    button.Position = UDim2.fromOffset(5, ((index - 1) * 43) + 5)
+    button.Size = UDim2.new(1, -8, 0, 34)
+    button.Position = UDim2.fromOffset(4, ((index - 1) * 39) + 5)
     button.BackgroundColor3 = Color3.fromRGB(45, 49, 65)
     button.TextColor3 = Color3.new(1, 1, 1)
     button.Text = name
-    button.TextSize = 11
+    button.TextSize = 9
+    button.TextWrapped = true
     button.Font = Enum.Font.GothamBold
     button.Parent = Sidebar
 
@@ -355,11 +353,12 @@ end
 
 local function CreateToggle(parent, name, callback, y, initial)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, -20, 0, 38)
-    button.Position = UDim2.fromOffset(10, y)
+    button.Size = UDim2.new(1, -16, 0, 34)
+    button.Position = UDim2.fromOffset(8, y)
     button.BackgroundColor3 = Color3.fromRGB(75, 78, 90)
     button.TextColor3 = Color3.new(1, 1, 1)
-    button.TextSize = 13
+    button.TextSize = 11
+    button.TextWrapped = true
     button.Font = Enum.Font.GothamBold
     button.Parent = parent
 
@@ -369,7 +368,6 @@ local function CreateToggle(parent, name, callback, y, initial)
 
     local function paint()
         button.Text = name .. (enabled and " : ON" or " : OFF")
-
         button.BackgroundColor3 = enabled
             and Color3.fromRGB(20, 150, 85)
             or Color3.fromRGB(75, 78, 90)
@@ -388,17 +386,17 @@ end
 
 local function CreateOption(parent, name, y, callback)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, -20, 0, 35)
-    button.Position = UDim2.fromOffset(10, y)
+    button.Size = UDim2.new(1, -16, 0, 32)
+    button.Position = UDim2.fromOffset(8, y)
     button.BackgroundColor3 = Color3.fromRGB(45, 95, 150)
     button.TextColor3 = Color3.new(1, 1, 1)
     button.Text = name
-    button.TextSize = 12
+    button.TextSize = 10
+    button.TextWrapped = true
     button.Font = Enum.Font.GothamBold
     button.Parent = parent
 
     Instance.new("UICorner", button)
-
     button.MouseButton1Click:Connect(callback)
 
     return button
@@ -406,22 +404,21 @@ end
 
 local function CreateInfo(parent, text, y, height)
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -20, 0, height or 34)
-    label.Position = UDim2.fromOffset(10, y)
+    label.Size = UDim2.new(1, -16, 0, height or 30)
+    label.Position = UDim2.fromOffset(8, y)
     label.BackgroundTransparency = 1
     label.Text = text
     label.TextColor3 = Color3.new(1, 1, 1)
-    label.TextSize = 12
+    label.TextSize = 10
     label.TextWrapped = true
     label.Font = Enum.Font.Gotham
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = parent
-
     return label
 end
 
 --==================================================
--- AIMBOT / ASSISTENCIA ORIGINAL
+-- AIMBOT E SELECAO DE PLAYERS
 --==================================================
 
 local AimTab = CreateTab("AIMBOT", 1)
@@ -429,8 +426,8 @@ local AimTab = CreateTab("AIMBOT", 1)
 local AimPrompt = CreateInfo(
     AimTab,
     "Ative a assistencia e escolha a parte do corpo.",
-    58,
-    35
+    48,
+    32
 )
 
 local HeadOption
@@ -439,7 +436,6 @@ local ChestOption
 local function SelectAimPart(partName)
     Settings.Target = partName
     AimPrompt.Text = "Parte selecionada: " .. partName
-
     HeadOption.Visible = false
     ChestOption.Visible = false
 end
@@ -459,35 +455,27 @@ CreateToggle(AimTab, "ASSISTENCIA DE MIRA", function(state)
         HeadOption.Visible = false
         ChestOption.Visible = false
     end
-end, 12)
+end, 8)
 
-HeadOption = CreateOption(AimTab, "MIRAR NA CABECA", 105, function()
+HeadOption = CreateOption(AimTab, "MIRAR NA CABECA", 84, function()
     SelectAimPart("Cabeca")
 end)
 
-ChestOption = CreateOption(AimTab, "MIRAR NO PEITO", 145, function()
+ChestOption = CreateOption(AimTab, "MIRAR NO PEITO", 120, function()
     SelectAimPart("Peito")
 end)
 
 HeadOption.Visible = false
 ChestOption.Visible = false
 
-local SmoothLabel = CreateInfo(
-    AimTab,
-    "Suavidade: 20%",
-    190,
-    25
-)
+local SmoothLabel = CreateInfo(AimTab, "Suavidade: 20%", 157, 22)
 
-local StepOption
-
-StepOption = CreateOption(
+local StepOption = CreateOption(
     AimTab,
     "PASSO: 5% (TOQUE PARA 10%)",
-    218,
+    181,
     function()
         Settings.SmoothStep = Settings.SmoothStep == 5 and 10 or 5
-
         StepOption.Text = "PASSO: "
             .. Settings.SmoothStep
             .. "% (TOQUE PARA ALTERNAR)"
@@ -495,9 +483,7 @@ StepOption = CreateOption(
 )
 
 local function ChangeSmoothness(direction)
-    local current = math.floor(
-        Settings.AimSmoothness * 100 + 0.5
-    )
+    local current = math.floor(Settings.AimSmoothness * 100 + 0.5)
 
     current = math.clamp(
         current + direction * Settings.SmoothStep,
@@ -509,12 +495,238 @@ local function ChangeSmoothness(direction)
     SmoothLabel.Text = "Suavidade: " .. current .. "%"
 end
 
-CreateOption(AimTab, "AUMENTAR SUAVIDADE +", 255, function()
+CreateOption(AimTab, "AUMENTAR SUAVIDADE +", 217, function()
     ChangeSmoothness(1)
 end)
 
-CreateOption(AimTab, "DIMINUIR SUAVIDADE -", 295, function()
+CreateOption(AimTab, "DIMINUIR SUAVIDADE -", 253, function()
     ChangeSmoothness(-1)
+end)
+
+local PlayerSelectionButton = CreateToggle(
+    AimTab,
+    "SELECAO DE PLAYER",
+    function(state)
+        Settings.PlayerSelectionEnabled = state
+        CurrentTarget = nil
+
+        if state then
+            SetAIEvent("selecao de players ativada")
+        else
+            SetAIEvent("selecao de players desativada")
+        end
+    end,
+    289
+)
+
+local SelectionInfo = CreateInfo(
+    AimTab,
+    "Marque os jogadores que poderao ser acompanhados.",
+    326,
+    30
+)
+
+-- Janela compacta de selecao, separada do painel principal.
+
+local SelectionPanel = Instance.new("Frame")
+SelectionPanel.Name = "PlayerSelectionPanel"
+SelectionPanel.Size = UDim2.fromOffset(235, 300)
+SelectionPanel.Position = UDim2.new(0.5, -117, 0.5, -150)
+SelectionPanel.BackgroundColor3 = PANEL
+SelectionPanel.BorderSizePixel = 0
+SelectionPanel.Visible = false
+SelectionPanel.ZIndex = 150
+SelectionPanel.Parent = GUI
+
+Instance.new("UICorner", SelectionPanel).CornerRadius = UDim.new(0, 10)
+
+local SelectionTitle = Instance.new("TextLabel")
+SelectionTitle.Size = UDim2.new(1, -42, 0, 34)
+SelectionTitle.Position = UDim2.fromOffset(8, 0)
+SelectionTitle.BackgroundTransparency = 1
+SelectionTitle.Text = "SELECIONAR PLAYERS"
+SelectionTitle.TextColor3 = Color3.new(1, 1, 1)
+SelectionTitle.TextSize = 12
+SelectionTitle.Font = Enum.Font.GothamBold
+SelectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+SelectionTitle.ZIndex = 151
+SelectionTitle.Parent = SelectionPanel
+
+local SelectionClose = Instance.new("TextButton")
+SelectionClose.Size = UDim2.fromOffset(28, 26)
+SelectionClose.Position = UDim2.new(1, -33, 0, 4)
+SelectionClose.BackgroundColor3 = RED
+SelectionClose.Text = "X"
+SelectionClose.TextColor3 = Color3.new(1, 1, 1)
+SelectionClose.TextSize = 13
+SelectionClose.Font = Enum.Font.GothamBold
+SelectionClose.ZIndex = 151
+SelectionClose.Parent = SelectionPanel
+
+Instance.new("UICorner", SelectionClose)
+
+local SelectionRefresh = Instance.new("TextButton")
+SelectionRefresh.Size = UDim2.new(1, -16, 0, 27)
+SelectionRefresh.Position = UDim2.fromOffset(8, 36)
+SelectionRefresh.BackgroundColor3 = Color3.fromRGB(45, 95, 150)
+SelectionRefresh.Text = "ATUALIZAR LISTA"
+SelectionRefresh.TextColor3 = Color3.new(1, 1, 1)
+SelectionRefresh.TextSize = 10
+SelectionRefresh.Font = Enum.Font.GothamBold
+SelectionRefresh.ZIndex = 151
+SelectionRefresh.Parent = SelectionPanel
+
+Instance.new("UICorner", SelectionRefresh)
+
+local SelectionScroll = Instance.new("ScrollingFrame")
+SelectionScroll.Size = UDim2.new(1, -16, 1, -105)
+SelectionScroll.Position = UDim2.fromOffset(8, 68)
+SelectionScroll.BackgroundColor3 = PANEL_INNER
+SelectionScroll.BorderSizePixel = 0
+SelectionScroll.ScrollBarThickness = 4
+SelectionScroll.CanvasSize = UDim2.new()
+SelectionScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+SelectionScroll.ZIndex = 151
+SelectionScroll.Parent = SelectionPanel
+
+Instance.new("UICorner", SelectionScroll)
+
+local SelectionLayout = Instance.new("UIListLayout")
+SelectionLayout.Padding = UDim.new(0, 4)
+SelectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SelectionLayout.Parent = SelectionScroll
+
+local SelectionCount = Instance.new("TextLabel")
+SelectionCount.Size = UDim2.new(1, -16, 0, 27)
+SelectionCount.Position = UDim2.new(0, 8, 1, -32)
+SelectionCount.BackgroundTransparency = 1
+SelectionCount.Text = "Selecionados: 0"
+SelectionCount.TextColor3 = Color3.new(1, 1, 1)
+SelectionCount.TextSize = 10
+SelectionCount.Font = Enum.Font.GothamBold
+SelectionCount.ZIndex = 151
+SelectionCount.Parent = SelectionPanel
+
+local function CountSelectedPlayers()
+    local count = 0
+
+    for userId, selected in pairs(Settings.SelectedPlayers) do
+        if selected then
+            local target = Players:GetPlayerByUserId(userId)
+
+            if target and target ~= Player then
+                count += 1
+            else
+                Settings.SelectedPlayers[userId] = nil
+            end
+        end
+    end
+
+    return count
+end
+
+local function UpdateSelectionCount()
+    SelectionCount.Text = "Selecionados: "
+        .. tostring(CountSelectedPlayers())
+end
+
+local function RefreshPlayerSelectionList()
+    for _, child in ipairs(SelectionScroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+
+    local targets = {}
+
+    for _, target in ipairs(Players:GetPlayers()) do
+        if target ~= Player then
+            table.insert(targets, target)
+        end
+    end
+
+    table.sort(targets, function(a, b)
+        return a.DisplayName:lower() < b.DisplayName:lower()
+    end)
+
+    if #targets == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Size = UDim2.new(1, -8, 0, 35)
+        empty.BackgroundTransparency = 1
+        empty.Text = "Nenhum outro player na partida."
+        empty.TextColor3 = Color3.new(1, 1, 1)
+        empty.TextSize = 10
+        empty.Font = Enum.Font.Gotham
+        empty.ZIndex = 152
+        empty.Parent = SelectionScroll
+    end
+
+    for index, target in ipairs(targets) do
+        local row = Instance.new("TextButton")
+        row.Size = UDim2.new(1, -8, 0, 31)
+        row.BackgroundColor3 = Color3.fromRGB(55, 60, 75)
+        row.TextColor3 = Color3.new(1, 1, 1)
+        row.TextSize = 10
+        row.Font = Enum.Font.GothamBold
+        row.TextXAlignment = Enum.TextXAlignment.Left
+        row.ZIndex = 152
+        row.LayoutOrder = index
+        row.Parent = SelectionScroll
+
+        Instance.new("UICorner", row)
+
+        local function PaintRow()
+            local selected = Settings.SelectedPlayers[target.UserId] == true
+
+            row.Text = selected
+                and "  [X] " .. target.DisplayName
+                or "  [ ] " .. target.DisplayName
+
+            row.BackgroundColor3 = selected
+                and Color3.fromRGB(20, 125, 75)
+                or Color3.fromRGB(55, 60, 75)
+        end
+
+        PaintRow()
+
+        row.MouseButton1Click:Connect(function()
+            Settings.SelectedPlayers[target.UserId] =
+                not Settings.SelectedPlayers[target.UserId]
+
+            PaintRow()
+            UpdateSelectionCount()
+            CurrentTarget = nil
+        end)
+    end
+
+    UpdateSelectionCount()
+end
+
+CreateOption(AimTab, "ABRIR LISTA DE PLAYERS", 326, function()
+    RefreshPlayerSelectionList()
+    SelectionPanel.Visible = true
+end)
+
+SelectionClose.MouseButton1Click:Connect(function()
+    SelectionPanel.Visible = false
+end)
+
+SelectionRefresh.MouseButton1Click:Connect(RefreshPlayerSelectionList)
+
+Players.PlayerAdded:Connect(function()
+    if SelectionPanel.Visible then
+        RefreshPlayerSelectionList()
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(target)
+    Settings.SelectedPlayers[target.UserId] = nil
+
+    if SelectionPanel.Visible then
+        RefreshPlayerSelectionList()
+    end
+
+    UpdateSelectionCount()
 end)
 
 --==================================================
@@ -525,7 +737,6 @@ local EspTab = CreateTab("ESP", 2)
 
 local function RemoveESP(target)
     local objects = ESPObjects[target]
-
     if not objects then
         return
     end
@@ -561,9 +772,7 @@ local function HasClearHeadLineOfSight(character, head)
 
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = {
-        Player.Character,
-    }
+    params.FilterDescendantsInstances = { Player.Character }
     params.IgnoreWater = true
 
     local result = workspace:Raycast(origin, direction, params)
@@ -587,6 +796,7 @@ local function UpdatePlayerHeadHighlight(target, character)
             objects.HeadHighlight:Destroy()
             objects.HeadHighlight = nil
         end
+
         return false
     end
 
@@ -610,6 +820,7 @@ local function UpdatePlayerHeadHighlight(target, character)
     end
 
     local visible = HasClearHeadLineOfSight(character, head)
+
     local visibilityColor = visible
         and Color3.fromRGB(0, 255, 70)
         or BLUE
@@ -634,27 +845,22 @@ local function UpdatePlayerHeadHighlight(target, character)
 end
 
 local function AddESP(target, character, displayName)
-    if not character or not character:IsA("Model") then
-        return
-    end
-
-    if not character.Parent or not IsAlive(character) then
+    if not character
+        or not character:IsA("Model")
+        or not character.Parent
+        or not IsAlive(character) then
         return
     end
 
     local anchor = GetCharacterAnchor(character)
-
     if not anchor then
         return
     end
 
     local isBot = target:IsA("Model")
-
     local espColor = isBot and YELLOW or BLUE
     local outlineColor = isBot and YELLOW_OUTLINE or BLUE_OUTLINE
-
-    local finalName = isBot and "BOT"
-        or tostring(displayName or character.Name)
+    local finalName = isBot and "BOT" or tostring(displayName or character.Name)
 
     local oldObjects = ESPObjects[target]
 
@@ -745,12 +951,7 @@ local function UpdateESP()
 
                 if character and IsAlive(character) then
                     activeObjects[target] = true
-
-                    AddESP(
-                        target,
-                        character,
-                        target.DisplayName
-                    )
+                    AddESP(target, character, target.DisplayName)
                 end
             end
         end
@@ -764,7 +965,6 @@ local function UpdateESP()
                 and not IsPlayerCharacter(model) then
 
                 activeObjects[model] = true
-
                 AddESP(model, model, "BOT")
             end
         end
@@ -796,10 +996,8 @@ CreateToggle(EspTab, "ESP PLAYER + ESP NAME", function(state)
     Settings.ESPPlayers = state
     UpdateESP()
 
-    SetAIEvent(
-        state and "ESP de jogadores ativado"
-        or "ESP de jogadores desativado"
-    )
+    SetAIEvent(state and "ESP de jogadores ativado"
+        or "ESP de jogadores desativado")
 end, 15)
 
 CreateToggle(EspTab, "ESP BOT + NOME", function(state)
@@ -811,25 +1009,21 @@ CreateToggle(EspTab, "ESP BOT + NOME", function(state)
 
     UpdateESP()
 
-    SetAIEvent(
-        state and "busca de bots/NPCs ativada"
-        or "busca de bots/NPCs desativada"
-    )
-end, 65)
+    SetAIEvent(state and "busca de bots/NPCs ativada"
+        or "busca de bots/NPCs desativada")
+end, 55)
 
 CreateToggle(EspTab, "RECUPERACAO AUTOMATICA", function(state)
     Settings.SmartRecovery = state
 
-    SetAIEvent(
-        state and "recuperacao automatica ativada"
-        or "recuperacao automatica desativada"
-    )
-end, 115, true)
+    SetAIEvent(state and "recuperacao automatica ativada"
+        or "recuperacao automatica desativada")
+end, 95, true)
 
 local ESPInfo = CreateInfo(
     EspTab,
     "Player e NPC possuem deteccao separada. O nome aparece junto com o ESP.",
-    165,
+    140,
     55
 )
 
@@ -845,33 +1039,24 @@ local function TrackPlayer(target)
     local connections = {}
     PlayerConnections[target] = connections
 
-    table.insert(
-        connections,
-        target.CharacterAdded:Connect(function(character)
-            task.spawn(function()
-                character:WaitForChild("Humanoid", 12)
-                task.wait(0.2)
+    table.insert(connections, target.CharacterAdded:Connect(function(character)
+        task.spawn(function()
+            character:WaitForChild("Humanoid", 12)
+            task.wait(0.2)
 
-                if Settings.ESPPlayers
-                    and target.Parent == Players
-                    and character.Parent then
+            if Settings.ESPPlayers
+                and target.Parent == Players
+                and character.Parent then
 
-                    AddESP(target, character, target.DisplayName)
-
-                    SetAIEvent(
-                        "respawn detectado: " .. target.DisplayName
-                    )
-                end
-            end)
+                AddESP(target, character, target.DisplayName)
+                SetAIEvent("respawn detectado: " .. target.DisplayName)
+            end
         end)
-    )
+    end))
 
-    table.insert(
-        connections,
-        target.CharacterRemoving:Connect(function()
-            RemoveESP(target)
-        end)
-    )
+    table.insert(connections, target.CharacterRemoving:Connect(function()
+        RemoveESP(target)
+    end))
 
     if Settings.ESPPlayers and target.Character then
         task.spawn(function()
@@ -913,10 +1098,7 @@ local FovTab = CreateTab("AIM FOV", 3)
 local FOVCircle = Instance.new("Frame")
 FOVCircle.Name = "TalesFOV"
 FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-FOVCircle.Size = UDim2.fromOffset(
-    Settings.FOVSize * 2,
-    Settings.FOVSize * 2
-)
+FOVCircle.Size = UDim2.fromOffset(Settings.FOVSize * 2, Settings.FOVSize * 2)
 FOVCircle.BackgroundTransparency = 1
 FOVCircle.Visible = false
 FOVCircle.Parent = GUI
@@ -937,19 +1119,10 @@ CreateToggle(FovTab, "AIM FOV", function(state)
     end
 end, 15)
 
-local SizeLabel = CreateInfo(
-    FovTab,
-    "Tamanho: " .. Settings.FOVSize,
-    65,
-    28
-)
+local SizeLabel = CreateInfo(FovTab, "Tamanho: " .. Settings.FOVSize, 58, 25)
 
 local function ChangeFOV(amount)
-    Settings.FOVSize = math.clamp(
-        Settings.FOVSize + amount,
-        40,
-        300
-    )
+    Settings.FOVSize = math.clamp(Settings.FOVSize + amount, 40, 300)
 
     FOVCircle.Size = UDim2.fromOffset(
         Settings.FOVSize * 2,
@@ -959,11 +1132,11 @@ local function ChangeFOV(amount)
     SizeLabel.Text = "Tamanho: " .. Settings.FOVSize
 end
 
-CreateOption(FovTab, "AUMENTAR +", 100, function()
+CreateOption(FovTab, "AUMENTAR +", 88, function()
     ChangeFOV(20)
 end)
 
-CreateOption(FovTab, "DIMINUIR -", 140, function()
+CreateOption(FovTab, "DIMINUIR -", 124, function()
     ChangeFOV(-20)
 end)
 
@@ -976,10 +1149,7 @@ local PursuitTab = CreateTab("PERSEGUICAO", 4)
 local Sensor = Instance.new("Frame")
 Sensor.Name = "TalesAimSensor"
 Sensor.AnchorPoint = Vector2.new(0.5, 0.5)
-Sensor.Size = UDim2.fromOffset(
-    Settings.SensorSize,
-    Settings.SensorSize
-)
+Sensor.Size = UDim2.fromOffset(Settings.SensorSize, Settings.SensorSize)
 Sensor.Position = Settings.SensorPosition
 Sensor.BackgroundColor3 = BLUE
 Sensor.BackgroundTransparency = 0.35
@@ -1006,34 +1176,16 @@ SensorText.Font = Enum.Font.GothamBold
 SensorText.ZIndex = 21
 SensorText.Parent = Sensor
 
-local PursuitStatus = CreateInfo(
-    PursuitTab,
-    "Perseguicao: DESATIVADA",
-    60,
-    30
-)
-
-local SensorStatus = CreateInfo(
-    PursuitTab,
-    "Sensor: TRAVADO",
-    90,
-    25
-)
+local PursuitStatus = CreateInfo(PursuitTab, "Perseguicao: DESATIVADA", 50, 25)
+local SensorStatus = CreateInfo(PursuitTab, "Sensor: TRAVADO", 78, 22)
 
 local function UpdateSensor()
-    Sensor.Size = UDim2.fromOffset(
-        Settings.SensorSize,
-        Settings.SensorSize
-    )
-
+    Sensor.Size = UDim2.fromOffset(Settings.SensorSize, Settings.SensorSize)
     Sensor.Position = Settings.SensorPosition
     Sensor.Visible = Settings.Pursuit
 
     SensorText.Text = Settings.PursuitActive and "ON" or "MIRA"
-
-    Sensor.BackgroundColor3 = Settings.PursuitActive
-        and Color3.fromRGB(20, 190, 90)
-        or BLUE
+    Sensor.BackgroundColor3 = Settings.PursuitActive and GREEN or BLUE
 
     PursuitStatus.Text = Settings.PursuitActive
         and "Perseguicao: ATIVA"
@@ -1052,35 +1204,25 @@ CreateToggle(PursuitTab, "PERSEGUICAO", function(state)
     end
 
     UpdateSensor()
-end, 15)
+end, 12)
 
-CreateOption(PursuitTab, "TRAVAR / DESTRAVAR", 130, function()
+CreateOption(PursuitTab, "TRAVAR / DESTRAVAR", 90, function()
     Settings.SensorLocked = not Settings.SensorLocked
     UpdateSensor()
 end)
 
-CreateOption(PursuitTab, "AUMENTAR BOLINHA +", 170, function()
-    Settings.SensorSize = math.clamp(
-        Settings.SensorSize + 10,
-        35,
-        150
-    )
-
+CreateOption(PursuitTab, "AUMENTAR BOLINHA +", 126, function()
+    Settings.SensorSize = math.clamp(Settings.SensorSize + 10, 35, 150)
     UpdateSensor()
 end)
 
-CreateOption(PursuitTab, "DIMINUIR BOLINHA -", 210, function()
-    Settings.SensorSize = math.clamp(
-        Settings.SensorSize - 10,
-        35,
-        150
-    )
-
+CreateOption(PursuitTab, "DIMINUIR BOLINHA -", 162, function()
+    Settings.SensorSize = math.clamp(Settings.SensorSize - 10, 35, 150)
     UpdateSensor()
 end)
 
 --==================================================
--- SENSOR EXCLUSIVO DO TIRO AUTOMATICO
+-- TIRO AUTOMATICO
 --==================================================
 
 local AutoFireTab = CreateTab("TIRO AUTOMATICO", 6)
@@ -1093,7 +1235,7 @@ AutoFireSensor.Size = UDim2.fromOffset(
     Settings.AutoFireSensorSize
 )
 AutoFireSensor.Position = Settings.AutoFireSensorPosition
-AutoFireSensor.BackgroundColor3 = Color3.fromRGB(220, 65, 45)
+AutoFireSensor.BackgroundColor3 = RED
 AutoFireSensor.BackgroundTransparency = 0.30
 AutoFireSensor.BorderSizePixel = 0
 AutoFireSensor.Active = false
@@ -1111,9 +1253,9 @@ AutoFireSensorStroke.Parent = AutoFireSensor
 local AutoFireSensorText = Instance.new("TextLabel")
 AutoFireSensorText.Size = UDim2.fromScale(1, 1)
 AutoFireSensorText.BackgroundTransparency = 1
-AutoFireSensorText.Text = "FIRE"
+AutoFireSensorText.Text = "BUSCA"
 AutoFireSensorText.TextColor3 = Color3.new(1, 1, 1)
-AutoFireSensorText.TextSize = 12
+AutoFireSensorText.TextSize = 11
 AutoFireSensorText.Font = Enum.Font.GothamBold
 AutoFireSensorText.ZIndex = 31
 AutoFireSensorText.Parent = AutoFireSensor
@@ -1121,23 +1263,40 @@ AutoFireSensorText.Parent = AutoFireSensor
 local AutoFireStatus = CreateInfo(
     AutoFireTab,
     "Tiro automatico: DESATIVADO",
-    15,
-    30
+    12,
+    24
 )
 
 local AutoFireSensorStatus = CreateInfo(
     AutoFireTab,
     "Sensor: TRAVADO",
-    48,
-    25
+    38,
+    22
 )
 
 local AutoFireTargetStatus = CreateInfo(
     AutoFireTab,
     "Alvo: aguardando",
-    75,
+    62,
     30
 )
+
+local function SetAutoFireSensorState(state, message)
+    if state == "READY" then
+        AutoFireSensor.BackgroundColor3 = GREEN
+        AutoFireSensorText.Text = "PRONTO"
+    elseif state == "SEARCH" then
+        AutoFireSensor.BackgroundColor3 = AMBER
+        AutoFireSensorText.Text = "BUSCA"
+    else
+        AutoFireSensor.BackgroundColor3 = RED
+        AutoFireSensorText.Text = "OFF"
+    end
+
+    if message then
+        AutoFireTargetStatus.Text = message
+    end
+end
 
 local function UpdateAutoFireSensor()
     AutoFireSensor.Size = UDim2.fromOffset(
@@ -1148,11 +1307,11 @@ local function UpdateAutoFireSensor()
     AutoFireSensor.Position = Settings.AutoFireSensorPosition
     AutoFireSensor.Visible = Settings.AutoFire
 
-    AutoFireSensor.BackgroundColor3 = Settings.AutoFire
-        and Color3.fromRGB(20, 160, 85)
-        or Color3.fromRGB(220, 65, 45)
-
-    AutoFireSensorText.Text = Settings.AutoFire and "FIRE" or "OFF"
+    if not Settings.AutoFire then
+        SetAutoFireSensorState("OFF", "Alvo: aguardando")
+    else
+        SetAutoFireSensorState("SEARCH", "Alvo: procurando")
+    end
 
     AutoFireStatus.Text = Settings.AutoFire
         and "Tiro automatico: ATIVADO"
@@ -1172,20 +1331,16 @@ CreateToggle(AutoFireTab, "TIRO AUTOMATICO", function(state)
 
     UpdateAutoFireSensor()
 
-    SetAIEvent(
-        state and "tiro automatico ativado"
-        or "tiro automatico desativado"
-    )
-end, 115)
+    SetAIEvent(state and "tiro automatico ativado"
+        or "tiro automatico desativado")
+end, 100)
 
-CreateOption(AutoFireTab, "TRAVAR / DESTRAVAR SENSOR", 160, function()
-    Settings.AutoFireSensorLocked =
-        not Settings.AutoFireSensorLocked
-
+CreateOption(AutoFireTab, "TRAVAR / DESTRAVAR SENSOR", 138, function()
+    Settings.AutoFireSensorLocked = not Settings.AutoFireSensorLocked
     UpdateAutoFireSensor()
 end)
 
-CreateOption(AutoFireTab, "AUMENTAR SENSOR +", 200, function()
+CreateOption(AutoFireTab, "AUMENTAR SENSOR +", 174, function()
     Settings.AutoFireSensorSize = math.clamp(
         Settings.AutoFireSensorSize + 10,
         35,
@@ -1195,7 +1350,7 @@ CreateOption(AutoFireTab, "AUMENTAR SENSOR +", 200, function()
     UpdateAutoFireSensor()
 end)
 
-CreateOption(AutoFireTab, "DIMINUIR SENSOR -", 240, function()
+CreateOption(AutoFireTab, "DIMINUIR SENSOR -", 210, function()
     Settings.AutoFireSensorSize = math.clamp(
         Settings.AutoFireSensorSize - 10,
         35,
@@ -1207,8 +1362,8 @@ end)
 
 CreateInfo(
     AutoFireTab,
-    "Arraste o sensor ate o botao de disparo do HUD e depois trave. O sensor e independente da perseguicao.",
-    285,
+    "O sensor e visual. Arraste para posicionar e trave. A ativacao depende da ferramenta equipada e das regras do jogo.",
+    250,
     55
 )
 
@@ -1217,16 +1372,11 @@ CreateInfo(
 --==================================================
 
 local function InputPosition(input)
-    return Vector2.new(
-        input.Position.X,
-        input.Position.Y
-    )
+    return Vector2.new(input.Position.X, input.Position.Y)
 end
 
 local function InsideFrame(frame, position)
-    local center = frame.AbsolutePosition
-        + frame.AbsoluteSize / 2
-
+    local center = frame.AbsolutePosition + frame.AbsoluteSize / 2
     local half = frame.AbsoluteSize / 2
 
     return math.abs(position.X - center.X) <= half.X
@@ -1235,7 +1385,6 @@ end
 
 local function SetFramePosition(frame, position, settingName)
     local camera = workspace.CurrentCamera
-
     if not camera then
         return
     end
@@ -1258,157 +1407,85 @@ local function SetFramePosition(frame, position, settingName)
     frame.Position = newPosition
 end
 
--- Controle independente do sensor de perseguicao.
+local function ConnectDraggableSensor(frame, isEnabled, isLocked, settingName)
+    local dragging = false
+    local activeInput
+    local startPosition
+    local origin
 
-local sensorDragging = false
-local sensorInput = nil
-local sensorStart = nil
-local sensorOrigin = nil
-local sensorMoved = false
+    UserInputService.InputBegan:Connect(function(input)
+        if not isEnabled() then
+            return
+        end
 
-UserInputService.InputBegan:Connect(function(input)
-    if not Settings.Pursuit then
-        return
-    end
+        local touch = input.UserInputType == Enum.UserInputType.Touch
+        local click = input.UserInputType == Enum.UserInputType.MouseButton1
 
-    local touch = input.UserInputType == Enum.UserInputType.Touch
-    local click = input.UserInputType == Enum.UserInputType.MouseButton1
+        if not touch and not click then
+            return
+        end
 
-    if not touch and not click then
-        return
-    end
+        if not InsideFrame(frame, InputPosition(input)) then
+            return
+        end
 
-    local pos = InputPosition(input)
+        if isLocked() then
+            if settingName == "Pursuit" then
+                Settings.PursuitActive = not Settings.PursuitActive
+                UpdateSensor()
+            end
+            return
+        end
 
-    if not InsideFrame(Sensor, pos) then
-        return
-    end
+        dragging = true
+        activeInput = input
+        startPosition = InputPosition(input)
+        origin = frame.AbsolutePosition + frame.AbsoluteSize / 2
+    end)
 
-    if Settings.SensorLocked then
-        Settings.PursuitActive = not Settings.PursuitActive
-        UpdateSensor()
-    else
-        sensorDragging = true
-        sensorInput = input
-        sensorStart = pos
-        sensorOrigin = Sensor.AbsolutePosition + Sensor.AbsoluteSize / 2
-        sensorMoved = false
-    end
-end)
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging then
+            return
+        end
 
-UserInputService.InputChanged:Connect(function(input)
-    if not sensorDragging then
-        return
-    end
+        local isMouse = input.UserInputType == Enum.UserInputType.MouseMovement
 
-    local move = input.UserInputType == Enum.UserInputType.MouseMovement
+        if not isMouse and input ~= activeInput then
+            return
+        end
 
-    if not move and input ~= sensorInput then
-        return
-    end
+        local delta = InputPosition(input) - startPosition
 
-    local delta = InputPosition(input) - sensorStart
+        if delta.Magnitude > 3 then
+            SetFramePosition(frame, origin + delta, settingName)
+        end
+    end)
 
-    if delta.Magnitude > 5 then
-        sensorMoved = true
-    end
+    UserInputService.InputEnded:Connect(function(input)
+        if input == activeInput
+            or input.UserInputType == Enum.UserInputType.MouseButton1 then
 
-    if sensorMoved then
-        SetFramePosition(
-            Sensor,
-            sensorOrigin + delta,
-            "Pursuit"
-        )
-    end
-end)
+            dragging = false
+            activeInput = nil
+            startPosition = nil
+            origin = nil
+        end
+    end)
+end
 
-UserInputService.InputEnded:Connect(function(input)
-    if input == sensorInput
-        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+ConnectDraggableSensor(
+    Sensor,
+    function() return Settings.Pursuit end,
+    function() return Settings.SensorLocked end,
+    "Pursuit"
+)
 
-        sensorDragging = false
-        sensorInput = nil
-        sensorStart = nil
-        sensorOrigin = nil
-    end
-end)
-
--- Controle independente do sensor de tiro automatico.
--- Tocar no sensor nao liga nem desliga o disparo.
--- Quando destravado, ele serve somente para posicionamento.
-
-local autoFireSensorDragging = false
-local autoFireSensorInput = nil
-local autoFireSensorStart = nil
-local autoFireSensorOrigin = nil
-local autoFireSensorMoved = false
-
-UserInputService.InputBegan:Connect(function(input)
-    if not Settings.AutoFire then
-        return
-    end
-
-    local touch = input.UserInputType == Enum.UserInputType.Touch
-    local click = input.UserInputType == Enum.UserInputType.MouseButton1
-
-    if not touch and not click then
-        return
-    end
-
-    local pos = InputPosition(input)
-
-    if not InsideFrame(AutoFireSensor, pos) then
-        return
-    end
-
-    if not Settings.AutoFireSensorLocked then
-        autoFireSensorDragging = true
-        autoFireSensorInput = input
-        autoFireSensorStart = pos
-        autoFireSensorOrigin =
-            AutoFireSensor.AbsolutePosition
-            + AutoFireSensor.AbsoluteSize / 2
-
-        autoFireSensorMoved = false
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if not autoFireSensorDragging then
-        return
-    end
-
-    local move = input.UserInputType == Enum.UserInputType.MouseMovement
-
-    if not move and input ~= autoFireSensorInput then
-        return
-    end
-
-    local delta = InputPosition(input) - autoFireSensorStart
-
-    if delta.Magnitude > 5 then
-        autoFireSensorMoved = true
-    end
-
-    if autoFireSensorMoved then
-        SetFramePosition(
-            AutoFireSensor,
-            autoFireSensorOrigin + delta,
-            "AutoFire"
-        )
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input == autoFireSensorInput
-        or input.UserInputType == Enum.UserInputType.MouseButton1 then
-
-        autoFireSensorDragging = false
-        autoFireSensorInput = nil
-        autoFireSensorStart = nil
-        autoFireSensorOrigin = nil
-    end
-end)
+ConnectDraggableSensor(
+    AutoFireSensor,
+    function() return Settings.AutoFire end,
+    function() return Settings.AutoFireSensorLocked end,
+    "AutoFire"
+)
 
 --==================================================
 -- IA ASSIST
@@ -1416,48 +1493,24 @@ end)
 
 local AITab = CreateTab("IA ASSIST", 5)
 
-local AIStatus = CreateInfo(
-    AITab,
-    "IA: INICIANDO...",
-    15,
-    35
-)
-
-local TargetStatus = CreateInfo(
-    AITab,
-    "Alvo: nenhum",
-    52,
-    27
-)
-
-local CivilStatus = CreateInfo(
-    AITab,
-    "Funcao: verificando",
-    80,
-    27
-)
+local AIStatus = CreateInfo(AITab, "IA: INICIANDO...", 12, 30)
+local TargetStatus = CreateInfo(AITab, "Alvo: nenhum", 44, 24)
+local CivilStatus = CreateInfo(AITab, "Funcao: verificando", 70, 24)
 
 AIEventStatus = CreateInfo(
     AITab,
     "Ultima deteccao: aguardando atividade",
-    110,
-    55
+    98,
+    48
 )
 
-local NPCStatus = CreateInfo(
-    AITab,
-    "Bots detectados: 0",
-    145,
-    25
-)
+local NPCStatus = CreateInfo(AITab, "Bots detectados: 0", 148, 22)
 
 CreateToggle(AITab, "RECUPERACAO INTELIGENTE", function(state)
     Settings.SmartRecovery = state
 
-    SetAIEvent(
-        state and "recuperacao inteligente ativada"
-        or "recuperacao inteligente desativada"
-    )
+    SetAIEvent(state and "recuperacao inteligente ativada"
+        or "recuperacao inteligente desativada")
 end, 180, true)
 
 CreateToggle(AITab, "PROTECAO AO VIRAR CIVIL", function(state)
@@ -1474,17 +1527,15 @@ CreateToggle(AITab, "PROTECAO AO VIRAR CIVIL", function(state)
 
         SetAIEvent("protecao ativada: funcao civil detectada")
     else
-        SetAIEvent(
-            state and "protecao civil ativada"
-            or "protecao civil desativada"
-        )
+        SetAIEvent(state and "protecao civil ativada"
+            or "protecao civil desativada")
     end
-end, 225, true)
+end, 220, true)
 
 CreateInfo(
     AITab,
     "A IA monitora alvos, ESP, bots e protecao. Nao altera dano nem cargo.",
-    270,
+    260,
     45
 )
 
@@ -1517,7 +1568,7 @@ AutoFireValue.Value = false
 AutoFireValue.Parent = GUI
 
 --==================================================
--- SELECAO DE ALVOS
+-- SELECAO E DETECCAO DE ALVOS
 --==================================================
 
 local function GetTargetPart(character)
@@ -1528,7 +1579,6 @@ local function GetTargetPart(character)
     if Settings.Target == "Cabeca" then
         return character:FindFirstChild("Head")
             or GetCharacterAnchor(character)
-
     elseif Settings.Target == "Peito" then
         return character:FindFirstChild("UpperTorso")
             or character:FindFirstChild("Torso")
@@ -1539,10 +1589,32 @@ local function GetTargetPart(character)
     return GetCharacterAnchor(character)
 end
 
+local function IsPlayerSelected(target)
+    if not Settings.PlayerSelectionEnabled then
+        return true
+    end
+
+    if not target or not target:IsA("Player") then
+        return false
+    end
+
+    return Settings.SelectedPlayers[target.UserId] == true
+end
+
 local function GetTargetScreenDistance(target)
     Camera = workspace.CurrentCamera
 
     if not Camera or not target or target == Player then
+        return nil
+    end
+
+    if target:IsA("Player")
+        and Settings.PlayerSelectionEnabled
+        and not IsPlayerSelected(target) then
+        return nil
+    end
+
+    if target:IsA("Model") and Settings.PlayerSelectionEnabled then
         return nil
     end
 
@@ -1560,15 +1632,9 @@ local function GetTargetScreenDistance(target)
     end
 
     local viewport = Camera.ViewportSize
+    local center = Vector2.new(viewport.X * 0.5, viewport.Y * 0.5)
 
-    local center = Vector2.new(
-        viewport.X * 0.5,
-        viewport.Y * 0.5
-    )
-
-    return (
-        Vector2.new(point.X, point.Y) - center
-    ).Magnitude
+    return (Vector2.new(point.X, point.Y) - center).Magnitude
 end
 
 local function IsTargetInRange(target)
@@ -1579,7 +1645,6 @@ local function IsTargetInRange(target)
     end
 
     local limit = Settings.FOV and Settings.FOVSize or 300
-
     return distance <= limit
 end
 
@@ -1592,7 +1657,6 @@ local function GetClosestTarget()
 
     local bestDistance = math.huge
     local bestTarget = nil
-
     local limit = Settings.FOV and Settings.FOVSize or 300
 
     local function CheckTarget(target)
@@ -1600,12 +1664,15 @@ local function GetClosestTarget()
             return
         end
 
+        if Settings.PlayerSelectionEnabled then
+            if not target:IsA("Player") or not IsPlayerSelected(target) then
+                return
+            end
+        end
+
         local distance = GetTargetScreenDistance(target)
 
-        if distance
-            and distance <= limit
-            and distance < bestDistance then
-
+        if distance and distance <= limit and distance < bestDistance then
             bestDistance = distance
             bestTarget = target
         end
@@ -1617,9 +1684,11 @@ local function GetClosestTarget()
         end
     end
 
-    for _, model in ipairs(CachedNPCs) do
-        if model and model.Parent and not IsPlayerCharacter(model) then
-            CheckTarget(model)
+    if not Settings.PlayerSelectionEnabled then
+        for _, model in ipairs(CachedNPCs) do
+            if model and model.Parent and not IsPlayerCharacter(model) then
+                CheckTarget(model)
+            end
         end
     end
 
@@ -1643,11 +1712,7 @@ local function GetStableTarget()
     end
 
     if bestDistance and bestDistance < currentDistance * 0.80 then
-        SetAIEvent(
-            "troca estavel de alvo: "
-            .. GetTargetName(bestTarget)
-        )
-
+        SetAIEvent("troca estavel de alvo: " .. GetTargetName(bestTarget))
         return bestTarget
     end
 
@@ -1813,6 +1878,7 @@ local function BindLocalCharacter(character)
             AutoFireValue.Value = false
 
             UpdateSensor()
+            UpdateAutoFireSensor()
         end)
     end
 end
@@ -1828,6 +1894,7 @@ Player.CharacterRemoving:Connect(function()
     AutoFireValue.Value = false
 
     UpdateSensor()
+    UpdateAutoFireSensor()
 end)
 
 if Player.Character then
@@ -1840,14 +1907,11 @@ end
 
 local function UpdateCivilStatus()
     local wasCivil = IsCivil
-
     IsCivil = IsLocalPlayerCivil()
 
     if IsCivil ~= wasCivil then
-        SetAIEvent(
-            IsCivil and "funcao civil detectada"
-            or "funcao civil nao detectada"
-        )
+        SetAIEvent(IsCivil and "funcao civil detectada"
+            or "funcao civil nao detectada")
     end
 
     if IsCivil and Settings.CivilProtection then
@@ -1862,7 +1926,6 @@ local function UpdateCivilStatus()
 end
 
 Player:GetPropertyChangedSignal("Team"):Connect(UpdateCivilStatus)
-
 Player:GetAttributeChangedSignal("Role"):Connect(UpdateCivilStatus)
 Player:GetAttributeChangedSignal("Class"):Connect(UpdateCivilStatus)
 Player:GetAttributeChangedSignal("Job"):Connect(UpdateCivilStatus)
@@ -1894,7 +1957,6 @@ RunService.RenderStepped:Connect(function(deltaTime)
 
     if npcTimer >= 0.60 then
         npcTimer = 0
-
         RefreshNPCs()
 
         if Settings.ESPBots or Settings.ESPPlayers then
@@ -1935,15 +1997,10 @@ RunService.RenderStepped:Connect(function(deltaTime)
 
     if wantsAim or wantsPursuit or wantsAutoFire then
         local previousTarget = CurrentTarget
-
         CurrentTarget = GetStableTarget()
 
         if CurrentTarget and CurrentTarget ~= previousTarget then
-            SetAIEvent(
-                "alvo localizado: "
-                .. GetTargetName(CurrentTarget)
-            )
-
+            SetAIEvent("alvo localizado: " .. GetTargetName(CurrentTarget))
         elseif not CurrentTarget then
             SetAIEvent("nenhum alvo dentro do limite atual")
         end
@@ -1956,9 +2013,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
     end
 
     local targetCharacter = GetCharacter(CurrentTarget)
-
-    local targetPart = targetCharacter
-        and GetTargetPart(targetCharacter)
+    local targetPart = targetCharacter and GetTargetPart(targetCharacter)
 
     if not targetPart or not IsAlive(targetCharacter) then
         CurrentTarget = nil
@@ -1967,12 +2022,13 @@ RunService.RenderStepped:Connect(function(deltaTime)
     end
 
     --==================================================
-    -- TIRO AUTOMATICO
+    -- TIRO AUTOMATICO: VALIDACAO DE PRONTIDAO
     --==================================================
 
     autoFireTimer += deltaTime
 
     local autoFireReady = false
+    local equippedTool = nil
 
     if wantsAutoFire
         and CurrentTarget
@@ -1980,77 +2036,88 @@ RunService.RenderStepped:Connect(function(deltaTime)
         and targetCharacter then
 
         local targetHead = targetCharacter:FindFirstChild("Head")
-
-        local headIsGreen = targetHead
+        local headIsVisible = targetHead
             and targetHead:IsA("BasePart")
             and HasClearHeadLineOfSight(targetCharacter, targetHead)
 
-        if headIsGreen then
-            autoFireReady = true
-            AutoFireTargetStatus.Text =
-                "Alvo: visivel - pronto para disparar"
+        local localCharacter = Player.Character
 
-            AutoFireSensor.BackgroundColor3 =
-                Color3.fromRGB(20, 220, 85)
+        if localCharacter then
+            equippedTool = localCharacter:FindFirstChildOfClass("Tool")
+        end
+
+        local toolIsReady = equippedTool ~= nil
+            and equippedTool.Parent == localCharacter
+            and equippedTool.Enabled == true
+
+        if not headIsVisible then
+            SetAutoFireSensorState(
+                "OFF",
+                "Alvo: sem linha de visao"
+            )
+            autoFireTimer = 0
+
+        elseif not toolIsReady then
+            SetAutoFireSensorState(
+                "SEARCH",
+                "Alvo visivel - equipe uma ferramenta"
+            )
+            autoFireTimer = 0
+
+        else
+            autoFireReady = true
+
+            SetAutoFireSensorState(
+                "READY",
+                "Alvo visivel: " .. GetTargetName(CurrentTarget)
+            )
 
             if autoFireTimer >= 0.18 then
-                local localCharacter = Player.Character
-                local equippedTool = localCharacter
-                    and localCharacter:FindFirstChildOfClass("Tool")
+                autoFireTimer = 0
 
-                if equippedTool
-                    and equippedTool.Parent == localCharacter
-                    and equippedTool.Enabled then
+                local activated, activationError = pcall(function()
+                    equippedTool:Activate()
+                end)
 
-                    autoFireTimer = 0
-
-                    local activated, activationError = pcall(function()
-                        equippedTool:Activate()
-                    end)
-
-                    if activated then
-                        SetAIEvent(
-                            "disparo automatico: "
-                            .. GetTargetName(CurrentTarget)
-                        )
-                    else
-                        SetAIEvent(
-                            "falha ao ativar ferramenta: "
-                            .. tostring(activationError)
-                        )
-                    end
+                if activated then
+                    SetAIEvent(
+                        "Tool:Activate solicitado para "
+                        .. GetTargetName(CurrentTarget)
+                    )
                 else
-                    AutoFireTargetStatus.Text =
-                        "Alvo visivel - equipe uma ferramenta"
+                    SetAIEvent(
+                        "falha ao ativar ferramenta: "
+                        .. tostring(activationError)
+                    )
 
-                    autoFireTimer = 0
+                    SetAutoFireSensorState(
+                        "OFF",
+                        "Falha ao ativar ferramenta"
+                    )
+
+                    autoFireReady = false
                 end
             end
-        else
-            AutoFireTargetStatus.Text =
-                "Alvo: sem linha de visao"
-
-            AutoFireSensor.BackgroundColor3 =
-                Color3.fromRGB(220, 65, 45)
-
-            autoFireTimer = 0
         end
     else
-        AutoFireTargetStatus.Text = CurrentTarget
-            and ("Alvo: " .. GetTargetName(CurrentTarget))
-            or "Alvo: aguardando"
-
-        AutoFireSensor.BackgroundColor3 =
-            Settings.AutoFire
-            and Color3.fromRGB(20, 160, 85)
-            or Color3.fromRGB(220, 65, 45)
-
         autoFireTimer = 0
+
+        if not Settings.AutoFire then
+            SetAutoFireSensorState("OFF", "Alvo: aguardando")
+        elseif not CombatAllowed() then
+            SetAutoFireSensorState("OFF", "Bloqueado pela protecao civil")
+        elseif CurrentTarget and CurrentTarget:IsA("Model") then
+            SetAutoFireSensorState("SEARCH", "Alvo NPC - AutoFire exige Player")
+        else
+            SetAutoFireSensorState("SEARCH", "Alvo: procurando player")
+        end
     end
 
     AutoFireValue.Value = autoFireReady
 
-    -- Assistencia original de camera.
+    --==================================================
+    -- ASSISTENCIA ORIGINAL DE CAMERA
+    --==================================================
 
     if wantsAim and targetPart and Camera then
         local cameraPosition = Camera.CFrame.Position
@@ -2060,11 +2127,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
             targetPart.Position
         )
 
-        local smooth = math.clamp(
-            Settings.AimSmoothness,
-            0,
-            1
-        )
+        local smooth = math.clamp(Settings.AimSmoothness, 0, 1)
 
         local alpha = smooth <= 0 and 0
             or (
@@ -2076,10 +2139,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
             )
 
         if alpha > 0 then
-            Camera.CFrame = Camera.CFrame:Lerp(
-                desired,
-                alpha
-            )
+            Camera.CFrame = Camera.CFrame:Lerp(desired, alpha)
         end
     end
 
@@ -2087,7 +2147,9 @@ RunService.RenderStepped:Connect(function(deltaTime)
     TargetPartValue.Value = Settings.Target or ""
     PursuitValue.Value = wantsPursuit
 
-    -- IA Assist.
+    --==================================================
+    -- IA ASSIST
+    --==================================================
 
     aiTimer += deltaTime
 
@@ -2096,35 +2158,27 @@ RunService.RenderStepped:Connect(function(deltaTime)
 
         if IsCivil then
             LastAIStatus = "CIVIL DETECTADO - COMBATE BLOQUEADO"
-
         elseif not CombatAllowed() then
             LastAIStatus = "PROTECAO ATIVA"
-
         elseif CurrentTarget then
             LastAIStatus = "ALVO ACOMPANHADO - "
                 .. GetTargetName(CurrentTarget)
-
         elseif wantsAim or wantsPursuit or wantsAutoFire then
             LastAIStatus = "PROCURANDO ALVO NO FOV"
-
         elseif Settings.ESPPlayers or Settings.ESPBots then
             LastAIStatus = "MONITORANDO ESP"
-
         else
             LastAIStatus = "MONITORANDO SISTEMAS"
         end
 
         AIStatus.Text = "IA: " .. LastAIStatus
-
-        TargetStatus.Text = "Alvo: "
-            .. GetTargetName(CurrentTarget)
+        TargetStatus.Text = "Alvo: " .. GetTargetName(CurrentTarget)
 
         CivilStatus.Text = IsCivil
             and "Funcao: CIVIL detectado"
             or "Funcao: nao identificada como civil"
 
-        NPCStatus.Text = "Bots detectados: "
-            .. tostring(#CachedNPCs)
+        NPCStatus.Text = "Bots detectados: " .. tostring(#CachedNPCs)
 
         ESPInfo.Text = "Players: "
             .. tostring(#Players:GetPlayers() - 1)
@@ -2132,6 +2186,10 @@ RunService.RenderStepped:Connect(function(deltaTime)
             .. tostring(#CachedNPCs)
             .. " | Recuperacao: "
             .. (Settings.SmartRecovery and "ON" or "OFF")
+
+        SelectionInfo.Text = Settings.PlayerSelectionEnabled
+            and ("Selecao ativa: " .. tostring(CountSelectedPlayers()) .. " player(s)")
+            or "Selecao desativada: todos os alvos elegiveis"
     end
 end)
 
@@ -2140,6 +2198,7 @@ end)
 --==================================================
 
 RefreshNPCs()
+RefreshPlayerSelectionList()
 UpdateSensor()
 UpdateAutoFireSensor()
 UpdateCivilStatus()
@@ -2147,6 +2206,8 @@ UpdateCivilStatus()
 print("Tales Mod Menu IA Assist carregado.")
 print("ESP Player azul + Name: pronto.")
 print("ESP Bot amarelo com nome BOT: pronto.")
-print("Busca de alvos independente da ESP: pronta.")
+print("Selecao de players por checkbox: pronta.")
+print("Busca de alvos: pronta.")
 print("Categoria exclusiva de AutoFire: pronta.")
-print("Sensor independente do AutoFire: pronto.")
+print("Sensor AutoFire com estado de prontidao: pronto.")
+print("Painel reduzido e minimizacao: pronto.")
