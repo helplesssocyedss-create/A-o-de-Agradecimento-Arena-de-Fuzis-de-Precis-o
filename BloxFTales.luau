@@ -1,6 +1,6 @@
 --========================================
---           BLOX F' - TALES
---              VERSION 2.0
+--          BLOX F' - TALES
+--              VERSION 2.1
 --========================================
 
 local Players = game:GetService("Players")
@@ -18,6 +18,14 @@ local C = {
     White = Color3.fromRGB(255,255,255)
 }
 
+-- ESTADOS PERSISTENTES
+
+local States = {}
+local SelectedPlayer = nil
+local WalkSpeedValue = 16
+
+-- INTERFACE
+
 local Screen = Instance.new("ScreenGui")
 Screen.Name = "BloxFTales"
 Screen.ResetOnSpawn = false
@@ -28,10 +36,12 @@ Main.Size = UDim2.fromOffset(650,440)
 Main.Position = UDim2.new(.5,-325,.5,-220)
 Main.BackgroundColor3 = C.Background
 Main.BorderSizePixel = 0
+Main.ClipsDescendants = true
 Main.Parent = Screen
 
-Instance.new("UICorner",Main).CornerRadius =
-    UDim.new(0,12)
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0,12)
+MainCorner.Parent = Main
 
 local Stroke = Instance.new("UIStroke")
 Stroke.Color = C.Purple
@@ -46,8 +56,9 @@ Header.BackgroundColor3 = Color3.fromRGB(38,25,58)
 Header.BorderSizePixel = 0
 Header.Parent = Main
 
-Instance.new("UICorner",Header).CornerRadius =
-    UDim.new(0,12)
+local HeaderCorner = Instance.new("UICorner")
+HeaderCorner.CornerRadius = UDim.new(0,12)
+HeaderCorner.Parent = Header
 
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1,-100,1,0)
@@ -68,6 +79,7 @@ Close.Position = UDim2.new(1,-45,0,10)
 Close.BackgroundColor3 = Color3.fromRGB(190,50,65)
 Close.Text = "X"
 Close.TextColor3 = C.White
+Close.TextSize = 16
 Close.Font = Enum.Font.GothamBold
 Close.Parent = Header
 
@@ -78,7 +90,7 @@ Close.MouseButton1Click:Connect(function()
     Screen:Destroy()
 end)
 
--- MINIMIZAR
+-- MINIMIZAR CORRIGIDO
 
 local Min = Instance.new("TextButton")
 Min.Size = UDim2.fromOffset(35,35)
@@ -86,66 +98,83 @@ Min.Position = UDim2.new(1,-85,0,10)
 Min.BackgroundColor3 = C.Purple
 Min.Text = "-"
 Min.TextColor3 = C.White
+Min.TextSize = 22
 Min.Font = Enum.Font.GothamBold
 Min.Parent = Header
 
 Instance.new("UICorner",Min).CornerRadius =
-    UDim.new(0,8)
+    UDim.new(0,10)
 
 local minimized = false
 
-Min.MouseButton1Click:Connect(function()
+local function MinimizePanel()
+
     minimized = not minimized
 
-    Main:TweenSize(
-        minimized and UDim2.fromOffset(650,55)
-        or UDim2.fromOffset(650,440),
-        Enum.EasingDirection.Out,
-        Enum.EasingStyle.Quart,
-        .25,
-        true
-    )
-end)
+    if minimized then
 
--- ARRASTAR JANELA
+        -- ESCONDER ELEMENTOS
 
-local dragging = false
-local dragStart
-local startPosition
+        Sidebar.Visible = false
+        Content.Visible = false
+        Title.Visible = false
+        Close.Visible = false
 
-Header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-    or input.UserInputType == Enum.UserInputType.Touch then
+        -- TRANSFORMAR EM QUADRADO
 
-        dragging = true
-        dragStart = input.Position
-        startPosition = Main.Position
+        Min.Position = UDim2.fromOffset(14,14)
+        Min.Size = UDim2.fromOffset(36,36)
+        Min.Text = "↗"
+
+        TweenService:Create(
+            Main,
+            TweenInfo.new(.3,Enum.EasingStyle.Quart),
+            {
+                Size = UDim2.fromOffset(64,64)
+            }
+        ):Play()
+
+        TweenService:Create(
+            Header,
+            TweenInfo.new(.3,Enum.EasingStyle.Quart),
+            {
+                Size = UDim2.fromOffset(64,64)
+            }
+        ):Play()
+
+    else
+
+        -- RESTAURAR ELEMENTOS
+
+        TweenService:Create(
+            Main,
+            TweenInfo.new(.3,Enum.EasingStyle.Quart),
+            {
+                Size = UDim2.fromOffset(650,440)
+            }
+        ):Play()
+
+        TweenService:Create(
+            Header,
+            TweenInfo.new(.3,Enum.EasingStyle.Quart),
+            {
+                Size = UDim2.new(1,0,0,55)
+            }
+        ):Play()
+
+        Min.Position = UDim2.new(1,-85,0,10)
+        Min.Size = UDim2.fromOffset(35,35)
+        Min.Text = "-"
+
+        Sidebar.Visible = true
+        Content.Visible = true
+        Title.Visible = true
+        Close.Visible = true
+
     end
-end)
+end
 
-UIS.InputChanged:Connect(function(input)
-    if dragging and (
-        input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch
-    ) then
-
-        local delta = input.Position - dragStart
-
-        Main.Position = UDim2.new(
-            startPosition.X.Scale,
-            startPosition.X.Offset + delta.X,
-            startPosition.Y.Scale,
-            startPosition.Y.Offset + delta.Y
-        )
-    end
-end)
-
-UIS.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-    or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
-    end
-end)
+Min.MouseButton1Click:Connect(MinimizePanel)
 
 -- MENU LATERAL
 
@@ -165,7 +194,7 @@ TabLayout.HorizontalAlignment =
 TabLayout.SortOrder = Enum.SortOrder.LayoutOrder
 TabLayout.Parent = Sidebar
 
--- CONTEÚDO
+-- ÁREA DE CONTEÚDO
 
 local Content = Instance.new("ScrollingFrame")
 Content.Size = UDim2.new(1,-185,1,-75)
@@ -186,16 +215,14 @@ List.SortOrder = Enum.SortOrder.LayoutOrder
 List.Parent = Content
 
 List:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+
     Content.CanvasSize = UDim2.new(
         0,0,0,List.AbsoluteContentSize.Y+15
     )
+
 end)
 
--- ESTADOS
-
-local States = {}
-
--- BOTÕES DESLIZANTES
+-- SISTEMA DE BOTÕES CORRIGIDO
 
 local function Toggle(name,callback)
 
@@ -221,7 +248,6 @@ local function Toggle(name,callback)
     local Switch = Instance.new("TextButton")
     Switch.Size = UDim2.fromOffset(48,24)
     Switch.Position = UDim2.new(1,-60,.5,-12)
-    Switch.BackgroundColor3 = C.Gray
     Switch.Text = ""
     Switch.AutoButtonColor = false
     Switch.Parent = Row
@@ -231,20 +257,19 @@ local function Toggle(name,callback)
 
     local Circle = Instance.new("Frame")
     Circle.Size = UDim2.fromOffset(18,18)
-    Circle.Position = UDim2.fromOffset(3,3)
     Circle.BackgroundColor3 = C.White
     Circle.Parent = Switch
 
     Instance.new("UICorner",Circle).CornerRadius =
         UDim.new(1,0)
 
-    States[name] = false
+    -- RECUPERAR ESTADO ANTERIOR
 
-    Switch.MouseButton1Click:Connect(function()
+    if States[name] == nil then
+        States[name] = false
+    end
 
-        States[name] = not States[name]
-
-        local active = States[name]
+    local function UpdateVisual(active)
 
         TweenService:Create(
             Switch,
@@ -265,9 +290,26 @@ local function Toggle(name,callback)
             }
         ):Play()
 
+    end
+
+    -- MOSTRAR ESTADO SALVO
+
+    UpdateVisual(States[name])
+
+    -- CLIQUE
+
+    Switch.MouseButton1Click:Connect(function()
+
+        States[name] = not States[name]
+
+        local active = States[name]
+
+        UpdateVisual(active)
+
         if callback then
             callback(active)
         end
+
     end)
 
     return Row
@@ -286,14 +328,18 @@ local function PlayerSelector()
     Label.TextSize = 14
     Label.Parent = Content
 
-    for _, target in ipairs(Players:GetPlayers()) do
+    for _,target in ipairs(Players:GetPlayers()) do
+
         if target ~= Player then
 
             local Button = Instance.new("TextButton")
             Button.Size = UDim2.new(1,-18,0,38)
-            Button.BackgroundColor3 = C.Background
+            Button.BackgroundColor3 =
+                SelectedPlayer == target and C.Purple or C.Background
+
             Button.Text = target.DisplayName ..
                 " (@" .. target.Name .. ")"
+
             Button.TextColor3 = C.White
             Button.Font = Enum.Font.Gotham
             Button.TextSize = 13
@@ -303,23 +349,36 @@ local function PlayerSelector()
                 UDim.new(0,8)
 
             Button.MouseButton1Click:Connect(function()
-                print("Jogador selecionado:",target.Name)
+
+                SelectedPlayer = target
+
+                for _,other in ipairs(Content:GetChildren()) do
+                    if other:IsA("TextButton") then
+                        other.BackgroundColor3 =
+                            C.Background
+                    end
+                end
+
+                Button.BackgroundColor3 = C.Purple
+
+                print("Selecionado:",target.Name)
+
             end)
+
         end
     end
 end
 
--- VELOCIDADE LOCAL
+-- VELOCIDADE
 
 local function SpeedControl()
 
     local Box = Instance.new("TextBox")
     Box.Size = UDim2.new(1,-18,0,40)
     Box.BackgroundColor3 = C.Background
-    Box.PlaceholderText = "Digite a velocidade (16 padrão)"
-    Box.Text = ""
+    Box.PlaceholderText = "Digite a velocidade"
+    Box.Text = tostring(WalkSpeedValue)
     Box.TextColor3 = C.White
-    Box.PlaceholderColor3 = C.Gray
     Box.Font = Enum.Font.Gotham
     Box.TextSize = 13
     Box.Parent = Content
@@ -332,12 +391,26 @@ local function SpeedControl()
         local value = tonumber(Box.Text)
 
         local character = Player.Character
+
         local humanoid = character and
             character:FindFirstChildOfClass("Humanoid")
 
-        if value and humanoid then
-            humanoid.WalkSpeed = math.clamp(value,0,100)
+        if value then
+
+            WalkSpeedValue = math.clamp(value,0,100)
+
+            if humanoid then
+                humanoid.WalkSpeed = WalkSpeedValue
+            end
+
+            Box.Text = tostring(WalkSpeedValue)
+
+        else
+
+            Box.Text = tostring(WalkSpeedValue)
+
         end
+
     end)
 end
 
@@ -404,28 +477,32 @@ local Options = {
         "Transparência",
         "Salvar configurações"
     }
+
 }
 
--- ABRIR CATEGORIA
+-- MOSTRAR CATEGORIA
 
 local function ShowCategory(category)
 
-    for _, child in ipairs(Content:GetChildren()) do
-        if child:IsA("Frame")
-        or child:IsA("TextLabel")
-        or child:IsA("TextButton")
-        or child:IsA("TextBox") then
+    for _,child in ipairs(Content:GetChildren()) do
+
+        if child ~= List then
             child:Destroy()
         end
+
     end
+
+    Content.CanvasPosition = Vector2.new(0,0)
 
     if category == "Início" then
 
         local Welcome = Instance.new("TextLabel")
-        Welcome.Size = UDim2.new(1,-18,0,60)
+        Welcome.Size = UDim2.new(1,-18,0,70)
         Welcome.BackgroundTransparency = 1
-        Welcome.Text = "Bem-vindo ao Blox F’ - Tales!\nJogador: " ..
-            Player.Name
+        Welcome.Text =
+            "Bem-vindo ao Blox F’ - Tales!\nJogador: "
+            .. Player.Name
+
         Welcome.TextColor3 = C.White
         Welcome.TextSize = 16
         Welcome.Font = Enum.Font.GothamBold
@@ -435,37 +512,46 @@ local function ShowCategory(category)
 
         PlayerSelector()
 
-        for _, option in ipairs(Options[category]) do
+        for _,option in ipairs(Options[category]) do
+
             Toggle(option,function(state)
                 print(option,state)
             end)
+
         end
 
     elseif category == "Jogador" then
 
         SpeedControl()
 
-        for _, option in ipairs(Options[category]) do
+        for _,option in ipairs(Options[category]) do
+
             Toggle(option,function(state)
                 print(option,state)
             end)
+
         end
 
     else
 
-        for _, option in ipairs(Options[category] or {}) do
+        for _,option in ipairs(Options[category] or {}) do
+
             Toggle(option,function(state)
                 print(option,state)
             end)
+
         end
+
     end
+
 end
 
 -- CRIAR ABAS
 
-for _, category in ipairs(Categories) do
+for _,category in ipairs(Categories) do
 
     local Tab = Instance.new("TextButton")
+
     Tab.Size = UDim2.new(1,-12,0,39)
     Tab.BackgroundColor3 = C.Background
     Tab.Text = category
@@ -482,8 +568,61 @@ for _, category in ipairs(Categories) do
         ShowCategory(category)
 
     end)
+
 end
+
+-- ARRASTAR PAINEL
+
+local dragging = false
+local dragStart
+local startPosition
+
+Header.InputBegan:Connect(function(input)
+
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+
+        dragging = true
+        dragStart = input.Position
+        startPosition = Main.Position
+
+    end
+
+end)
+
+UIS.InputChanged:Connect(function(input)
+
+    if dragging and (
+        input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch
+    ) then
+
+        local delta = input.Position - dragStart
+
+        Main.Position = UDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
+
+    end
+
+end)
+
+UIS.InputEnded:Connect(function(input)
+
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+
+        dragging = false
+
+    end
+
+end)
+
+-- INICIALIZAÇÃO
 
 ShowCategory("Início")
 
-print("Blox F’ - Tales carregado com sucesso!")
+print("Blox F’ - Tales 2.1 carregado!")
