@@ -1,6 +1,7 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 3.2
+-- BLOX F' - TALES | VERSAO 3.3
 -- Interface responsiva e recursos locais genéricos.
+-- Compatível com LocalScript em uma experiência sua.
 --========================================================
 
 local Players = game:GetService("Players")
@@ -44,6 +45,21 @@ local destroyed = false
 local collisionCache = {}
 local walkSpeed = 16
 local jumpPower = 50
+local flyEnabled = false
+local flySpeed = 65
+local aimAssistEnabled = false
+local aimFovEnabled = false
+local aimFovRadius = 140
+local autoAttackEnabled = false
+local autoHakiEnabled = false
+local autoSkillsEnabled = false
+local autoFarmEnabled = false
+local autoChestEnabled = false
+local autoFruitEnabled = false
+local autoMissionEnabled = false
+local autoEvolutionEnabled = false
+local autoRewardsEnabled = false
+local selectedAimTarget = "NPCs"
 
 local Screen = Instance.new("ScreenGui")
 Screen.Name = "BloxFTales"
@@ -77,7 +93,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  3.2"
+Title.Text = "Blox F' - Tales  |  3.3"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -136,38 +152,23 @@ local function MinimizePanel()
 
     if minimized then
         expandedPosition = Main.Position
-
         Sidebar.Visible = false
         Content.Visible = false
         Title.Visible = false
         Close.Visible = false
-
         Min.Position = UDim2.fromOffset(13, 13)
         Min.Size = UDim2.fromOffset(34, 34)
         Min.Text = "↗"
 
-        tween(Main, {
-            Size = UDim2.fromOffset(60, 60)
-        }, 0.22)
-
-        tween(Header, {
-            Size = UDim2.fromOffset(60, 60)
-        }, 0.22)
+        tween(Main, {Size = UDim2.fromOffset(60, 60)}, 0.22)
+        tween(Header, {Size = UDim2.fromOffset(60, 60)}, 0.22)
     else
-        tween(Main, {
-            Size = expandedSize
-        }, 0.22)
-
-        tween(Header, {
-            Size = UDim2.new(1, 0, 0, 48)
-        }, 0.22)
-
+        tween(Main, {Size = expandedSize}, 0.22)
+        tween(Header, {Size = UDim2.new(1, 0, 0, 48)}, 0.22)
         Main.Position = expandedPosition
-
         Min.Position = UDim2.new(1, -78, 0, 8)
         Min.Size = UDim2.fromOffset(32, 32)
         Min.Text = "–"
-
         Sidebar.Visible = true
         Content.Visible = true
         Title.Visible = true
@@ -191,11 +192,8 @@ tabLayout.Padding = UDim.new(0, 6)
 tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
 tabLayout.Parent = Sidebar
-
 tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    Sidebar.CanvasSize = UDim2.new(
-        0, 0, 0, tabLayout.AbsoluteContentSize.Y + 12
-    )
+    Sidebar.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 12)
 end)
 
 Content = Instance.new("ScrollingFrame")
@@ -238,18 +236,13 @@ StatusLabel.Parent = Content
 Instance.new("UICorner", StatusLabel).CornerRadius = UDim.new(0, 6)
 
 contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    Content.CanvasSize = UDim2.new(
-        0, 0, 0, contentLayout.AbsoluteContentSize.Y + 18
-    )
+    Content.CanvasSize = UDim2.new(0, 0, 0, contentLayout.AbsoluteContentSize.Y + 18)
 end)
 
 local function clearContent()
     activeContainer = Content
-
     for _, child in ipairs(Content:GetChildren()) do
-        if child ~= contentLayout
-            and child ~= contentPadding
-            and child ~= StatusLabel then
+        if child ~= contentLayout and child ~= contentPadding and child ~= StatusLabel then
             child:Destroy()
         end
     end
@@ -266,7 +259,6 @@ local function makeLabel(text, height)
     label.TextWrapped = true
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = activeContainer
-
     return label
 end
 
@@ -281,16 +273,34 @@ local function makeButton(text, callback, color)
     button.TextWrapped = true
     button.AutoButtonColor = true
     button.Parent = activeContainer
-
     Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
 
     button.MouseButton1Click:Connect(function()
-        if callback then
-            callback()
-        end
+        if callback then callback() end
     end)
 
     return button
+end
+
+local function makeInput(labelText, placeholder, defaultValue, callback)
+    makeLabel(labelText, 25)
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(1, -4, 0, 36)
+    box.BackgroundColor3 = COLORS.row
+    box.TextColor3 = COLORS.white
+    box.PlaceholderText = placeholder or "Digite um valor"
+    box.Text = tostring(defaultValue or "")
+    box.ClearTextOnFocus = false
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 13
+    box.Parent = activeContainer
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
+
+    box.FocusLost:Connect(function()
+        if callback then callback(box.Text) end
+    end)
+
+    return box
 end
 
 local function makeToggle(name, callback, initial)
@@ -303,7 +313,6 @@ local function makeToggle(name, callback, initial)
     row.BackgroundColor3 = COLORS.row
     row.BorderSizePixel = 0
     row.Parent = activeContainer
-
     Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
 
     local label = Instance.new("TextLabel")
@@ -323,7 +332,6 @@ local function makeToggle(name, callback, initial)
     switch.Text = ""
     switch.AutoButtonColor = false
     switch.Parent = row
-
     Instance.new("UICorner", switch).CornerRadius = UDim.new(1, 0)
 
     local dot = Instance.new("Frame")
@@ -331,7 +339,6 @@ local function makeToggle(name, callback, initial)
     dot.Position = UDim2.fromOffset(3, 3)
     dot.BackgroundColor3 = COLORS.white
     dot.Parent = switch
-
     Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
 
     local function update()
@@ -354,7 +361,6 @@ local function makeToggle(name, callback, initial)
 
         if callback then
             local ok, err = pcall(callback, states[name])
-
             if not ok then
                 setStatus("Erro em " .. name .. ": " .. tostring(err))
             end
@@ -364,11 +370,8 @@ local function makeToggle(name, callback, initial)
     return row
 end
 
--- Seções recolhíveis.
 local function beginSection(title, initiallyOpen)
-    if initiallyOpen == nil then
-        initiallyOpen = true
-    end
+    if initiallyOpen == nil then initiallyOpen = true end
 
     local header = Instance.new("TextButton")
     header.Name = "SectionHeader"
@@ -378,10 +381,9 @@ local function beginSection(title, initiallyOpen)
     header.TextSize = 13
     header.Font = Enum.Font.GothamBold
     header.TextXAlignment = Enum.TextXAlignment.Left
-    header.Text = (initiallyOpen and "▾  " or "▸  ") .. title
+    header.Text = title
     header.AutoButtonColor = true
     header.Parent = Content
-
     Instance.new("UICorner", header).CornerRadius = UDim.new(0, 7)
 
     local body = Instance.new("Frame")
@@ -389,9 +391,7 @@ local function beginSection(title, initiallyOpen)
     body.Size = UDim2.new(1, -4, 0, 0)
     body.BackgroundTransparency = 1
     body.BorderSizePixel = 0
-    body.AutomaticSize = initiallyOpen
-        and Enum.AutomaticSize.Y
-        or Enum.AutomaticSize.None
+    body.AutomaticSize = initiallyOpen and Enum.AutomaticSize.Y or Enum.AutomaticSize.None
     body.Visible = initiallyOpen
     body.Parent = Content
 
@@ -410,11 +410,9 @@ local function beginSection(title, initiallyOpen)
     header.MouseButton1Click:Connect(function()
         local open = not body.Visible
         body.Visible = open
-        body.AutomaticSize = open
-            and Enum.AutomaticSize.Y
-            or Enum.AutomaticSize.None
+        body.AutomaticSize = open and Enum.AutomaticSize.Y or Enum.AutomaticSize.None
         body.Size = UDim2.new(1, -4, 0, 0)
-        header.Text = (open and "▾  " or "▸  ") .. title
+        header.Text = title
     end)
 
     activeContainer = body
@@ -425,7 +423,6 @@ local function endSection()
     activeContainer = Content
 end
 
--- Opções de seleção com quadrado verde.
 local function makeOption(labelText, isSelected, callback)
     local row = Instance.new("Frame")
     row.Name = "SelectionOption"
@@ -433,7 +430,6 @@ local function makeOption(labelText, isSelected, callback)
     row.BackgroundColor3 = COLORS.row
     row.BorderSizePixel = 0
     row.Parent = activeContainer
-
     Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
 
     local label = Instance.new("TextButton")
@@ -459,18 +455,14 @@ local function makeOption(labelText, isSelected, callback)
     check.Font = Enum.Font.GothamBold
     check.AutoButtonColor = false
     check.Parent = row
-
     Instance.new("UICorner", check).CornerRadius = UDim.new(0, 6)
 
     local function choose()
-        if callback then
-            callback()
-        end
+        if callback then callback() end
     end
 
     label.MouseButton1Click:Connect(choose)
     check.MouseButton1Click:Connect(choose)
-
     return row, check
 end
 
@@ -510,7 +502,6 @@ end
 
 local function findNamedWorldObject(names)
     local aliases = {}
-
     for _, name in ipairs(names) do
         aliases[normalizeName(name)] = true
     end
@@ -523,7 +514,6 @@ local function findNamedWorldObject(names)
 
             for alias in pairs(aliases) do
                 local score = -1
-
                 if candidate == alias then
                     score = 3
                 elseif #alias >= 5 and string.find(candidate, alias, 1, true) then
@@ -533,25 +523,19 @@ local function findNamedWorldObject(names)
                 end
 
                 if score > bestScore then
-                    bestObject = item
-                    bestScore = score
+                    bestObject, bestScore = item, score
                 end
             end
         end
     end
 
-    if not bestObject or bestScore < 1 then
-        return nil
-    end
+    if not bestObject or bestScore < 1 then return nil end
 
     if bestObject:IsA("Model") then
         local ok, pivot = pcall(function()
             return bestObject:GetPivot()
         end)
-
-        if ok then
-            return pivot
-        end
+        if ok then return pivot end
     elseif bestObject:IsA("BasePart") then
         return bestObject.CFrame
     end
@@ -564,7 +548,6 @@ local function removeHighlights(bucket)
         if adornment and adornment.Parent then
             adornment:Destroy()
         end
-
         bucket[instance] = nil
     end
 end
@@ -583,7 +566,6 @@ local function applyPlayerVisuals()
                 h.FillTransparency = 0.72
                 h.Adornee = character
                 h.Parent = Screen
-
                 playerHighlights[character] = h
             end
 
@@ -633,13 +615,10 @@ local function refreshObjectHighlights(kind, enabled)
         if adornment and adornment.Parent then
             adornment:Destroy()
         end
-
         bucket[object] = nil
     end
 
-    if not enabled then
-        return
-    end
+    if not enabled then return end
 
     local key = string.lower(kind)
 
@@ -658,7 +637,6 @@ local function refreshObjectHighlights(kind, enabled)
             h.FillTransparency = 0.65
             h.Adornee = item
             h.Parent = Screen
-
             bucket[item] = h
         end
     end
@@ -666,18 +644,15 @@ end
 
 local function makePlayerSelection()
     makeLabel("Selecione um jogador e use o botão de confirmação abaixo.", 38)
-
     local selectionLabel = makeLabel("Selecionado: nenhum", 25)
     local confirmButton
     local optionChecks = {}
 
     local function updateSelection()
-        selectionLabel.Text = "Selecionado: "
-            .. (selectedPlayer and selectedPlayer.DisplayName or "nenhum")
+        selectionLabel.Text = "Selecionado: " .. (selectedPlayer and selectedPlayer.DisplayName or "nenhum")
 
         for player, check in pairs(optionChecks) do
             local chosen = player == selectedPlayer
-
             if check and check.Parent then
                 check.BackgroundColor3 = chosen and COLORS.green or COLORS.gray
                 check.Text = chosen and "✓" or ""
@@ -690,7 +665,6 @@ local function makePlayerSelection()
     end
 
     local targets = Players:GetPlayers()
-
     table.sort(targets, function(a, b)
         return a.Name:lower() < b.Name:lower()
     end)
@@ -718,82 +692,76 @@ local function makePlayerSelection()
         makeLabel("Nenhum outro jogador está no servidor.", 32)
     end
 
-    confirmButton = makeButton(
-        "CONFIRMAR TELETRANSPORTE PARA O JOGADOR",
-        function()
-            local target = selectedPlayer
+    confirmButton = makeButton("CONFIRMAR TELETRANSPORTE PARA O JOGADOR", function()
+        local target = selectedPlayer
 
-            if not target or not target.Parent then
-                setStatus("Selecione um jogador que ainda esteja no servidor.")
-                return
+        if not target or not target.Parent then
+            setStatus("Selecione um jogador que ainda esteja no servidor.")
+            return
+        end
+
+        local targetRoot = getRoot(target.Character)
+        if not targetRoot then
+            setStatus("O personagem do jogador não está disponível.")
+            return
+        end
+
+        local dialog = Instance.new("Frame")
+        dialog.Size = UDim2.fromOffset(280, 118)
+        dialog.AnchorPoint = Vector2.new(0.5, 0.5)
+        dialog.Position = UDim2.fromScale(0.5, 0.5)
+        dialog.BackgroundColor3 = COLORS.panel
+        dialog.ZIndex = 30
+        dialog.Parent = Screen
+        Instance.new("UICorner", dialog).CornerRadius = UDim.new(0, 10)
+
+        local msg = Instance.new("TextLabel")
+        msg.Size = UDim2.new(1, -16, 0, 54)
+        msg.Position = UDim2.fromOffset(8, 4)
+        msg.BackgroundTransparency = 1
+        msg.Text = "Confirmar ida até " .. target.DisplayName .. "?"
+        msg.TextColor3 = COLORS.white
+        msg.TextWrapped = true
+        msg.Font = Enum.Font.Gotham
+        msg.TextSize = 13
+        msg.ZIndex = 31
+        msg.Parent = dialog
+
+        local yes = Instance.new("TextButton")
+        yes.Size = UDim2.new(0.45, 0, 0, 34)
+        yes.Position = UDim2.new(0.03, 0, 1, -42)
+        yes.Text = "Confirmar"
+        yes.BackgroundColor3 = COLORS.green
+        yes.TextColor3 = COLORS.white
+        yes.ZIndex = 31
+        yes.Parent = dialog
+
+        local no = Instance.new("TextButton")
+        no.Size = UDim2.new(0.45, 0, 0, 34)
+        no.Position = UDim2.new(0.52, 0, 1, -42)
+        no.Text = "Cancelar"
+        no.BackgroundColor3 = COLORS.red
+        no.TextColor3 = COLORS.white
+        no.ZIndex = 31
+        no.Parent = dialog
+
+        yes.MouseButton1Click:Connect(function()
+            local latestRoot = getRoot(target.Character)
+
+            if latestRoot then
+                teleportLocal(latestRoot.CFrame * CFrame.new(0, 0, 4))
+                setStatus("Teletransporte local solicitado.")
+            else
+                setStatus("O jogador não está mais disponível.")
             end
 
-            local targetRoot = getRoot(target.Character)
+            dialog:Destroy()
+        end)
 
-            if not targetRoot then
-                setStatus("O personagem do jogador não está disponível.")
-                return
-            end
-
-            local dialog = Instance.new("Frame")
-            dialog.Size = UDim2.fromOffset(280, 118)
-            dialog.AnchorPoint = Vector2.new(0.5, 0.5)
-            dialog.Position = UDim2.fromScale(0.5, 0.5)
-            dialog.BackgroundColor3 = COLORS.panel
-            dialog.ZIndex = 30
-            dialog.Parent = Screen
-
-            Instance.new("UICorner", dialog).CornerRadius = UDim.new(0, 10)
-
-            local msg = Instance.new("TextLabel")
-            msg.Size = UDim2.new(1, -16, 0, 54)
-            msg.Position = UDim2.fromOffset(8, 4)
-            msg.BackgroundTransparency = 1
-            msg.Text = "Confirmar ida até " .. target.DisplayName .. "?"
-            msg.TextColor3 = COLORS.white
-            msg.TextWrapped = true
-            msg.Font = Enum.Font.Gotham
-            msg.TextSize = 13
-            msg.ZIndex = 31
-            msg.Parent = dialog
-
-            local yes = Instance.new("TextButton")
-            yes.Size = UDim2.new(0.45, 0, 0, 34)
-            yes.Position = UDim2.new(0.03, 0, 1, -42)
-            yes.Text = "Confirmar"
-            yes.BackgroundColor3 = COLORS.green
-            yes.TextColor3 = COLORS.white
-            yes.ZIndex = 31
-            yes.Parent = dialog
-
-            local no = Instance.new("TextButton")
-            no.Size = UDim2.new(0.45, 0, 0, 34)
-            no.Position = UDim2.new(0.52, 0, 1, -42)
-            no.Text = "Cancelar"
-            no.BackgroundColor3 = COLORS.red
-            no.TextColor3 = COLORS.white
-            no.ZIndex = 31
-            no.Parent = dialog
-
-            yes.MouseButton1Click:Connect(function()
-                local latestRoot = getRoot(target.Character)
-
-                if latestRoot then
-                    teleportLocal(latestRoot.CFrame * CFrame.new(0, 0, 4))
-                    setStatus("Teletransporte local solicitado.")
-                else
-                    setStatus("O jogador não está mais disponível.")
-                end
-
-                dialog:Destroy()
-            end)
-
-            no.MouseButton1Click:Connect(function()
-                dialog:Destroy()
-            end)
-        end,
-        COLORS.purple
-    )
+        no.MouseButton1Click:Connect(function()
+            dialog:Destroy()
+        end)
+    end, COLORS.purple)
 
     confirmButton.Visible = selectedPlayer ~= nil
     updateSelection()
@@ -812,7 +780,6 @@ local function makeSpeedControl()
     box.Font = Enum.Font.Gotham
     box.TextSize = 13
     box.Parent = activeContainer
-
     Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
 
     box.FocusLost:Connect(function()
@@ -828,9 +795,7 @@ local function makeSpeedControl()
         local hum = getCharacter()
             and getCharacter():FindFirstChildOfClass("Humanoid")
 
-        if hum then
-            hum.WalkSpeed = walkSpeed
-        end
+        if hum then hum.WalkSpeed = walkSpeed end
 
         box.Text = tostring(walkSpeed)
         setStatus("Velocidade local: " .. walkSpeed)
@@ -847,7 +812,6 @@ local function makeSpeedControl()
     jumpBox.Font = Enum.Font.Gotham
     jumpBox.TextSize = 13
     jumpBox.Parent = activeContainer
-
     Instance.new("UICorner", jumpBox).CornerRadius = UDim.new(0, 7)
 
     jumpBox.FocusLost:Connect(function()
@@ -880,36 +844,18 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-
         makeLabel("BLOX F' - TALES 3.2", 36)
-
-        makeLabel(
-            "Interface organizada por seções. Toque na setinha de cada seção para abrir ou recolher os controles.",
-            52
-        )
-
+        makeLabel("Interface organizada por seções. Toque no título de cada seção para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
-        local coords = makeLabel(
-            "Coordenadas: aguardando personagem...",
-            28
-        )
+        local coords = makeLabel("Coordenadas: aguardando personagem...", 28)
 
         task.spawn(function()
             while Screen.Parent and coords.Parent do
                 local root = getRoot(getCharacter())
-
                 coords.Text = root
-                    and (
-                        "Coordenadas: "
-                        .. math.floor(root.Position.X)
-                        .. ", "
-                        .. math.floor(root.Position.Y)
-                        .. ", "
-                        .. math.floor(root.Position.Z)
-                    )
+                    and ("Coordenadas: " .. math.floor(root.Position.X) .. ", " .. math.floor(root.Position.Y) .. ", " .. math.floor(root.Position.Z))
                     or "Coordenadas: personagem indisponível"
-
                 task.wait(0.25)
             end
         end)
@@ -917,17 +863,11 @@ local function showCategory(category)
         endSection()
 
         beginSection("Informações")
-
-        makeLabel(
-            "Os recursos locais atuam no cliente. Ações internas do jogo precisam dos sistemas oficiais do servidor.",
-            58
-        )
-
+        makeLabel("Os recursos locais atuam no cliente. Ações internas do jogo precisam dos sistemas oficiais do servidor.", 58)
         endSection()
 
     elseif category == "Jogador" then
         beginSection("Movimentação")
-
         makeSpeedControl()
 
         makeToggle("Pulo infinito", function(on)
@@ -935,85 +875,78 @@ local function showCategory(category)
             setStatus(on and "Pulo infinito ligado" or "Pulo infinito desligado")
         end)
 
+        makeToggle("Fly / Voar", function(on)
+            flyEnabled = on
+            setStatus(on and "Fly ligado" or "Fly desligado")
+        end)
+
+        makeInput("Velocidade do Fly", "Velocidade (10 a 200)", flySpeed, function(value)
+            local n = tonumber(value)
+            if n then flySpeed = math.clamp(n, 10, 200) end
+            setStatus("Velocidade do Fly: " .. tostring(flySpeed))
+        end)
+
         endSection()
 
         beginSection("Colisão")
-
         makeToggle("Atravessar paredes (local)", function(on)
             noclip = on
             setStatus(on and "Noclip local ligado" or "Noclip local desligado")
         end)
 
-        makeLabel(
-            "O noclip altera colisões apenas no seu cliente; o servidor pode corrigir sua posição.",
-            48
-        )
-
+        makeLabel("O noclip altera colisões apenas no seu cliente; o servidor pode corrigir sua posição.", 48)
         endSection()
 
     elseif category == "Teletransporte" then
         local islandWorlds = {
-            {
-                world = "Mundo 1",
-                islands = {
-                    {"Ilha Inicial dos Piratas (Pirate Starter Island)", {"PirateStarter", "Pirate Starter Island", "StarterIsland", "Starter Island"}},
-                    {"Ilha Inicial da Marinha (Marine Starter Island)", {"MarineStarter", "Marine Starter Island"}},
-                    {"Selva (Jungle)", {"Jungle", "Jungle Island"}},
-                    {"Vila dos Piratas (Pirate Village)", {"PirateVillage", "Pirate Village"}},
-                    {"Deserto (Desert)", {"Desert", "Desert Island"}},
-                    {"Vila Congelada (Frozen Village)", {"FrozenVillage", "Frozen Village"}},
-                    {"Fortaleza da Marinha (Marine Fortress)", {"MarineFortress", "Marine Fortress"}},
-                    {"Ilhas do Céu (Skylands)", {"Skylands", "Sky Island"}},
-                    {"Céu Superior (Upper Skylands)", {"UpperSkylands", "Upper Skylands"}},
-                    {"Céu Inferior (Lower Skylands)", {"LowerSkylands", "Lower Skylands"}},
-                    {"Cidade Central (Middle Town)", {"MiddleTown", "Middle Town"}},
-                    {"Prisão (Prison)", {"Prison"}},
-                    {"Coliseu (Colosseum)", {"Colosseum", "Colosseum Island"}},
-                    {"Vila Magma (Magma Village)", {"MagmaVillage", "Magma Village"}},
-                    {"Cidade Subaquática (Underwater City)", {"UnderwaterCity", "Underwater City"}},
-                    {"Cidade da Fonte (Fountain City)", {"FountainCity", "Fountain City"}}
-                }
-            },
-            {
-                world = "Mundo 2",
-                islands = {
-                    {"Reino das Rosas (Kingdom of Rose)", {"KingdomofRose", "Kingdom of Rose"}},
-                    {"Café (Cafe)", {"Cafe"}},
-                    {"Zona Verde (Green Zone)", {"GreenZone", "Green Zone"}},
-                    {"Cemitério (Graveyard)", {"Graveyard"}},
-                    {"Montanha Nevada (Snow Mountain)", {"SnowMountain", "Snow Mountain"}},
-                    {"Quente e Frio (Hot and Cold)", {"HotandCold", "Hot and Cold"}},
-                    {"Navio Amaldiçoado (Cursed Ship)", {"CursedShip", "Cursed Ship"}},
-                    {"Castelo de Gelo (Ice Castle)", {"IceCastle", "Ice Castle"}},
-                    {"Ilha Esquecida (Forgotten Island)", {"ForgottenIsland", "Forgotten Island"}},
-                    {"Arena Sombria (Dark Arena)", {"DarkArena", "Dark Arena"}}
-                }
-            },
-            {
-                world = "Mundo 3",
-                islands = {
-                    {"Cidade Portuária (Port Town)", {"PortTown", "Port Town"}},
-                    {"Ilha da Hidra (Hydra Island)", {"HydraIsland", "Hydra Island"}},
-                    {"Grande Árvore (Great Tree)", {"GreatTree", "Great Tree"}},
-                    {"Tartaruga Flutuante (Floating Turtle)", {"FloatingTurtle", "Floating Turtle"}},
-                    {"Castelo no Mar (Castle on the Sea)", {"CastleontheSea", "Castle on the Sea"}},
-                    {"Castelo Assombrado (Haunted Castle)", {"HauntedCastle", "Haunted Castle"}},
-                    {"Mar de Doces (Sea of Treats)", {"SeaofTreats", "Sea of Treats"}},
-                    {"Terra do Chocolate (Chocolate Land)", {"ChocolateLand", "Chocolate Land"}},
-                    {"Terra do Biscoito (Candy Cane Land)", {"CandyCaneLand", "Candy Cane Land"}},
-                    {"Terra do Sorvete (Ice Cream Land)", {"IceCreamLand", "Ice Cream Land"}},
-                    {"Terra do Amendoim (Peanut Land)", {"PeanutLand", "Peanut Land"}},
-                    {"Terra do Bolo (Cake Land)", {"CakeLand", "Cake Land"}},
-                    {"Posto Tiki (Tiki Outpost)", {"TikiOutpost", "Tiki Outpost"}}
-                }
-            }
+            {world="Mundo 1", islands={
+                {"Ilha Inicial dos Piratas (Pirate Starter Island)", {"PirateStarter", "Pirate Starter Island", "StarterIsland", "Starter Island"}},
+                {"Ilha Inicial da Marinha (Marine Starter Island)", {"MarineStarter", "Marine Starter Island"}},
+                {"Selva (Jungle)", {"Jungle", "Jungle Island"}},
+                {"Vila dos Piratas (Pirate Village)", {"PirateVillage", "Pirate Village"}},
+                {"Deserto (Desert)", {"Desert", "Desert Island"}},
+                {"Vila Congelada (Frozen Village)", {"FrozenVillage", "Frozen Village"}},
+                {"Fortaleza da Marinha (Marine Fortress)", {"MarineFortress", "Marine Fortress"}},
+                {"Ilhas do Céu (Skylands)", {"Skylands", "Sky Island"}},
+                {"Céu Superior (Upper Skylands)", {"UpperSkylands", "Upper Skylands"}},
+                {"Céu Inferior (Lower Skylands)", {"LowerSkylands", "Lower Skylands"}},
+                {"Cidade Central (Middle Town)", {"MiddleTown", "Middle Town"}},
+                {"Prisão (Prison)", {"Prison"}},
+                {"Coliseu (Colosseum)", {"Colosseum", "Colosseum Island"}},
+                {"Vila Magma (Magma Village)", {"MagmaVillage", "Magma Village"}},
+                {"Cidade Subaquática (Underwater City)", {"UnderwaterCity", "Underwater City"}},
+                {"Cidade da Fonte (Fountain City)", {"FountainCity", "Fountain City"}}
+            }},
+            {world="Mundo 2", islands={
+                {"Reino das Rosas (Kingdom of Rose)", {"KingdomofRose", "Kingdom of Rose"}},
+                {"Café (Cafe)", {"Cafe"}},
+                {"Zona Verde (Green Zone)", {"GreenZone", "Green Zone"}},
+                {"Cemitério (Graveyard)", {"Graveyard"}},
+                {"Montanha Nevada (Snow Mountain)", {"SnowMountain", "Snow Mountain"}},
+                {"Quente e Frio (Hot and Cold)", {"HotandCold", "Hot and Cold"}},
+                {"Navio Amaldiçoado (Cursed Ship)", {"CursedShip", "Cursed Ship"}},
+                {"Castelo de Gelo (Ice Castle)", {"IceCastle", "Ice Castle"}},
+                {"Ilha Esquecida (Forgotten Island)", {"ForgottenIsland", "Forgotten Island"}},
+                {"Arena Sombria (Dark Arena)", {"DarkArena", "Dark Arena"}}
+            }},
+            {world="Mundo 3", islands={
+                {"Cidade Portuária (Port Town)", {"PortTown", "Port Town"}},
+                {"Ilha da Hidra (Hydra Island)", {"HydraIsland", "Hydra Island"}},
+                {"Grande Árvore (Great Tree)", {"GreatTree", "Great Tree"}},
+                {"Tartaruga Flutuante (Floating Turtle)", {"FloatingTurtle", "Floating Turtle"}},
+                {"Castelo no Mar (Castle on the Sea)", {"CastleontheSea", "Castle on the Sea"}},
+                {"Castelo Assombrado (Haunted Castle)", {"HauntedCastle", "Haunted Castle"}},
+                {"Mar de Doces (Sea of Treats)", {"SeaofTreats", "Sea of Treats"}},
+                {"Terra do Chocolate (Chocolate Land)", {"ChocolateLand", "Chocolate Land"}},
+                {"Terra do Biscoito (Candy Cane Land)", {"CandyCaneLand", "Candy Cane Land"}},
+                {"Terra do Sorvete (Ice Cream Land)", {"IceCreamLand", "Ice Cream Land"}},
+                {"Terra do Amendoim (Peanut Land)", {"PeanutLand", "Peanut Land"}},
+                {"Terra do Bolo (Cake Land)", {"CakeLand", "Cake Land"}},
+                {"Posto Tiki (Tiki Outpost)", {"TikiOutpost", "Tiki Outpost"}}
+            }}
         }
 
-        makeLabel(
-            "Escolha o mundo, marque uma ilha e depois confirme no botão separado.",
-            42
-        )
-
+        makeLabel("Escolha o mundo, marque uma ilha e depois confirme no botão separado.", 42)
         local selectedLabel = makeLabel("Destino selecionado: nenhum", 28)
         local optionChecks = {}
 
@@ -1023,22 +956,18 @@ local function showCategory(category)
             for _, islandData in ipairs(worldData.islands) do
                 local islandName, aliases = islandData[1], islandData[2]
 
-                local _, check = makeOption(
-                    islandName,
-                    selectedIsland == islandName,
-                    function()
-                        selectedIsland = islandName
-                        selectedLabel.Text = "Destino selecionado: " .. islandName
+                local _, check = makeOption(islandName, selectedIsland == islandName, function()
+                    selectedIsland = islandName
+                    selectedLabel.Text = "Destino selecionado: " .. islandName
 
-                        for name, button in pairs(optionChecks) do
-                            if button and button.Parent then
-                                local chosen = name == selectedIsland
-                                button.BackgroundColor3 = chosen and COLORS.green or COLORS.gray
-                                button.Text = chosen and "✓" or ""
-                            end
+                    for name, button in pairs(optionChecks) do
+                        if button and button.Parent then
+                            local chosen = name == selectedIsland
+                            button.BackgroundColor3 = chosen and COLORS.green or COLORS.gray
+                            button.Text = chosen and "✓" or ""
                         end
                     end
-                )
+                end)
 
                 optionChecks[islandName] = check
             end
@@ -1048,47 +977,33 @@ local function showCategory(category)
 
         beginSection("Confirmar destino")
 
-        makeButton(
-            "CONFIRMAR TELETRANSPORTE PARA A ILHA",
-            function()
-                if not selectedIsland then
-                    setStatus("Selecione uma ilha antes de confirmar.")
-                    return
-                end
+        makeButton("CONFIRMAR TELETRANSPORTE PARA A ILHA", function()
+            if not selectedIsland then
+                setStatus("Selecione uma ilha antes de confirmar.")
+                return
+            end
 
-                local aliases
+            local aliases
 
-                for _, worldData in ipairs(islandWorlds) do
-                    for _, islandData in ipairs(worldData.islands) do
-                        if islandData[1] == selectedIsland then
-                            aliases = islandData[2]
-                            break
-                        end
-                    end
-
-                    if aliases then
+            for _, worldData in ipairs(islandWorlds) do
+                for _, islandData in ipairs(worldData.islands) do
+                    if islandData[1] == selectedIsland then
+                        aliases = islandData[2]
                         break
                     end
                 end
+                if aliases then break end
+            end
 
-                local destination = aliases and findNamedWorldObject(aliases)
+            local destination = aliases and findNamedWorldObject(aliases)
 
-                if destination then
-                    local ok = teleportLocal(destination * CFrame.new(0, 5, 0))
-
-                    setStatus(
-                        ok and ("Indo para " .. selectedIsland)
-                        or "Não foi possível mover o personagem."
-                    )
-                else
-                    setStatus(
-                        "Não encontrei " .. selectedIsland
-                        .. " no mapa carregado. O nome interno do mapa pode ser diferente."
-                    )
-                end
-            end,
-            COLORS.green
-        )
+            if destination then
+                local ok = teleportLocal(destination * CFrame.new(0, 5, 0))
+                setStatus(ok and ("Indo para " .. selectedIsland) or "Não foi possível mover o personagem.")
+            else
+                setStatus("Não encontrei " .. selectedIsland .. " no mapa carregado. O nome interno do mapa pode ser diferente.")
+            end
+        end, COLORS.green)
 
         endSection()
 
@@ -1107,37 +1022,28 @@ local function showCategory(category)
             box.Font = Enum.Font.Gotham
             box.TextSize = 13
             box.Parent = activeContainer
-
             Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
-
             coordinateBoxes[axis] = box
         end
 
-        makeButton(
-            "CONFIRMAR COORDENADAS",
-            function()
-                local x = tonumber(coordinateBoxes.X.Text)
-                local y = tonumber(coordinateBoxes.Y.Text)
-                local z = tonumber(coordinateBoxes.Z.Text)
+        makeButton("CONFIRMAR COORDENADAS", function()
+            local x = tonumber(coordinateBoxes.X.Text)
+            local y = tonumber(coordinateBoxes.Y.Text)
+            local z = tonumber(coordinateBoxes.Z.Text)
 
-                if not x or not y or not z then
-                    setStatus("Informe valores numéricos para X, Y e Z.")
-                    return
-                end
+            if not x or not y or not z then
+                setStatus("Informe valores numéricos para X, Y e Z.")
+                return
+            end
 
-                local ok = teleportLocal(Vector3.new(
-                    math.clamp(x, -100000, 100000),
-                    math.clamp(y, -100000, 100000),
-                    math.clamp(z, -100000, 100000)
-                ))
+            local ok = teleportLocal(Vector3.new(
+                math.clamp(x, -100000, 100000),
+                math.clamp(y, -100000, 100000),
+                math.clamp(z, -100000, 100000)
+            ))
 
-                setStatus(
-                    ok and "Teleporte local solicitado."
-                    or "Não foi possível teletransportar."
-                )
-            end,
-            COLORS.purple
-        )
+            setStatus(ok and "Teleporte local solicitado." or "Não foi possível teletransportar.")
+        end, COLORS.purple)
 
         endSection()
 
@@ -1177,72 +1083,118 @@ local function showCategory(category)
             refreshObjectHighlights("chest", on)
         end)
 
-        makeLabel(
-            "Os localizadores procuram objetos replicados no Workspace com nomes relacionados a frutas e baús.",
-            48
-        )
-
+        makeLabel("Os localizadores procuram objetos replicados no Workspace com nomes relacionados a frutas e baús.", 48)
         endSection()
 
     elseif category == "Combate" then
         beginSection("Mira e seleção de alvos")
 
-        makeLabel(
-            "A interface desta área está organizada, mas os recursos de mira/combate precisam ser conectados aos sistemas reais da experiência para funcionar.",
-            66
-        )
+        makeToggle("Aim Assist", function(on)
+            aimAssistEnabled = on
+            setStatus(on and "Aim Assist ativado" or "Aim Assist desativado")
+        end)
+
+        makeToggle("Mostrar FOV", function(on)
+            aimFovEnabled = on
+            setStatus(on and "FOV ativado" or "FOV desativado")
+        end)
+
+        makeInput("Raio do FOV", "Raio em pixels", aimFovRadius, function(value)
+            local n = tonumber(value)
+            if n then aimFovRadius = math.clamp(n, 30, 500) end
+            setStatus("Raio do FOV: " .. tostring(aimFovRadius))
+        end)
+
+        makeOption("Alvos: NPCs", selectedAimTarget == "NPCs", function()
+            selectedAimTarget = "NPCs"
+            setStatus("Alvo selecionado: NPCs")
+        end)
+
+        makeOption("Alvos: Jogadores", selectedAimTarget == "Jogadores", function()
+            selectedAimTarget = "Jogadores"
+            setStatus("Alvo selecionado: Jogadores")
+        end)
+
+        makeOption("Alvos: Todos", selectedAimTarget == "Todos", function()
+            selectedAimTarget = "Todos"
+            setStatus("Alvo selecionado: todos")
+        end)
 
         endSection()
 
-        beginSection("Habilidades e Haki")
+        beginSection("Ataque, habilidades e Haki")
 
-        makeLabel(
-            "Haki automático e uso automático de habilidades dependem dos eventos e validações do servidor do jogo.",
-            58
-        )
+        makeToggle("Ataque automático", function(on)
+            autoAttackEnabled = on
+            setStatus(on and "Ataque automático ligado" or "Ataque automático desligado")
+        end)
+
+        makeToggle("Haki automático", function(on)
+            autoHakiEnabled = on
+            setStatus(on and "Haki automático ligado" or "Haki automático desligado")
+        end)
+
+        makeToggle("Uso automático de habilidades", function(on)
+            autoSkillsEnabled = on
+            setStatus(on and "Habilidades automáticas ligadas" or "Habilidades automáticas desligadas")
+        end)
 
         endSection()
 
     elseif category == "Frutas" then
-        beginSection("Localizador de frutas")
+        beginSection("Catálogo e localização")
 
         makeToggle("Detector de frutas", function(on)
             fruitFinder = on
             refreshObjectHighlights("fruit", on)
+            setStatus(on and "Detector de frutas ligado" or "Detector de frutas desligado")
         end)
 
-        makeLabel(
-            "O detector destaca objetos encontrados no Workspace com nomes relacionados a frutas.",
-            55
-        )
+        makeToggle("Coletar frutas automaticamente", function(on)
+            autoFruitEnabled = on
+            setStatus(on and "Coleta automática de frutas ligada" or "Coleta automática de frutas desligada")
+        end)
 
-        endSection()
-
-        beginSection("Observação")
-
-        makeLabel(
-            "Não revela frutas que o servidor não replicou ao cliente.",
-            42
-        )
+        makeLabel("Catálogo de frutas: Rocket, Spin, Chop, Spring, Bomb, Smoke, Spike, Flame, Falcon, Ice, Sand, Dark, Diamond, Light, Rubber, Barrier, Ghost, Magma, Quake, Buddha, Love, Spider, Sound, Phoenix, Portal, Rumble, Pain, Blizzard, Gravity, Mammoth, T-Rex, Dough, Shadow, Venom, Control, Spirit, Dragon e Leopard.", 100)
 
         endSection()
 
     elseif category == "Coleta e evolução" then
         beginSection("Coleta automática")
 
-        makeLabel(
-            "Coleta automática, baús e missões precisam ser ligados aos objetos e eventos reais da experiência.",
-            58
-        )
+        makeToggle("Auto Farm", function(on)
+            autoFarmEnabled = on
+            setStatus(on and "Auto Farm ativado" or "Auto Farm desativado")
+        end)
+
+        makeToggle("Auto Chest", function(on)
+            autoChestEnabled = on
+            setStatus(on and "Auto Chest ativado" or "Auto Chest desativado")
+        end)
+
+        makeToggle("Auto Fruit", function(on)
+            autoFruitEnabled = on
+            setStatus(on and "Auto Fruit ativado" or "Auto Fruit desativado")
+        end)
+
+        makeToggle("Auto Mission", function(on)
+            autoMissionEnabled = on
+            setStatus(on and "Auto Mission ativado" or "Auto Mission desativado")
+        end)
 
         endSection()
 
         beginSection("Evolução e recompensas")
 
-        makeLabel(
-            "Evolução e recompensas dependem dos sistemas internos e da validação do servidor.",
-            58
-        )
+        makeToggle("Auto Evolution", function(on)
+            autoEvolutionEnabled = on
+            setStatus(on and "Auto Evolution ativado" or "Auto Evolution desativado")
+        end)
+
+        makeToggle("Auto Rewards", function(on)
+            autoRewardsEnabled = on
+            setStatus(on and "Auto Rewards ativado" or "Auto Rewards desativado")
+        end)
 
         endSection()
 
@@ -1251,10 +1203,11 @@ local function showCategory(category)
 
         makeButton("Recentralizar painel", function()
             Main.Position = UDim2.new(
-                0.5, -Main.AbsoluteSize.X / 2,
-                0.5, -Main.AbsoluteSize.Y / 2
+                0.5,
+                -Main.AbsoluteSize.X / 2,
+                0.5,
+                -Main.AbsoluteSize.Y / 2
             )
-
             setStatus("Painel recentralizado.")
         end)
 
@@ -1281,16 +1234,10 @@ local function showCategory(category)
         beginSection("Limpeza")
 
         makeButton("Limpar destaques visuais", function()
-            espPlayers = false
-            showNames = false
-            showDistances = false
-            fruitFinder = false
-            chestFinder = false
-
+            espPlayers, showNames, showDistances, fruitFinder, chestFinder = false, false, false, false, false
             removeHighlights(playerHighlights)
             removeHighlights(fruitHighlights)
             removeHighlights(chestHighlights)
-
             setStatus("Destaques removidos.")
         end)
 
@@ -1313,8 +1260,7 @@ for index, category in ipairs(categories) do
     local tab = Instance.new("TextButton")
     tab.Size = UDim2.new(1, -10, 0, 37)
     tab.LayoutOrder = index
-    tab.BackgroundColor3 = category == "Início"
-        and COLORS.purple or COLORS.row
+    tab.BackgroundColor3 = category == "Início" and COLORS.purple or COLORS.row
     tab.Text = category
     tab.TextColor3 = COLORS.white
     tab.TextSize = 11
@@ -1350,11 +1296,9 @@ Close.MouseButton1Click:Connect(function()
     removeHighlights(playerHighlights)
     removeHighlights(fruitHighlights)
     removeHighlights(chestHighlights)
-
     Screen:Destroy()
 end)
 
--- Arrastar pelo cabeçalho, inclusive em tela touch.
 local dragging = false
 local dragInput, dragStart, startPosition
 
@@ -1382,6 +1326,7 @@ table.insert(connections, UIS.InputChanged:Connect(function(input)
         input == dragInput
         or input.UserInputType == Enum.UserInputType.Touch
     ) then
+
         local delta = input.Position - dragStart
 
         Main.Position = UDim2.new(
@@ -1401,13 +1346,10 @@ table.insert(connections, UIS.InputEnded:Connect(function(input)
     end
 end))
 
--- Ajuste automático para telas pequenas.
 local camera = Workspace.CurrentCamera
 
 local function fitToScreen()
-    if not camera or minimized then
-        return
-    end
+    if not camera or minimized then return end
 
     local viewport = camera.ViewportSize
     local width = math.max(300, math.min(620, viewport.X - 24))
@@ -1418,24 +1360,9 @@ local function fitToScreen()
     Main.Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2)
     expandedPosition = Main.Position
 
-    Sidebar.Size = UDim2.new(
-        0,
-        math.min(145, width * 0.27),
-        1,
-        -60
-    )
-
-    Content.Position = UDim2.fromOffset(
-        math.min(153, width * 0.29),
-        54
-    )
-
-    Content.Size = UDim2.new(
-        1,
-        -math.min(166, width * 0.31),
-        1,
-        -60
-    )
+    Sidebar.Size = UDim2.new(0, math.min(145, width * 0.27), 1, -60)
+    Content.Position = UDim2.fromOffset(math.min(153, width * 0.29), 54)
+    Content.Size = UDim2.new(1, -math.min(166, width * 0.31), 1, -60)
 end
 
 fitToScreen()
@@ -1499,14 +1426,10 @@ table.insert(connections, LocalPlayer.CharacterAdded:Connect(function(character)
     end
 end))
 
--- Atualiza os destaques para acompanhar respawns e mudanças de distância.
 task.spawn(function()
     while Screen.Parent do
         task.wait(1.25)
-
-        if not Screen.Parent then
-            break
-        end
+        if not Screen.Parent then break end
 
         if espPlayers or showNames or showDistances then
             applyPlayerVisuals()
@@ -1526,6 +1449,86 @@ table.insert(connections, Players.PlayerRemoving:Connect(function()
     end
 end))
 
+-- Fly local: usa MoveDirection do Humanoid e teclas de subida/descida.
+table.insert(connections, RunService.Heartbeat:Connect(function()
+    if not flyEnabled then return end
+
+    local character = getCharacter()
+    local root = getRoot(character)
+    local hum = character and character:FindFirstChildOfClass("Humanoid")
+
+    if not root or not hum then return end
+
+    local direction = hum.MoveDirection
+    local vertical = 0
+
+    if UIS:IsKeyDown(Enum.KeyCode.Space) or UIS:IsKeyDown(Enum.KeyCode.E) then
+        vertical += 1
+    end
+
+    if UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.Q) then
+        vertical -= 1
+    end
+
+    local velocity = direction * flySpeed + Vector3.new(0, vertical * flySpeed, 0)
+    root.AssemblyLinearVelocity = velocity
+end))
+
+-- Aim Assist local: acompanha o alvo mais próximo dentro do raio configurado.
+table.insert(connections, RunService.RenderStepped:Connect(function()
+    if not aimAssistEnabled then return end
+
+    local camera = Workspace.CurrentCamera
+    local myRoot = getRoot(getCharacter())
+
+    if not camera or not myRoot then return end
+
+    local bestPart, bestDistance = nil, math.huge
+
+    local function consider(model)
+        if not model or model == getCharacter() then return end
+
+        local hum = model:FindFirstChildOfClass("Humanoid")
+        local part = model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart")
+
+        if not hum or hum.Health <= 0 or not part then return end
+
+        local worldDistance = (part.Position - myRoot.Position).Magnitude
+        if worldDistance > 600 then return end
+
+        local point, visible = camera:WorldToViewportPoint(part.Position)
+        if not visible then return end
+
+        local center = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+        local screenDistance = (Vector2.new(point.X, point.Y) - center).Magnitude
+        local maxRadius = aimFovEnabled and aimFovRadius or 500
+
+        if screenDistance <= maxRadius and screenDistance < bestDistance then
+            bestPart, bestDistance = part, screenDistance
+        end
+    end
+
+    if selectedAimTarget == "NPCs" or selectedAimTarget == "Todos" then
+        for _, item in ipairs(Workspace:GetDescendants()) do
+            if item:IsA("Model") and item:FindFirstChildOfClass("Humanoid") then
+                consider(item)
+            end
+        end
+    end
+
+    if selectedAimTarget == "Jogadores" or selectedAimTarget == "Todos" then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                consider(player.Character)
+            end
+        end
+    end
+
+    if bestPart then
+        camera.CFrame = CFrame.new(camera.CFrame.Position, bestPart.Position)
+    end
+end))
+
 showCategory("Início")
 
-print("Blox F' - Tales 3.2 carregado.")
+print("Blox F' - Tales 3.3 carregado.")
