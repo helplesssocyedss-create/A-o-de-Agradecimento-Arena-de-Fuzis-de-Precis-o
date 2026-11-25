@@ -1,7 +1,6 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 3.3
--- Interface responsiva e recursos locais genéricos.
--- Compatível com LocalScript em uma experiência sua.
+-- BLOX F' - TALES | VERSAO 3.4
+-- Interface responsiva e recursos locais.
 --========================================================
 
 local Players = game:GetService("Players")
@@ -30,23 +29,29 @@ local COLORS = {
 local states = {}
 local selectedPlayer = nil
 local selectedIsland = nil
+local selectedAttackTargets = {}
 local connections = {}
 local playerHighlights = {}
 local fruitHighlights = {}
 local chestHighlights = {}
+local bossHighlights = {}
+
 local infiniteJump = false
 local noclip = false
 local showNames = false
 local showDistances = false
 local espPlayers = false
+local bossESP = false
 local fruitFinder = false
 local chestFinder = false
 local destroyed = false
 local collisionCache = {}
+
 local walkSpeed = 16
 local jumpPower = 50
 local flyEnabled = false
 local flySpeed = 65
+
 local aimAssistEnabled = false
 local aimFovEnabled = false
 local aimFovRadius = 140
@@ -60,6 +65,8 @@ local autoMissionEnabled = false
 local autoEvolutionEnabled = false
 local autoRewardsEnabled = false
 local selectedAimTarget = "NPCs"
+local attackDropdownOpen = false
+local targetTypeDropdownOpen = false
 
 local Screen = Instance.new("ScreenGui")
 Screen.Name = "BloxFTales"
@@ -93,7 +100,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  3.3"
+Title.Text = "Blox F' - Tales  |  3.4"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -192,6 +199,7 @@ tabLayout.Padding = UDim.new(0, 6)
 tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
 tabLayout.Parent = Sidebar
+
 tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     Sidebar.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 12)
 end)
@@ -284,6 +292,7 @@ end
 
 local function makeInput(labelText, placeholder, defaultValue, callback)
     makeLabel(labelText, 25)
+
     local box = Instance.new("TextBox")
     box.Size = UDim2.new(1, -4, 0, 36)
     box.BackgroundColor3 = COLORS.row
@@ -381,7 +390,7 @@ local function beginSection(title, initiallyOpen)
     header.TextSize = 13
     header.Font = Enum.Font.GothamBold
     header.TextXAlignment = Enum.TextXAlignment.Left
-    header.Text = title
+    header.Text = (initiallyOpen and "▼  " or "▶  ") .. title
     header.AutoButtonColor = true
     header.Parent = Content
     Instance.new("UICorner", header).CornerRadius = UDim.new(0, 7)
@@ -412,7 +421,7 @@ local function beginSection(title, initiallyOpen)
         body.Visible = open
         body.AutomaticSize = open and Enum.AutomaticSize.Y or Enum.AutomaticSize.None
         body.Size = UDim2.new(1, -4, 0, 0)
-        header.Text = title
+        header.Text = (open and "▼  " or "▶  ") .. title
     end)
 
     activeContainer = body
@@ -423,47 +432,128 @@ local function endSection()
     activeContainer = Content
 end
 
+-- Opções em formato de botão, sem a caixa quadrada antiga.
 local function makeOption(labelText, isSelected, callback)
-    local row = Instance.new("Frame")
-    row.Name = "SelectionOption"
-    row.Size = UDim2.new(1, -4, 0, 38)
-    row.BackgroundColor3 = COLORS.row
-    row.BorderSizePixel = 0
-    row.Parent = activeContainer
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
+    local button = Instance.new("TextButton")
+    button.Name = "SelectionOption"
+    button.Size = UDim2.new(1, -4, 0, 38)
+    button.BackgroundColor3 = isSelected and COLORS.green or COLORS.row
+    button.BorderSizePixel = 0
+    button.Text = (isSelected and "✓   " or "○   ") .. labelText
+    button.TextColor3 = COLORS.white
+    button.TextSize = 12
+    button.Font = Enum.Font.Gotham
+    button.TextXAlignment = Enum.TextXAlignment.Left
+    button.TextTruncate = Enum.TextTruncate.AtEnd
+    button.Parent = activeContainer
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
 
-    local label = Instance.new("TextButton")
-    label.Size = UDim2.new(1, -48, 1, 0)
-    label.Position = UDim2.fromOffset(9, 0)
-    label.BackgroundTransparency = 1
-    label.Text = labelText
-    label.TextColor3 = COLORS.white
-    label.TextSize = 12
-    label.Font = Enum.Font.Gotham
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextTruncate = Enum.TextTruncate.AtEnd
-    label.Parent = row
-
-    local check = Instance.new("TextButton")
-    check.Name = "SelectBox"
-    check.Size = UDim2.fromOffset(25, 25)
-    check.Position = UDim2.new(1, -33, 0.5, -12)
-    check.BackgroundColor3 = isSelected and COLORS.green or COLORS.gray
-    check.Text = isSelected and "✓" or ""
-    check.TextColor3 = COLORS.white
-    check.TextSize = 15
-    check.Font = Enum.Font.GothamBold
-    check.AutoButtonColor = false
-    check.Parent = row
-    Instance.new("UICorner", check).CornerRadius = UDim.new(0, 6)
-
-    local function choose()
+    button.MouseButton1Click:Connect(function()
         if callback then callback() end
+    end)
+
+    return button
+end
+
+local function makeSlider(labelText, minValue, maxValue, initialValue, callback)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(1, -4, 0, 64)
+    holder.BackgroundColor3 = COLORS.row
+    holder.BorderSizePixel = 0
+    holder.Parent = activeContainer
+    Instance.new("UICorner", holder).CornerRadius = UDim.new(0, 7)
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -20, 0, 24)
+    title.Position = UDim2.fromOffset(10, 2)
+    title.BackgroundTransparency = 1
+    title.TextColor3 = COLORS.white
+    title.Font = Enum.Font.Gotham
+    title.TextSize = 12
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Text = labelText .. ": " .. tostring(initialValue)
+    title.Parent = holder
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, -24, 0, 8)
+    bar.Position = UDim2.fromOffset(12, 39)
+    bar.BackgroundColor3 = COLORS.gray
+    bar.BorderSizePixel = 0
+    bar.Parent = holder
+    Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((initialValue - minValue) / (maxValue - minValue), 0, 1, 0)
+    fill.BackgroundColor3 = COLORS.purple
+    fill.BorderSizePixel = 0
+    fill.Parent = bar
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(16, 16)
+    knob.AnchorPoint = Vector2.new(0.5, 0.5)
+    knob.Position = UDim2.new(fill.Size.X.Scale, 0, 0.5, 0)
+    knob.BackgroundColor3 = COLORS.white
+    knob.Parent = bar
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+    local draggingSlider = false
+    local value = initialValue
+
+    local function setValueFromX(x)
+        local percent = math.clamp(
+            (x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X,
+            0,
+            1
+        )
+
+        value = math.floor(minValue + (maxValue - minValue) * percent + 0.5)
+        fill.Size = UDim2.new(percent, 0, 1, 0)
+        knob.Position = UDim2.new(percent, 0, 0.5, 0)
+        title.Text = labelText .. ": " .. tostring(value)
+
+        if callback then callback(value) end
     end
 
-    label.MouseButton1Click:Connect(choose)
-    check.MouseButton1Click:Connect(choose)
-    return row, check
+    local function beginDrag(input)
+        draggingSlider = true
+        setValueFromX(input.Position.X)
+    end
+
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            beginDrag(input)
+        end
+    end)
+
+    knob.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            beginDrag(input)
+        end
+    end)
+
+    local moveConnection = UIS.InputChanged:Connect(function(input)
+        if draggingSlider and (
+            input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch
+        ) then
+            setValueFromX(input.Position.X)
+        end
+    end)
+
+    local endConnection = UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            draggingSlider = false
+        end
+    end)
+
+    table.insert(connections, moveConnection)
+    table.insert(connections, endConnection)
+
+    return holder
 end
 
 local function getCharacter()
@@ -611,12 +701,7 @@ end
 local function refreshObjectHighlights(kind, enabled)
     local bucket = kind == "fruit" and fruitHighlights or chestHighlights
 
-    for object, adornment in pairs(bucket) do
-        if adornment and adornment.Parent then
-            adornment:Destroy()
-        end
-        bucket[object] = nil
-    end
+    removeHighlights(bucket)
 
     if not enabled then return end
 
@@ -642,20 +727,45 @@ local function refreshObjectHighlights(kind, enabled)
     end
 end
 
+local function refreshBossESP(enabled)
+    removeHighlights(bossHighlights)
+
+    if not enabled then return end
+
+    for _, item in ipairs(Workspace:GetDescendants()) do
+        if item:IsA("Model") and item:FindFirstChildOfClass("Humanoid") then
+            local name = string.lower(item.Name)
+
+            if string.find(name, "boss", 1, true)
+                or string.find(name, "raid", 1, true) then
+
+                local h = Instance.new("Highlight")
+                h.FillColor = COLORS.red
+                h.OutlineColor = COLORS.white
+                h.FillTransparency = 0.55
+                h.Adornee = item
+                h.Parent = Screen
+                bossHighlights[item] = h
+            end
+        end
+    end
+end
+
 local function makePlayerSelection()
     makeLabel("Selecione um jogador e use o botão de confirmação abaixo.", 38)
     local selectionLabel = makeLabel("Selecionado: nenhum", 25)
     local confirmButton
-    local optionChecks = {}
+    local optionButtons = {}
 
     local function updateSelection()
         selectionLabel.Text = "Selecionado: " .. (selectedPlayer and selectedPlayer.DisplayName or "nenhum")
 
-        for player, check in pairs(optionChecks) do
-            local chosen = player == selectedPlayer
-            if check and check.Parent then
-                check.BackgroundColor3 = chosen and COLORS.green or COLORS.gray
-                check.Text = chosen and "✓" or ""
+        for player, button in pairs(optionButtons) do
+            if button and button.Parent then
+                local chosen = player == selectedPlayer
+                button.BackgroundColor3 = chosen and COLORS.green or COLORS.row
+                button.Text = (chosen and "✓   " or "○   ")
+                    .. player.DisplayName .. "  (@" .. player.Name .. ")"
             end
         end
 
@@ -675,16 +785,16 @@ local function makePlayerSelection()
         if target ~= LocalPlayer then
             found = true
 
-            local _, check = makeOption(
+            local button = makeOption(
                 target.DisplayName .. "  (@" .. target.Name .. ")",
                 selectedPlayer == target,
                 function()
-                    selectedPlayer = target
+                    selectedPlayer = selectedPlayer == target and nil or target
                     updateSelection()
                 end
             )
 
-            optionChecks[target] = check
+            optionButtons[target] = button
         end
     end
 
@@ -768,72 +878,214 @@ local function makePlayerSelection()
 end
 
 local function makeSpeedControl()
-    makeLabel("Velocidade de caminhada (aplicada localmente):", 28)
-
-    local box = Instance.new("TextBox")
-    box.Size = UDim2.new(1, -4, 0, 38)
-    box.BackgroundColor3 = COLORS.row
-    box.TextColor3 = COLORS.white
-    box.PlaceholderText = "Velocidade entre 0 e 100"
-    box.Text = tostring(walkSpeed)
-    box.ClearTextOnFocus = false
-    box.Font = Enum.Font.Gotham
-    box.TextSize = 13
-    box.Parent = activeContainer
-    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
-
-    box.FocusLost:Connect(function()
-        local value = tonumber(box.Text)
-
-        if not value then
-            box.Text = tostring(walkSpeed)
-            return
-        end
-
-        walkSpeed = math.clamp(value, 0, 100)
-
-        local hum = getCharacter()
-            and getCharacter():FindFirstChildOfClass("Humanoid")
-
+    makeSlider("Velocidade de caminhada", 0, 100, walkSpeed, function(value)
+        walkSpeed = value
+        local character = getCharacter()
+        local hum = character and character:FindFirstChildOfClass("Humanoid")
         if hum then hum.WalkSpeed = walkSpeed end
-
-        box.Text = tostring(walkSpeed)
         setStatus("Velocidade local: " .. walkSpeed)
     end)
 
-    makeLabel("Força do pulo:", 25)
-
-    local jumpBox = Instance.new("TextBox")
-    jumpBox.Size = UDim2.new(1, -4, 0, 38)
-    jumpBox.BackgroundColor3 = COLORS.row
-    jumpBox.TextColor3 = COLORS.white
-    jumpBox.Text = tostring(jumpPower)
-    jumpBox.ClearTextOnFocus = false
-    jumpBox.Font = Enum.Font.Gotham
-    jumpBox.TextSize = 13
-    jumpBox.Parent = activeContainer
-    Instance.new("UICorner", jumpBox).CornerRadius = UDim.new(0, 7)
-
-    jumpBox.FocusLost:Connect(function()
-        local value = tonumber(jumpBox.Text)
-
-        if not value then
-            jumpBox.Text = tostring(jumpPower)
-            return
-        end
-
-        jumpPower = math.clamp(value, 0, 150)
-
-        local hum = getCharacter()
-            and getCharacter():FindFirstChildOfClass("Humanoid")
-
+    makeSlider("Força do pulo", 0, 150, jumpPower, function(value)
+        jumpPower = value
+        local character = getCharacter()
+        local hum = character and character:FindFirstChildOfClass("Humanoid")
         if hum then
             hum.UseJumpPower = true
             hum.JumpPower = jumpPower
         end
-
-        jumpBox.Text = tostring(jumpPower)
         setStatus("Pulo local: " .. jumpPower)
+    end)
+end
+
+local function getAttackableTargets()
+    local targets = {}
+
+    if selectedAimTarget == "Jogadores" or selectedAimTarget == "Todos" then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local hum = player.Character:FindFirstChildOfClass("Humanoid")
+                local root = getRoot(player.Character)
+
+                if hum and hum.Health > 0 and root then
+                    table.insert(targets, {
+                        model = player.Character,
+                        humanoid = hum,
+                        root = root,
+                        name = player.DisplayName
+                    })
+                end
+            end
+        end
+    end
+
+    if selectedAimTarget == "NPCs" or selectedAimTarget == "Todos" then
+        for _, item in ipairs(Workspace:GetDescendants()) do
+            if item:IsA("Model") and item ~= getCharacter()
+                and not Players:GetPlayerFromCharacter(item) then
+
+                local hum = item:FindFirstChildOfClass("Humanoid")
+                local root = getRoot(item)
+
+                if hum and hum.Health > 0 and root then
+                    table.insert(targets, {
+                        model = item,
+                        humanoid = hum,
+                        root = root,
+                        name = item.Name
+                    })
+                end
+            end
+        end
+    end
+
+    return targets
+end
+
+local function refreshAttackTargetList(container, statusLabel)
+    for _, child in ipairs(container:GetChildren()) do
+        if child:IsA("TextButton") and child.Name == "AttackTargetOption" then
+            child:Destroy()
+        end
+    end
+
+    local targets = getAttackableTargets()
+
+    table.sort(targets, function(a, b)
+        return a.name:lower() < b.name:lower()
+    end)
+
+    if #targets == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Name = "AttackTargetOption"
+        empty.Size = UDim2.new(1, -4, 0, 30)
+        empty.BackgroundTransparency = 1
+        empty.Text = "Nenhum alvo encontrado."
+        empty.TextColor3 = COLORS.white
+        empty.Font = Enum.Font.Gotham
+        empty.TextSize = 12
+        empty.Parent = container
+        return
+    end
+
+    for _, target in ipairs(targets) do
+        local selected = selectedAttackTargets[target.model] == true
+
+        local option = Instance.new("TextButton")
+        option.Name = "AttackTargetOption"
+        option.Size = UDim2.new(1, -4, 0, 34)
+        option.BackgroundColor3 = selected and COLORS.green or COLORS.row
+        option.TextColor3 = COLORS.white
+        option.TextSize = 12
+        option.Font = Enum.Font.Gotham
+        option.TextXAlignment = Enum.TextXAlignment.Left
+        option.Text = (selected and "✓   " or "○   ") .. target.name
+        option.Parent = container
+        Instance.new("UICorner", option).CornerRadius = UDim.new(0, 6)
+
+        option.MouseButton1Click:Connect(function()
+            selectedAttackTargets[target.model] =
+                not selectedAttackTargets[target.model]
+
+            option.BackgroundColor3 =
+                selectedAttackTargets[target.model] and COLORS.green or COLORS.row
+
+            option.Text = (selectedAttackTargets[target.model] and "✓   " or "○   ")
+                .. target.name
+
+            local count = 0
+            for _ in pairs(selectedAttackTargets) do count += 1 end
+            statusLabel.Text = "Alvos selecionados: " .. count
+        end)
+    end
+end
+
+local attackLoopRunning = false
+
+local function startAttackLoop()
+    if attackLoopRunning then return end
+    attackLoopRunning = true
+
+    task.spawn(function()
+        while autoAttackEnabled and Screen.Parent do
+            local character = getCharacter()
+            local root = getRoot(character)
+            local hum = character and character:FindFirstChildOfClass("Humanoid")
+
+            if not root or not hum or hum.Health <= 0 then
+                task.wait(0.5)
+                continue
+            end
+
+            local selectedTarget = nil
+
+            for model in pairs(selectedAttackTargets) do
+                if model and model.Parent then
+                    local targetHum = model:FindFirstChildOfClass("Humanoid")
+                    local targetRoot = getRoot(model)
+
+                    if targetHum and targetHum.Health > 0 and targetRoot then
+                        selectedTarget = {
+                            model = model,
+                            humanoid = targetHum,
+                            root = targetRoot
+                        }
+                        break
+                    else
+                        selectedAttackTargets[model] = nil
+                    end
+                else
+                    selectedAttackTargets[model] = nil
+                end
+            end
+
+            if selectedTarget then
+                local targetRoot = selectedTarget.root
+                local distance = (root.Position - targetRoot.Position).Magnitude
+
+                if distance > 7 then
+                    hum:MoveTo(targetRoot.Position - targetRoot.CFrame.LookVector * 4)
+                else
+                    hum:MoveTo(root.Position)
+
+                    if autoHakiEnabled then
+                        for _, tool in ipairs(character:GetChildren()) do
+                            if tool:IsA("Tool") then
+                                pcall(function()
+                                    tool:Activate()
+                                end)
+                            end
+                        end
+                    end
+
+                    if autoSkillsEnabled then
+                        for _, tool in ipairs(character:GetChildren()) do
+                            if tool:IsA("Tool") then
+                                pcall(function()
+                                    tool:Activate()
+                                end)
+                            end
+                        end
+                    end
+
+                    if autoAttackEnabled then
+                        for _, tool in ipairs(character:GetChildren()) do
+                            if tool:IsA("Tool") then
+                                pcall(function()
+                                    tool:Activate()
+                                end)
+                            end
+                        end
+                    end
+                end
+            else
+                hum:MoveTo(root.Position)
+            end
+
+            task.wait(0.2)
+        end
+
+        attackLoopRunning = false
     end)
 end
 
@@ -844,8 +1096,8 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 3.2", 36)
-        makeLabel("Interface organizada por seções. Toque no título de cada seção para abrir ou recolher os controles.", 52)
+        makeLabel("BLOX F' - TALES 3.4", 36)
+        makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
         local coords = makeLabel("Coordenadas: aguardando personagem...", 28)
@@ -863,7 +1115,7 @@ local function showCategory(category)
         endSection()
 
         beginSection("Informações")
-        makeLabel("Os recursos locais atuam no cliente. Ações internas do jogo precisam dos sistemas oficiais do servidor.", 58)
+        makeLabel("Os recursos locais atuam no cliente. Ações internas do jogo dependem dos sistemas oficiais da experiência.", 58)
         endSection()
 
     elseif category == "Jogador" then
@@ -880,12 +1132,12 @@ local function showCategory(category)
             setStatus(on and "Fly ligado" or "Fly desligado")
         end)
 
-        makeInput("Velocidade do Fly", "Velocidade (10 a 200)", flySpeed, function(value)
-            local n = tonumber(value)
-            if n then flySpeed = math.clamp(n, 10, 200) end
-            setStatus("Velocidade do Fly: " .. tostring(flySpeed))
+        makeSlider("Velocidade do Fly", 10, 200, flySpeed, function(value)
+            flySpeed = value
+            setStatus("Velocidade do Fly: " .. flySpeed)
         end)
 
+        makeLabel("O Fly acompanha a direção para a qual a câmera está apontando. Use o controle de movimento para avançar.", 48)
         endSection()
 
         beginSection("Colisão")
@@ -894,7 +1146,7 @@ local function showCategory(category)
             setStatus(on and "Noclip local ligado" or "Noclip local desligado")
         end)
 
-        makeLabel("O noclip altera colisões apenas no seu cliente; o servidor pode corrigir sua posição.", 48)
+        makeLabel("O noclip altera colisões no cliente; o servidor pode corrigir sua posição.", 48)
         endSection()
 
     elseif category == "Teletransporte" then
@@ -948,34 +1200,34 @@ local function showCategory(category)
 
         makeLabel("Escolha o mundo, marque uma ilha e depois confirme no botão separado.", 42)
         local selectedLabel = makeLabel("Destino selecionado: nenhum", 28)
-        local optionChecks = {}
+        local optionButtons = {}
 
         for _, worldData in ipairs(islandWorlds) do
-            beginSection(worldData.world, true)
+            beginSection(worldData.world, false)
 
             for _, islandData in ipairs(worldData.islands) do
                 local islandName, aliases = islandData[1], islandData[2]
 
-                local _, check = makeOption(islandName, selectedIsland == islandName, function()
-                    selectedIsland = islandName
-                    selectedLabel.Text = "Destino selecionado: " .. islandName
+                local button = makeOption(islandName, selectedIsland == islandName, function()
+                    selectedIsland = selectedIsland == islandName and nil or islandName
+                    selectedLabel.Text = "Destino selecionado: " .. (selectedIsland or "nenhum")
 
-                    for name, button in pairs(optionChecks) do
-                        if button and button.Parent then
+                    for name, option in pairs(optionButtons) do
+                        if option and option.Parent then
                             local chosen = name == selectedIsland
-                            button.BackgroundColor3 = chosen and COLORS.green or COLORS.gray
-                            button.Text = chosen and "✓" or ""
+                            option.BackgroundColor3 = chosen and COLORS.green or COLORS.row
+                            option.Text = (chosen and "✓   " or "○   ") .. name
                         end
                     end
                 end)
 
-                optionChecks[islandName] = check
+                optionButtons[islandName] = button
             end
 
             endSection()
         end
 
-        beginSection("Confirmar destino")
+        beginSection("Confirmar destino", false)
 
         makeButton("CONFIRMAR TELETRANSPORTE PARA A ILHA", function()
             if not selectedIsland then
@@ -1001,13 +1253,13 @@ local function showCategory(category)
                 local ok = teleportLocal(destination * CFrame.new(0, 5, 0))
                 setStatus(ok and ("Indo para " .. selectedIsland) or "Não foi possível mover o personagem.")
             else
-                setStatus("Não encontrei " .. selectedIsland .. " no mapa carregado. O nome interno do mapa pode ser diferente.")
+                setStatus("Não encontrei " .. selectedIsland .. " no mapa carregado. O nome interno pode ser diferente.")
             end
         end, COLORS.green)
 
         endSection()
 
-        beginSection("Teletransporte por coordenadas")
+        beginSection("Teletransporte por coordenadas", false)
 
         local coordinateBoxes = {}
 
@@ -1047,12 +1299,12 @@ local function showCategory(category)
 
         endSection()
 
-        beginSection("Teletransporte para jogador")
+        beginSection("Teletransporte para jogador", false)
         makePlayerSelection()
         endSection()
 
     elseif category == "Visualização" then
-        beginSection("Jogadores")
+        beginSection("Jogadores", false)
 
         makeToggle("Destacar jogadores", function(on)
             espPlayers = on
@@ -1071,7 +1323,17 @@ local function showCategory(category)
 
         endSection()
 
-        beginSection("Localizadores")
+        beginSection("Chefes / Boss ESP", false)
+
+        makeToggle("Destacar bosses", function(on)
+            bossESP = on
+            refreshBossESP(on)
+            setStatus(on and "Boss ESP ligado" or "Boss ESP desligado")
+        end)
+
+        endSection()
+
+        beginSection("Localizadores", false)
 
         makeToggle("Localizador de frutas", function(on)
             fruitFinder = on
@@ -1087,7 +1349,7 @@ local function showCategory(category)
         endSection()
 
     elseif category == "Combate" then
-        beginSection("Mira e seleção de alvos")
+        beginSection("Mira e seleção de alvos", false)
 
         makeToggle("Aim Assist", function(on)
             aimAssistEnabled = on
@@ -1099,33 +1361,103 @@ local function showCategory(category)
             setStatus(on and "FOV ativado" or "FOV desativado")
         end)
 
-        makeInput("Raio do FOV", "Raio em pixels", aimFovRadius, function(value)
-            local n = tonumber(value)
-            if n then aimFovRadius = math.clamp(n, 30, 500) end
-            setStatus("Raio do FOV: " .. tostring(aimFovRadius))
+        makeSlider("Raio do FOV", 30, 500, aimFovRadius, function(value)
+            aimFovRadius = value
+            setStatus("Raio do FOV: " .. aimFovRadius)
         end)
 
-        makeOption("Alvos: NPCs", selectedAimTarget == "NPCs", function()
-            selectedAimTarget = "NPCs"
-            setStatus("Alvo selecionado: NPCs")
+        local typeButton = makeButton("▼  Tipo de alvo: " .. selectedAimTarget, function()
+            targetTypeDropdownOpen = not targetTypeDropdownOpen
+            targetTypeDropdown.Visible = targetTypeDropdownOpen
+            typeButton.Text = (targetTypeDropdownOpen and "▼  " or "▶  ")
+                .. "Tipo de alvo: " .. selectedAimTarget
         end)
 
-        makeOption("Alvos: Jogadores", selectedAimTarget == "Jogadores", function()
-            selectedAimTarget = "Jogadores"
-            setStatus("Alvo selecionado: Jogadores")
-        end)
+        local targetTypeDropdown = Instance.new("Frame")
+        targetTypeDropdown.Size = UDim2.new(1, -4, 0, 114)
+        targetTypeDropdown.BackgroundColor3 = COLORS.panel
+        targetTypeDropdown.Visible = false
+        targetTypeDropdown.Parent = activeContainer
 
-        makeOption("Alvos: Todos", selectedAimTarget == "Todos", function()
-            selectedAimTarget = "Todos"
-            setStatus("Alvo selecionado: todos")
-        end)
+        local typeLayout = Instance.new("UIListLayout")
+        typeLayout.Padding = UDim.new(0, 4)
+        typeLayout.Parent = targetTypeDropdown
+
+        for _, targetType in ipairs({"NPCs", "Jogadores", "Todos"}) do
+            local option = Instance.new("TextButton")
+            option.Size = UDim2.new(1, 0, 0, 34)
+            option.BackgroundColor3 = selectedAimTarget == targetType and COLORS.green or COLORS.row
+            option.Text = targetType
+            option.TextColor3 = COLORS.white
+            option.Font = Enum.Font.Gotham
+            option.TextSize = 12
+            option.Parent = targetTypeDropdown
+            Instance.new("UICorner", option).CornerRadius = UDim.new(0, 6)
+
+            option.MouseButton1Click:Connect(function()
+                selectedAimTarget = targetType
+                typeButton.Text = "▶  Tipo de alvo: " .. targetType
+                targetTypeDropdownOpen = false
+                targetTypeDropdown.Visible = false
+
+                for _, sibling in ipairs(targetTypeDropdown:GetChildren()) do
+                    if sibling:IsA("TextButton") then
+                        sibling.BackgroundColor3 =
+                            sibling.Text == targetType and COLORS.green or COLORS.row
+                    end
+                end
+
+                setStatus("Alvo selecionado: " .. targetType)
+            end)
+        end
 
         endSection()
 
-        beginSection("Ataque, habilidades e Haki")
+        beginSection("Ataque, habilidades e Haki", false)
+
+        local attackButton = makeButton("▼  Selecionar alvos para ataque", function()
+            attackDropdownOpen = not attackDropdownOpen
+            attackList.Visible = attackDropdownOpen
+            attackButton.Text = (attackDropdownOpen and "▼  " or "▶  ")
+                .. "Selecionar alvos para ataque"
+        end)
+
+        local attackStatus = makeLabel("Alvos selecionados: 0", 25)
+
+        local attackList = Instance.new("ScrollingFrame")
+        attackList.Name = "AttackTargetList"
+        attackList.Size = UDim2.new(1, -4, 0, 170)
+        attackList.BackgroundColor3 = COLORS.panel
+        attackList.BorderSizePixel = 0
+        attackList.ScrollBarThickness = 4
+        attackList.ScrollBarImageColor3 = COLORS.purple
+        attackList.CanvasSize = UDim2.new(0, 0, 0, 0)
+        attackList.Visible = false
+        attackList.Parent = activeContainer
+        Instance.new("UICorner", attackList).CornerRadius = UDim.new(0, 7)
+
+        local attackListLayout = Instance.new("UIListLayout")
+        attackListLayout.Padding = UDim.new(0, 4)
+        attackListLayout.Parent = attackList
+
+        attackListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            attackList.CanvasSize = UDim2.new(0, 0, 0, attackListLayout.AbsoluteContentSize.Y + 8)
+        end)
+
+        local refreshButton = makeButton("ATUALIZAR LISTA DE ALVOS", function()
+            refreshAttackTargetList(attackList, attackStatus)
+            local count = 0
+            for _ in pairs(selectedAttackTargets) do count += 1 end
+            attackStatus.Text = "Alvos selecionados: " .. count
+        end, COLORS.purple)
+
+        refreshAttackTargetList(attackList, attackStatus)
 
         makeToggle("Ataque automático", function(on)
             autoAttackEnabled = on
+            if on then
+                startAttackLoop()
+            end
             setStatus(on and "Ataque automático ligado" or "Ataque automático desligado")
         end)
 
@@ -1139,10 +1471,17 @@ local function showCategory(category)
             setStatus(on and "Habilidades automáticas ligadas" or "Habilidades automáticas desligadas")
         end)
 
+        makeButton("LIMPAR ALVOS SELECIONADOS", function()
+            table.clear(selectedAttackTargets)
+            refreshAttackTargetList(attackList, attackStatus)
+            attackStatus.Text = "Alvos selecionados: 0"
+            setStatus("Seleção de alvos limpa.")
+        end, COLORS.red)
+
         endSection()
 
     elseif category == "Frutas" then
-        beginSection("Catálogo e localização")
+        beginSection("Catálogo e localização", false)
 
         makeToggle("Detector de frutas", function(on)
             fruitFinder = on
@@ -1160,7 +1499,7 @@ local function showCategory(category)
         endSection()
 
     elseif category == "Coleta e evolução" then
-        beginSection("Coleta automática")
+        beginSection("Coleta automática", false)
 
         makeToggle("Auto Farm", function(on)
             autoFarmEnabled = on
@@ -1184,7 +1523,7 @@ local function showCategory(category)
 
         endSection()
 
-        beginSection("Evolução e recompensas")
+        beginSection("Evolução e recompensas", false)
 
         makeToggle("Auto Evolution", function(on)
             autoEvolutionEnabled = on
@@ -1199,7 +1538,7 @@ local function showCategory(category)
         endSection()
 
     elseif category == "Configurações" then
-        beginSection("Interface")
+        beginSection("Interface", false)
 
         makeButton("Recentralizar painel", function()
             Main.Position = UDim2.new(
@@ -1213,7 +1552,7 @@ local function showCategory(category)
 
         endSection()
 
-        beginSection("Personagem")
+        beginSection("Personagem", false)
 
         makeButton("Reaplicar velocidade e pulo", function()
             local character = getCharacter()
@@ -1231,13 +1570,16 @@ local function showCategory(category)
 
         endSection()
 
-        beginSection("Limpeza")
+        beginSection("Limpeza", false)
 
         makeButton("Limpar destaques visuais", function()
-            espPlayers, showNames, showDistances, fruitFinder, chestFinder = false, false, false, false, false
+            espPlayers, showNames, showDistances, fruitFinder, chestFinder, bossESP =
+                false, false, false, false, false, false
+
             removeHighlights(playerHighlights)
             removeHighlights(fruitHighlights)
             removeHighlights(chestHighlights)
+            removeHighlights(bossHighlights)
             setStatus("Destaques removidos.")
         end)
 
@@ -1286,6 +1628,8 @@ Min.MouseButton1Click:Connect(MinimizePanel)
 
 Close.MouseButton1Click:Connect(function()
     destroyed = true
+    autoAttackEnabled = false
+    flyEnabled = false
 
     for _, connection in ipairs(connections) do
         pcall(function()
@@ -1296,6 +1640,7 @@ Close.MouseButton1Click:Connect(function()
     removeHighlights(playerHighlights)
     removeHighlights(fruitHighlights)
     removeHighlights(chestHighlights)
+    removeHighlights(bossHighlights)
     Screen:Destroy()
 end)
 
@@ -1434,6 +1779,10 @@ task.spawn(function()
         if espPlayers or showNames or showDistances then
             applyPlayerVisuals()
         end
+
+        if bossESP then
+            refreshBossESP(true)
+        end
     end
 end)
 
@@ -1443,45 +1792,63 @@ table.insert(connections, Players.PlayerAdded:Connect(function()
     end
 end))
 
-table.insert(connections, Players.PlayerRemoving:Connect(function()
+table.insert(connections, Players.PlayerRemoving:Connect(function(player)
+    selectedAttackTargets[player.Character] = nil
+
     if espPlayers or showNames or showDistances then
         task.delay(0.2, applyPlayerVisuals)
     end
 end))
 
--- Fly local: usa MoveDirection do Humanoid e teclas de subida/descida.
+-- Fly: movimento alinhado à direção completa da câmera,
+-- incluindo inclinação para cima e para baixo.
 table.insert(connections, RunService.Heartbeat:Connect(function()
     if not flyEnabled then return end
 
     local character = getCharacter()
     local root = getRoot(character)
     local hum = character and character:FindFirstChildOfClass("Humanoid")
+    local currentCamera = Workspace.CurrentCamera
 
-    if not root or not hum then return end
+    if not root or not hum or not currentCamera then return end
 
-    local direction = hum.MoveDirection
-    local vertical = 0
+    local cameraCFrame = currentCamera.CFrame
+    local look = cameraCFrame.LookVector
+    local right = cameraCFrame.RightVector
 
-    if UIS:IsKeyDown(Enum.KeyCode.Space) or UIS:IsKeyDown(Enum.KeyCode.E) then
-        vertical += 1
+    local moveDirection = hum.MoveDirection
+    local forwardInput = 0
+    local sideInput = 0
+
+    if UIS:IsKeyDown(Enum.KeyCode.W) then forwardInput += 1 end
+    if UIS:IsKeyDown(Enum.KeyCode.S) then forwardInput -= 1 end
+    if UIS:IsKeyDown(Enum.KeyCode.D) then sideInput += 1 end
+    if UIS:IsKeyDown(Enum.KeyCode.A) then sideInput -= 1 end
+
+    local direction
+
+    if UIS.TouchEnabled then
+        direction = moveDirection
+    else
+        direction = look * forwardInput + right * sideInput
     end
 
-    if UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.Q) then
-        vertical -= 1
+    if direction.Magnitude > 0 then
+        direction = direction.Unit
     end
 
-    local velocity = direction * flySpeed + Vector3.new(0, vertical * flySpeed, 0)
-    root.AssemblyLinearVelocity = velocity
+    root.AssemblyLinearVelocity = direction * flySpeed
+    hum:ChangeState(Enum.HumanoidStateType.Physics)
 end))
 
 -- Aim Assist local: acompanha o alvo mais próximo dentro do raio configurado.
 table.insert(connections, RunService.RenderStepped:Connect(function()
     if not aimAssistEnabled then return end
 
-    local camera = Workspace.CurrentCamera
+    local currentCamera = Workspace.CurrentCamera
     local myRoot = getRoot(getCharacter())
 
-    if not camera or not myRoot then return end
+    if not currentCamera or not myRoot then return end
 
     local bestPart, bestDistance = nil, math.huge
 
@@ -1496,10 +1863,14 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
         local worldDistance = (part.Position - myRoot.Position).Magnitude
         if worldDistance > 600 then return end
 
-        local point, visible = camera:WorldToViewportPoint(part.Position)
+        local point, visible = currentCamera:WorldToViewportPoint(part.Position)
         if not visible then return end
 
-        local center = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+        local center = Vector2.new(
+            currentCamera.ViewportSize.X / 2,
+            currentCamera.ViewportSize.Y / 2
+        )
+
         local screenDistance = (Vector2.new(point.X, point.Y) - center).Magnitude
         local maxRadius = aimFovEnabled and aimFovRadius or 500
 
@@ -1525,10 +1896,13 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
     end
 
     if bestPart then
-        camera.CFrame = CFrame.new(camera.CFrame.Position, bestPart.Position)
+        currentCamera.CFrame = CFrame.new(
+            currentCamera.CFrame.Position,
+            bestPart.Position
+        )
     end
 end))
 
 showCategory("Início")
 
-print("Blox F' - Tales 3.3 carregado.")
+print("Blox F' - Tales 3.4 carregado.")
