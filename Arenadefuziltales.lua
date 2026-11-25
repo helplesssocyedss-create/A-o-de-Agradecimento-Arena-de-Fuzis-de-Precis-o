@@ -9,13 +9,16 @@
     - Deteccao sem exigir a peca Head.
     - Recuperacao automatica de ESP apos respawn.
     - Aimbot procura jogadores e NPCs independentemente da ESP.
-    - Mantida a assistencia original de camera.
-    - Suavidade de 0% a 100%, passos de 5% ou 10%.
+    - Assistencia original de camera.
+    - Suavidade de 0% a 100%.
     - Selecao estavel de alvo.
     - FOV, perseguicao, IA Assist e minimizacao.
     - Indicador verde na cabeca e no nick quando ha linha de visao livre.
-    - Tiro automatico via ativacao da ferramenta equipada, condicionado
-      a cabeca visivel do jogador acompanhado.
+    - Categoria exclusiva de TIRO AUTOMATICO.
+    - Sensor exclusivo do AutoFire.
+    - Sensor AutoFire arrastavel, redimensionavel e travavel.
+    - Sensor AutoFire independente da perseguicao.
+    - Disparo por Tool:Activate() quando a cabeca do jogador esta visivel.
 ]]
 
 local Players = game:GetService("Players")
@@ -47,7 +50,11 @@ local Settings = {
 
     ESPPlayers = false,
     ESPBots = false,
+
     AutoFire = false,
+    AutoFireSensorSize = 65,
+    AutoFireSensorPosition = UDim2.new(0.5, 0, 0.75, 0),
+    AutoFireSensorLocked = true,
 
     FOV = false,
     FOVSize = 120,
@@ -510,14 +517,6 @@ CreateOption(AimTab, "DIMINUIR SUAVIDADE -", 295, function()
     ChangeSmoothness(-1)
 end)
 
-CreateToggle(AimTab, "TIRO AUTOMATICO", function(state)
-    Settings.AutoFire = state
-    SetAIEvent(
-        state and "tiro automatico ativado"
-        or "tiro automatico desativado"
-    )
-end, 335)
-
 --==================================================
 -- ESP PLAYER + ESP BOT
 --==================================================
@@ -545,10 +544,6 @@ local function RemoveESP(target)
 
     ESPObjects[target] = nil
 end
-
--- ESP PLAYER AZUL.
--- ESP BOT AMARELO COM NOME FIXO BOT.
--- Mesmo tamanho de texto para os dois.
 
 local function HasClearHeadLineOfSight(character, head)
     Camera = workspace.CurrentCamera
@@ -624,7 +619,6 @@ local function UpdatePlayerHeadHighlight(target, character)
         and Color3.fromRGB(0, 255, 70)
         or BLUE_OUTLINE
 
-    -- O nome acompanha exatamente o estado de visibilidade da cabeca.
     local billboard = objects.Billboard
     local nameLabel = billboard and billboard:FindFirstChild("NameLabel")
 
@@ -744,7 +738,6 @@ end
 local function UpdateESP()
     local activeObjects = {}
 
-    -- Jogadores.
     if Settings.ESPPlayers then
         for _, target in ipairs(Players:GetPlayers()) do
             if target ~= Player then
@@ -763,7 +756,6 @@ local function UpdateESP()
         end
     end
 
-    -- Bots/NPCs.
     if Settings.ESPBots then
         for _, model in ipairs(CachedNPCs) do
             if model
@@ -773,16 +765,11 @@ local function UpdateESP()
 
                 activeObjects[model] = true
 
-                AddESP(
-                    model,
-                    model,
-                    "BOT"
-                )
+                AddESP(model, model, "BOT")
             end
         end
     end
 
-    -- Remove objetos que nao devem mais aparecer.
     for target in pairs(ESPObjects) do
         if not activeObjects[target] then
             RemoveESP(target)
@@ -799,6 +786,7 @@ local function UpdateAllPlayerHeadHighlights()
         if target:IsA("Player")
             and objects.Character
             and objects.Character.Parent then
+
             UpdatePlayerHeadHighlight(target, objects.Character)
         end
     end
@@ -806,7 +794,6 @@ end
 
 CreateToggle(EspTab, "ESP PLAYER + ESP NAME", function(state)
     Settings.ESPPlayers = state
-
     UpdateESP()
 
     SetAIEvent(
@@ -869,11 +856,7 @@ local function TrackPlayer(target)
                     and target.Parent == Players
                     and character.Parent then
 
-                    AddESP(
-                        target,
-                        character,
-                        target.DisplayName
-                    )
+                    AddESP(target, character, target.DisplayName)
 
                     SetAIEvent(
                         "respawn detectado: " .. target.DisplayName
@@ -895,11 +878,7 @@ local function TrackPlayer(target)
             target.Character:WaitForChild("Humanoid", 8)
 
             if target.Character and Settings.ESPPlayers then
-                AddESP(
-                    target,
-                    target.Character,
-                    target.DisplayName
-                )
+                AddESP(target, target.Character, target.DisplayName)
             end
         end)
     end
@@ -1100,11 +1079,142 @@ CreateOption(PursuitTab, "DIMINUIR BOLINHA -", 210, function()
     UpdateSensor()
 end)
 
-local sensorDragging = false
-local sensorInput = nil
-local sensorStart = nil
-local sensorOrigin = nil
-local sensorMoved = false
+--==================================================
+-- SENSOR EXCLUSIVO DO TIRO AUTOMATICO
+--==================================================
+
+local AutoFireTab = CreateTab("TIRO AUTOMATICO", 6)
+
+local AutoFireSensor = Instance.new("Frame")
+AutoFireSensor.Name = "TalesAutoFireSensor"
+AutoFireSensor.AnchorPoint = Vector2.new(0.5, 0.5)
+AutoFireSensor.Size = UDim2.fromOffset(
+    Settings.AutoFireSensorSize,
+    Settings.AutoFireSensorSize
+)
+AutoFireSensor.Position = Settings.AutoFireSensorPosition
+AutoFireSensor.BackgroundColor3 = Color3.fromRGB(220, 65, 45)
+AutoFireSensor.BackgroundTransparency = 0.30
+AutoFireSensor.BorderSizePixel = 0
+AutoFireSensor.Active = false
+AutoFireSensor.Visible = false
+AutoFireSensor.ZIndex = 30
+AutoFireSensor.Parent = GUI
+
+Instance.new("UICorner", AutoFireSensor).CornerRadius = UDim.new(1, 0)
+
+local AutoFireSensorStroke = Instance.new("UIStroke")
+AutoFireSensorStroke.Color = Color3.new(1, 1, 1)
+AutoFireSensorStroke.Thickness = 2
+AutoFireSensorStroke.Parent = AutoFireSensor
+
+local AutoFireSensorText = Instance.new("TextLabel")
+AutoFireSensorText.Size = UDim2.fromScale(1, 1)
+AutoFireSensorText.BackgroundTransparency = 1
+AutoFireSensorText.Text = "FIRE"
+AutoFireSensorText.TextColor3 = Color3.new(1, 1, 1)
+AutoFireSensorText.TextSize = 12
+AutoFireSensorText.Font = Enum.Font.GothamBold
+AutoFireSensorText.ZIndex = 31
+AutoFireSensorText.Parent = AutoFireSensor
+
+local AutoFireStatus = CreateInfo(
+    AutoFireTab,
+    "Tiro automatico: DESATIVADO",
+    15,
+    30
+)
+
+local AutoFireSensorStatus = CreateInfo(
+    AutoFireTab,
+    "Sensor: TRAVADO",
+    48,
+    25
+)
+
+local AutoFireTargetStatus = CreateInfo(
+    AutoFireTab,
+    "Alvo: aguardando",
+    75,
+    30
+)
+
+local function UpdateAutoFireSensor()
+    AutoFireSensor.Size = UDim2.fromOffset(
+        Settings.AutoFireSensorSize,
+        Settings.AutoFireSensorSize
+    )
+
+    AutoFireSensor.Position = Settings.AutoFireSensorPosition
+    AutoFireSensor.Visible = Settings.AutoFire
+
+    AutoFireSensor.BackgroundColor3 = Settings.AutoFire
+        and Color3.fromRGB(20, 160, 85)
+        or Color3.fromRGB(220, 65, 45)
+
+    AutoFireSensorText.Text = Settings.AutoFire and "FIRE" or "OFF"
+
+    AutoFireStatus.Text = Settings.AutoFire
+        and "Tiro automatico: ATIVADO"
+        or "Tiro automatico: DESATIVADO"
+
+    AutoFireSensorStatus.Text = Settings.AutoFireSensorLocked
+        and "Sensor: TRAVADO"
+        or "Sensor: DESTRAVADO"
+end
+
+CreateToggle(AutoFireTab, "TIRO AUTOMATICO", function(state)
+    Settings.AutoFire = state
+
+    if not state then
+        AutoFireTargetStatus.Text = "Alvo: aguardando"
+    end
+
+    UpdateAutoFireSensor()
+
+    SetAIEvent(
+        state and "tiro automatico ativado"
+        or "tiro automatico desativado"
+    )
+end, 115)
+
+CreateOption(AutoFireTab, "TRAVAR / DESTRAVAR SENSOR", 160, function()
+    Settings.AutoFireSensorLocked =
+        not Settings.AutoFireSensorLocked
+
+    UpdateAutoFireSensor()
+end)
+
+CreateOption(AutoFireTab, "AUMENTAR SENSOR +", 200, function()
+    Settings.AutoFireSensorSize = math.clamp(
+        Settings.AutoFireSensorSize + 10,
+        35,
+        150
+    )
+
+    UpdateAutoFireSensor()
+end)
+
+CreateOption(AutoFireTab, "DIMINUIR SENSOR -", 240, function()
+    Settings.AutoFireSensorSize = math.clamp(
+        Settings.AutoFireSensorSize - 10,
+        35,
+        150
+    )
+
+    UpdateAutoFireSensor()
+end)
+
+CreateInfo(
+    AutoFireTab,
+    "Arraste o sensor ate o botao de disparo do HUD e depois trave. O sensor e independente da perseguicao.",
+    285,
+    55
+)
+
+--==================================================
+-- CONTROLE DE TOQUE E ARRASTO DOS SENSORES
+--==================================================
 
 local function InputPosition(input)
     return Vector2.new(
@@ -1113,17 +1223,17 @@ local function InputPosition(input)
     )
 end
 
-local function InsideSensor(position)
-    local center = Sensor.AbsolutePosition
-        + Sensor.AbsoluteSize / 2
+local function InsideFrame(frame, position)
+    local center = frame.AbsolutePosition
+        + frame.AbsoluteSize / 2
 
-    local half = Sensor.AbsoluteSize / 2
+    local half = frame.AbsoluteSize / 2
 
     return math.abs(position.X - center.X) <= half.X
         and math.abs(position.Y - center.Y) <= half.Y
 end
 
-local function SetSensorPosition(position)
+local function SetFramePosition(frame, position, settingName)
     local camera = workspace.CurrentCamera
 
     if not camera then
@@ -1132,15 +1242,29 @@ local function SetSensorPosition(position)
 
     local viewport = camera.ViewportSize
 
-    Settings.SensorPosition = UDim2.new(
+    local newPosition = UDim2.new(
         math.clamp(position.X / viewport.X, 0.03, 0.97),
         0,
         math.clamp(position.Y / viewport.Y, 0.05, 0.95),
         0
     )
 
-    Sensor.Position = Settings.SensorPosition
+    if settingName == "Pursuit" then
+        Settings.SensorPosition = newPosition
+    elseif settingName == "AutoFire" then
+        Settings.AutoFireSensorPosition = newPosition
+    end
+
+    frame.Position = newPosition
 end
+
+-- Controle independente do sensor de perseguicao.
+
+local sensorDragging = false
+local sensorInput = nil
+local sensorStart = nil
+local sensorOrigin = nil
+local sensorMoved = false
 
 UserInputService.InputBegan:Connect(function(input)
     if not Settings.Pursuit then
@@ -1156,7 +1280,7 @@ UserInputService.InputBegan:Connect(function(input)
 
     local pos = InputPosition(input)
 
-    if not InsideSensor(pos) then
+    if not InsideFrame(Sensor, pos) then
         return
     end
 
@@ -1190,7 +1314,11 @@ UserInputService.InputChanged:Connect(function(input)
     end
 
     if sensorMoved then
-        SetSensorPosition(sensorOrigin + delta)
+        SetFramePosition(
+            Sensor,
+            sensorOrigin + delta,
+            "Pursuit"
+        )
     end
 end)
 
@@ -1202,6 +1330,83 @@ UserInputService.InputEnded:Connect(function(input)
         sensorInput = nil
         sensorStart = nil
         sensorOrigin = nil
+    end
+end)
+
+-- Controle independente do sensor de tiro automatico.
+-- Tocar no sensor nao liga nem desliga o disparo.
+-- Quando destravado, ele serve somente para posicionamento.
+
+local autoFireSensorDragging = false
+local autoFireSensorInput = nil
+local autoFireSensorStart = nil
+local autoFireSensorOrigin = nil
+local autoFireSensorMoved = false
+
+UserInputService.InputBegan:Connect(function(input)
+    if not Settings.AutoFire then
+        return
+    end
+
+    local touch = input.UserInputType == Enum.UserInputType.Touch
+    local click = input.UserInputType == Enum.UserInputType.MouseButton1
+
+    if not touch and not click then
+        return
+    end
+
+    local pos = InputPosition(input)
+
+    if not InsideFrame(AutoFireSensor, pos) then
+        return
+    end
+
+    if not Settings.AutoFireSensorLocked then
+        autoFireSensorDragging = true
+        autoFireSensorInput = input
+        autoFireSensorStart = pos
+        autoFireSensorOrigin =
+            AutoFireSensor.AbsolutePosition
+            + AutoFireSensor.AbsoluteSize / 2
+
+        autoFireSensorMoved = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if not autoFireSensorDragging then
+        return
+    end
+
+    local move = input.UserInputType == Enum.UserInputType.MouseMovement
+
+    if not move and input ~= autoFireSensorInput then
+        return
+    end
+
+    local delta = InputPosition(input) - autoFireSensorStart
+
+    if delta.Magnitude > 5 then
+        autoFireSensorMoved = true
+    end
+
+    if autoFireSensorMoved then
+        SetFramePosition(
+            AutoFireSensor,
+            autoFireSensorOrigin + delta,
+            "AutoFire"
+        )
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input == autoFireSensorInput
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+        autoFireSensorDragging = false
+        autoFireSensorInput = nil
+        autoFireSensorStart = nil
+        autoFireSensorOrigin = nil
     end
 end)
 
@@ -1261,8 +1466,11 @@ CreateToggle(AITab, "PROTECAO AO VIRAR CIVIL", function(state)
     if state and IsCivil then
         Settings.PursuitActive = false
         Settings.Aimbot = false
+        Settings.AutoFire = false
         CurrentTarget = nil
+
         UpdateSensor()
+        UpdateAutoFireSensor()
 
         SetAIEvent("protecao ativada: funcao civil detectada")
     else
@@ -1302,6 +1510,11 @@ local CivilValue = Instance.new("BoolValue")
 CivilValue.Name = "TalesIsCivil"
 CivilValue.Value = false
 CivilValue.Parent = GUI
+
+local AutoFireValue = Instance.new("BoolValue")
+AutoFireValue.Name = "TalesAutoFireActive"
+AutoFireValue.Value = false
+AutoFireValue.Parent = GUI
 
 --==================================================
 -- SELECAO DE ALVOS
@@ -1597,6 +1810,7 @@ local function BindLocalCharacter(character)
 
             TargetValue.Value = nil
             PursuitValue.Value = false
+            AutoFireValue.Value = false
 
             UpdateSensor()
         end)
@@ -1611,6 +1825,7 @@ Player.CharacterRemoving:Connect(function()
 
     TargetValue.Value = nil
     PursuitValue.Value = false
+    AutoFireValue.Value = false
 
     UpdateSensor()
 end)
@@ -1638,9 +1853,11 @@ local function UpdateCivilStatus()
     if IsCivil and Settings.CivilProtection then
         Settings.PursuitActive = false
         Settings.Aimbot = false
+        Settings.AutoFire = false
         CurrentTarget = nil
 
         UpdateSensor()
+        UpdateAutoFireSensor()
     end
 end
 
@@ -1749,54 +1966,89 @@ RunService.RenderStepped:Connect(function(deltaTime)
         targetPart = nil
     end
 
-    -- Disparo automatico no alvo acompanhado quando a cabeca esta visivel.
-    -- Nao depende do ESP estar ligado: a visibilidade e verificada por raycast.
+    --==================================================
+    -- TIRO AUTOMATICO
+    --==================================================
+
     autoFireTimer += deltaTime
 
-    if Settings.AutoFire
-        and CombatAllowed()
+    local autoFireReady = false
+
+    if wantsAutoFire
         and CurrentTarget
         and CurrentTarget:IsA("Player")
-        and targetCharacter
-        and autoFireTimer >= 0.18 then
+        and targetCharacter then
 
         local targetHead = targetCharacter:FindFirstChild("Head")
+
         local headIsGreen = targetHead
             and targetHead:IsA("BasePart")
             and HasClearHeadLineOfSight(targetCharacter, targetHead)
 
         if headIsGreen then
-            local localCharacter = Player.Character
-            local equippedTool = localCharacter
-                and localCharacter:FindFirstChildOfClass("Tool")
+            autoFireReady = true
+            AutoFireTargetStatus.Text =
+                "Alvo: visivel - pronto para disparar"
 
-            if equippedTool
-                and equippedTool.Parent == localCharacter
-                and equippedTool.Enabled then
+            AutoFireSensor.BackgroundColor3 =
+                Color3.fromRGB(20, 220, 85)
 
-                -- Respeita o intervalo minimo entre ativacoes.
-                autoFireTimer = 0
+            if autoFireTimer >= 0.18 then
+                local localCharacter = Player.Character
+                local equippedTool = localCharacter
+                    and localCharacter:FindFirstChildOfClass("Tool")
 
-                local activated, activationError = pcall(function()
-                    equippedTool:Activate()
-                end)
+                if equippedTool
+                    and equippedTool.Parent == localCharacter
+                    and equippedTool.Enabled then
 
-                if not activated then
-                    SetAIEvent(
-                        "falha ao ativar a ferramenta: "
-                        .. tostring(activationError)
-                    )
+                    autoFireTimer = 0
+
+                    local activated, activationError = pcall(function()
+                        equippedTool:Activate()
+                    end)
+
+                    if activated then
+                        SetAIEvent(
+                            "disparo automatico: "
+                            .. GetTargetName(CurrentTarget)
+                        )
+                    else
+                        SetAIEvent(
+                            "falha ao ativar ferramenta: "
+                            .. tostring(activationError)
+                        )
+                    end
+                else
+                    AutoFireTargetStatus.Text =
+                        "Alvo visivel - equipe uma ferramenta"
+
+                    autoFireTimer = 0
                 end
-            else
-                autoFireTimer = 0
             end
         else
-            -- Rearma o disparo assim que a cabeca voltar a ficar visivel.
+            AutoFireTargetStatus.Text =
+                "Alvo: sem linha de visao"
+
+            AutoFireSensor.BackgroundColor3 =
+                Color3.fromRGB(220, 65, 45)
+
             autoFireTimer = 0
         end
     else
+        AutoFireTargetStatus.Text = CurrentTarget
+            and ("Alvo: " .. GetTargetName(CurrentTarget))
+            or "Alvo: aguardando"
+
+        AutoFireSensor.BackgroundColor3 =
+            Settings.AutoFire
+            and Color3.fromRGB(20, 160, 85)
+            or Color3.fromRGB(220, 65, 45)
+
         autoFireTimer = 0
     end
+
+    AutoFireValue.Value = autoFireReady
 
     -- Assistencia original de camera.
 
@@ -1852,7 +2104,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
             LastAIStatus = "ALVO ACOMPANHADO - "
                 .. GetTargetName(CurrentTarget)
 
-        elseif wantsAim or wantsPursuit then
+        elseif wantsAim or wantsPursuit or wantsAutoFire then
             LastAIStatus = "PROCURANDO ALVO NO FOV"
 
         elseif Settings.ESPPlayers or Settings.ESPBots then
@@ -1889,9 +2141,12 @@ end)
 
 RefreshNPCs()
 UpdateSensor()
+UpdateAutoFireSensor()
 UpdateCivilStatus()
 
 print("Tales Mod Menu IA Assist carregado.")
 print("ESP Player azul + Name: pronto.")
 print("ESP Bot amarelo com nome BOT: pronto.")
 print("Busca de alvos independente da ESP: pronta.")
+print("Categoria exclusiva de AutoFire: pronta.")
+print("Sensor independente do AutoFire: pronto.")
