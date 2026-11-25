@@ -1,8 +1,7 @@
---========================================================
--- BLOX F' - TALES | VERSAO 3.2
--- Interface, recursos locais e pontos de integração
--- Para uso em uma experiência Roblox que você controla.
---========================================================
+--============================================================
+-- BLOX F' - TALES 3.5
+-- SCRIPT ÚNICO — INTERFACE E RECURSOS LOCAIS
+--============================================================
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -11,989 +10,1175 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local Player = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
 
-local old = PlayerGui:FindFirstChild("BloxFTales")
-if old then old:Destroy() end
+if not Player then
+	warn("BLOX F' - TALES: execute em ambiente de jogador.")
+	return
+end
 
-local COLORS = {
-    bg = Color3.fromRGB(15, 15, 23),
-    panel = Color3.fromRGB(25, 25, 37),
-    row = Color3.fromRGB(34, 34, 48),
-    purple = Color3.fromRGB(135, 65, 220),
-    green = Color3.fromRGB(40, 190, 105),
-    gray = Color3.fromRGB(75, 75, 85),
-    white = Color3.fromRGB(255, 255, 255),
-    red = Color3.fromRGB(190, 55, 65)
+local Character, Humanoid, Root
+
+local function UpdateCharacter()
+	Character = Player.Character or Player.CharacterAdded:Wait()
+	Humanoid = Character:WaitForChild("Humanoid")
+	Root = Character:WaitForChild("HumanoidRootPart")
+end
+
+UpdateCharacter()
+
+Player.CharacterAdded:Connect(function()
+	task.wait(0.5)
+	UpdateCharacter()
+end)
+
+--============================================================
+-- CONFIGURAÇÕES
+--============================================================
+
+local Config = {
+	WalkSpeed = 16,
+	JumpPower = 50,
+	FlySpeed = 65,
+
+	AimAssist = false,
+	AimDistance = 500,
+	AimFOVLimit = true,
+	AimTarget = nil,
+
+	FOVEnabled = true,
+	FOVSize = 150,
+
+	CombatDistance = 300,
+	AutoAttack = false,
+	AutoHaki = false,
+	AutoSkills = false,
+
+	Fly = false,
+	Noclip = false,
+	InfiniteJump = false,
+
+	ESPPlayers = false,
+	ESPNPCs = false,
+	ESPBosses = false,
+	ESPFruits = false,
+	ESPChests = false,
+
+	AutoFarm = false,
+	AutoChest = false,
+	AutoFruit = false,
+	AutoMission = false,
+	AutoEvolution = false,
+	AutoRewards = false,
+
+	SelectedFruit = nil,
+	SelectedEnemy = nil,
+	SelectedMission = nil,
+	SelectedPlayer = nil,
+	SelectedIsland = nil,
 }
 
-local states = {}
-local connections = {}
-local playerHighlights = {}
-local objectHighlights = {}
+--============================================================
+-- REMOTES DO JOGO
+--============================================================
 
-local selectedPlayer
-local infiniteJump = false
-local noclip = false
-local flying = false
-local espPlayers = false
-local espEnemies = false
-local showNames = false
-local showDistances = false
-local fruitFinder = false
-local chestFinder = false
-local destroyed = false
+local Remotes = ReplicatedStorage:FindFirstChild("BloxFTalesRemotes")
 
-local walkSpeed = 16
-local jumpPower = 50
-local flySpeed = 60
-local flyConnection
-local bodyVelocity
-local bodyGyro
-local collisionCache = {}
+local function ServerAction(action, data)
+	if not Remotes then
+		return false
+	end
 
-local Screen = Instance.new("ScreenGui")
-Screen.Name = "BloxFTales"
-Screen.ResetOnSpawn = false
-Screen.IgnoreGuiInset = true
-Screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-Screen.Parent = PlayerGui
+	local remote = Remotes:FindFirstChild("Action")
+
+	if remote and remote:IsA("RemoteEvent") then
+		remote:FireServer(action, data or {})
+		return true
+	end
+
+	return false
+end
+
+--============================================================
+-- INTERFACE
+--============================================================
+
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "BLOX_F_TALES_35"
+Gui.ResetOnSpawn = false
+Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+Gui.Parent = Player:WaitForChild("PlayerGui")
 
 local Main = Instance.new("Frame")
-Main.Name = "Main"
-Main.Size = UDim2.fromOffset(620, 430)
-Main.Position = UDim2.new(0.5, -310, 0.5, -215)
-Main.BackgroundColor3 = COLORS.bg
+Main.Size = UDim2.fromOffset(570, 430)
+Main.Position = UDim2.new(0.5, -285, 0.5, -215)
+Main.BackgroundColor3 = Color3.fromRGB(18, 12, 30)
 Main.BorderSizePixel = 0
-Main.ClipsDescendants = true
-Main.Parent = Screen
+Main.Active = true
+Main.Parent = Gui
+
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 
-local stroke = Instance.new("UIStroke", Main)
-stroke.Color = COLORS.purple
-stroke.Thickness = 2
+local Stroke = Instance.new("UIStroke")
+Stroke.Color = Color3.fromRGB(145, 65, 255)
+Stroke.Thickness = 2
+Stroke.Parent = Main
 
 local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, 48)
-Header.BackgroundColor3 = Color3.fromRGB(38, 25, 58)
+Header.Size = UDim2.new(1, 0, 0, 42)
+Header.BackgroundColor3 = Color3.fromRGB(43, 20, 75)
 Header.BorderSizePixel = 0
 Header.Parent = Main
+
 Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 12)
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -105, 1, 0)
-Title.Position = UDim2.fromOffset(14, 0)
+Title.Size = UDim2.new(1, -110, 1, 0)
+Title.Position = UDim2.fromOffset(12, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  3.2"
-Title.TextColor3 = COLORS.white
+Title.Text = "BLOX F' - TALES 3.5"
+Title.TextColor3 = Color3.new(1, 1, 1)
 Title.Font = Enum.Font.GothamBold
-Title.TextSize = 18
+Title.TextSize = 16
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = Header
 
-local Min = Instance.new("TextButton")
-Min.Size = UDim2.fromOffset(32, 32)
-Min.Position = UDim2.new(1, -78, 0, 8)
-Min.BackgroundColor3 = COLORS.purple
-Min.Text = "–"
-Min.TextColor3 = COLORS.white
-Min.Font = Enum.Font.GothamBold
-Min.TextSize = 20
-Min.Parent = Header
-Instance.new("UICorner", Min).CornerRadius = UDim.new(0, 8)
+local Minimize = Instance.new("TextButton")
+Minimize.Size = UDim2.fromOffset(34, 28)
+Minimize.Position = UDim2.new(1, -78, 0, 7)
+Minimize.Text = "—"
+Minimize.Font = Enum.Font.GothamBold
+Minimize.TextSize = 18
+Minimize.BackgroundColor3 = Color3.fromRGB(95, 50, 150)
+Minimize.TextColor3 = Color3.new(1, 1, 1)
+Minimize.Parent = Header
 
 local Close = Instance.new("TextButton")
-Close.Size = UDim2.fromOffset(32, 32)
-Close.Position = UDim2.new(1, -40, 0, 8)
-Close.BackgroundColor3 = COLORS.red
+Close.Size = UDim2.fromOffset(34, 28)
+Close.Position = UDim2.new(1, -39, 0, 7)
 Close.Text = "X"
-Close.TextColor3 = COLORS.white
 Close.Font = Enum.Font.GothamBold
-Close.TextSize = 14
+Close.TextSize = 15
+Close.BackgroundColor3 = Color3.fromRGB(150, 35, 65)
+Close.TextColor3 = Color3.new(1, 1, 1)
 Close.Parent = Header
-Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 8)
 
-local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0, 145, 1, -60)
-Sidebar.Position = UDim2.fromOffset(8, 54)
-Sidebar.BackgroundColor3 = COLORS.panel
-Sidebar.BorderSizePixel = 0
-Sidebar.Parent = Main
-Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 9)
+local Tabs = Instance.new("Frame")
+Tabs.Size = UDim2.new(0, 135, 1, -52)
+Tabs.Position = UDim2.fromOffset(8, 48)
+Tabs.BackgroundColor3 = Color3.fromRGB(27, 18, 42)
+Tabs.BorderSizePixel = 0
+Tabs.Parent = Main
 
-local tabLayout = Instance.new("UIListLayout")
-tabLayout.Padding = UDim.new(0, 6)
-tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
-tabLayout.Parent = Sidebar
+local TabLayout = Instance.new("UIListLayout")
+TabLayout.Padding = UDim.new(0, 5)
+TabLayout.Parent = Tabs
+
+local TabPadding = Instance.new("UIPadding")
+TabPadding.PaddingTop = UDim.new(0, 7)
+TabPadding.PaddingLeft = UDim.new(0, 5)
+TabPadding.PaddingRight = UDim.new(0, 5)
+TabPadding.Parent = Tabs
 
 local Content = Instance.new("ScrollingFrame")
-Content.Size = UDim2.new(1, -166, 1, -60)
-Content.Position = UDim2.fromOffset(158, 54)
-Content.BackgroundColor3 = COLORS.panel
+Content.Size = UDim2.new(1, -160, 1, -58)
+Content.Position = UDim2.fromOffset(150, 50)
+Content.BackgroundColor3 = Color3.fromRGB(24, 16, 37)
 Content.BorderSizePixel = 0
-Content.ScrollBarThickness = 4
-Content.ScrollBarImageColor3 = COLORS.purple
-Content.CanvasSize = UDim2.new(0, 0, 0, 0)
+Content.ScrollBarThickness = 5
+Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Content.CanvasSize = UDim2.new()
 Content.Parent = Main
-Instance.new("UICorner", Content).CornerRadius = UDim.new(0, 9)
 
-local contentLayout = Instance.new("UIListLayout")
-contentLayout.Padding = UDim.new(0, 7)
-contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-contentLayout.Parent = Content
+local ContentLayout = Instance.new("UIListLayout")
+ContentLayout.Padding = UDim.new(0, 7)
+ContentLayout.Parent = Content
 
-local padding = Instance.new("UIPadding")
-padding.PaddingTop = UDim.new(0, 8)
-padding.PaddingBottom = UDim.new(0, 8)
-padding.PaddingLeft = UDim.new(0, 8)
-padding.PaddingRight = UDim.new(0, 8)
-padding.Parent = Content
+local Padding = Instance.new("UIPadding")
+Padding.PaddingTop = UDim.new(0, 8)
+Padding.PaddingLeft = UDim.new(0, 8)
+Padding.PaddingRight = UDim.new(0, 8)
+Padding.PaddingBottom = UDim.new(0, 8)
+Padding.Parent = Content
 
-contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    Content.CanvasSize = UDim2.new(0, 0, 0, contentLayout.AbsoluteContentSize.Y + 18)
-end)
+--============================================================
+-- COMPONENTES
+--============================================================
 
-local function setStatus(message)
-    local label = _G.BloxFTalesStatus
-    if label and label.Parent then
-        label.Text = "Status: " .. tostring(message)
-    end
+local function Label(text)
+	local obj = Instance.new("TextLabel")
+	obj.Size = UDim2.new(1, -8, 0, 27)
+	obj.BackgroundTransparency = 1
+	obj.Text = text
+	obj.TextColor3 = Color3.fromRGB(210, 190, 240)
+	obj.Font = Enum.Font.GothamBold
+	obj.TextSize = 13
+	obj.TextXAlignment = Enum.TextXAlignment.Left
+	obj.Parent = Content
+	return obj
 end
 
-local function tween(object, properties, duration)
-    TweenService:Create(
-        object,
-        TweenInfo.new(duration or 0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-        properties
-    ):Play()
+local function Button(text, callback, parent)
+	local obj = Instance.new("TextButton")
+	obj.Size = UDim2.new(1, -8, 0, 32)
+	obj.BackgroundColor3 = Color3.fromRGB(65, 35, 105)
+	obj.TextColor3 = Color3.new(1, 1, 1)
+	obj.Text = text
+	obj.Font = Enum.Font.Gotham
+	obj.TextSize = 12
+	obj.Parent = parent or Content
+
+	Instance.new("UICorner", obj).CornerRadius = UDim.new(0, 6)
+
+	obj.MouseButton1Click:Connect(callback)
+	return obj
 end
 
-local function clearContent()
-    for _, child in ipairs(Content:GetChildren()) do
-        if child ~= contentLayout and child ~= padding then
-            child:Destroy()
-        end
-    end
+local function Toggle(text, initial, callback)
+	local enabled = initial == true
+	local obj
+
+	obj = Button(text .. ": " .. (enabled and "ATIVADO" or "DESATIVADO"), function()
+		enabled = not enabled
+		obj.Text = text .. ": " .. (enabled and "ATIVADO" or "DESATIVADO")
+		obj.BackgroundColor3 = enabled
+			and Color3.fromRGB(105, 50, 170)
+			or Color3.fromRGB(65, 35, 105)
+
+		callback(enabled)
+	end)
+
+	return obj
 end
 
-local function makeLabel(text, height)
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -4, 0, height or 34)
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = COLORS.white
-    label.TextSize = 13
-    label.Font = Enum.Font.Gotham
-    label.TextWrapped = true
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = Content
-    return label
+local function Slider(text, minValue, maxValue, initial, callback)
+	Label(text)
+
+	local holder = Instance.new("Frame")
+	holder.Size = UDim2.new(1, -8, 0, 42)
+	holder.BackgroundTransparency = 1
+	holder.Parent = Content
+
+	local valueLabel = Instance.new("TextLabel")
+	valueLabel.Size = UDim2.new(1, 0, 0, 18)
+	valueLabel.BackgroundTransparency = 1
+	valueLabel.TextColor3 = Color3.new(1, 1, 1)
+	valueLabel.Font = Enum.Font.Gotham
+	valueLabel.TextSize = 12
+	valueLabel.TextXAlignment = Enum.TextXAlignment.Left
+	valueLabel.Parent = holder
+
+	local bar = Instance.new("TextButton")
+	bar.Size = UDim2.new(1, 0, 0, 12)
+	bar.Position = UDim2.fromOffset(0, 24)
+	bar.Text = ""
+	bar.BackgroundColor3 = Color3.fromRGB(55, 40, 75)
+	bar.Parent = holder
+
+	local fill = Instance.new("Frame")
+	fill.BackgroundColor3 = Color3.fromRGB(155, 75, 255)
+	fill.BorderSizePixel = 0
+	fill.Parent = bar
+
+	local dragging = false
+	local value = initial
+
+	local function SetValue(newValue)
+		value = math.clamp(math.floor(newValue), minValue, maxValue)
+		local percent = (value - minValue) / (maxValue - minValue)
+		fill.Size = UDim2.new(percent, 0, 1, 0)
+		valueLabel.Text = text .. ": " .. value
+		callback(value)
+	end
+
+	local function Update(input)
+		local percent = math.clamp(
+			(input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X,
+			0,
+			1
+		)
+		SetValue(minValue + (maxValue - minValue) * percent)
+	end
+
+	bar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			Update(input)
+		end
+	end)
+
+	UIS.InputChanged:Connect(function(input)
+		if dragging and (
+			input.UserInputType == Enum.UserInputType.MouseMovement
+			or input.UserInputType == Enum.UserInputType.Touch
+		) then
+			Update(input)
+		end
+	end)
+
+	UIS.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+
+	SetValue(initial)
 end
 
-local function makeButton(text, callback, color)
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, -4, 0, 38)
-    button.BackgroundColor3 = color or COLORS.row
-    button.Text = text
-    button.TextColor3 = COLORS.white
-    button.TextSize = 13
-    button.Font = Enum.Font.GothamSemibold
-    button.TextWrapped = true
-    button.Parent = Content
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
-
-    button.MouseButton1Click:Connect(function()
-        if callback then
-            local ok, err = pcall(callback)
-            if not ok then setStatus("Erro: " .. tostring(err)) end
-        end
-    end)
-    return button
+local function ClearContent()
+	for _, child in ipairs(Content:GetChildren()) do
+		if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+			child:Destroy()
+		end
+	end
 end
 
-local function makeToggle(name, callback, initial)
-    if states[name] == nil then states[name] = initial or false end
+local function Catalog(title, items, callback)
+	Label(title)
 
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -4, 0, 40)
-    row.BackgroundColor3 = COLORS.row
-    row.BorderSizePixel = 0
-    row.Parent = Content
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
+	local expanded = true
+	local container = Instance.new("Frame")
+	container.Size = UDim2.new(1, -8, 0, 0)
+	container.BackgroundTransparency = 1
+	container.AutomaticSize = Enum.AutomaticSize.Y
+	container.Parent = Content
 
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -78, 1, 0)
-    label.Position = UDim2.fromOffset(10, 0)
-    label.BackgroundTransparency = 1
-    label.Text = name
-    label.TextColor3 = COLORS.white
-    label.TextSize = 12
-    label.Font = Enum.Font.Gotham
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = row
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 4)
+	layout.Parent = container
 
-    local switch = Instance.new("TextButton")
-    switch.Size = UDim2.fromOffset(46, 23)
-    switch.Position = UDim2.new(1, -56, 0.5, -11)
-    switch.Text = ""
-    switch.AutoButtonColor = false
-    switch.Parent = row
-    Instance.new("UICorner", switch).CornerRadius = UDim.new(1, 0)
+	local toggleButton = Button("Ocultar catálogo", function()
+		expanded = not expanded
+		for _, child in ipairs(container:GetChildren()) do
+			if child:IsA("TextButton") and child ~= toggleButton then
+				child.Visible = expanded
+			end
+		end
+		toggleButton.Text = expanded and "Ocultar catálogo" or "Mostrar catálogo"
+	end, container)
 
-    local dot = Instance.new("Frame")
-    dot.Size = UDim2.fromOffset(17, 17)
-    dot.Position = UDim2.fromOffset(3, 3)
-    dot.BackgroundColor3 = COLORS.white
-    dot.Parent = switch
-    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+	local buttons = {}
 
-    local function update()
-        tween(switch, {
-            BackgroundColor3 = states[name] and COLORS.green or COLORS.gray
-        }, 0.15)
-        tween(dot, {
-            Position = states[name] and UDim2.fromOffset(26, 3) or UDim2.fromOffset(3, 3)
-        }, 0.15)
-    end
+	for _, item in ipairs(items) do
+		local selected = false
 
-    update()
-    switch.MouseButton1Click:Connect(function()
-        states[name] = not states[name]
-        update()
-        if callback then
-            local ok, err = pcall(callback, states[name])
-            if not ok then setStatus("Erro em " .. name .. ": " .. tostring(err)) end
-        end
-    end)
-    return row
+		local obj = Button("□  " .. item, function()
+			selected = not selected
+			obj.Text = (selected and "☑  " or "□  ") .. item
+			obj.BackgroundColor3 = selected
+				and Color3.fromRGB(105, 55, 165)
+				or Color3.fromRGB(65, 35, 105)
+
+			if selected then
+				callback(item)
+			elseif not selected then
+				callback(nil)
+			end
+		end, container)
+
+		table.insert(buttons, obj)
+	end
+
+	return container
 end
 
-local function getCharacter()
-    return LocalPlayer.Character
-end
-
-local function getHumanoid(character)
-    return character and character:FindFirstChildOfClass("Humanoid")
-end
-
-local function getRoot(character)
-    return character and character:FindFirstChild("HumanoidRootPart")
-end
-
-local function teleportLocal(destination)
-    local character = getCharacter()
-    if not getRoot(character) then
-        setStatus("Personagem ainda não carregou.")
-        return false
-    end
-    if typeof(destination) == "Vector3" then
-        destination = CFrame.new(destination + Vector3.new(0, 4, 0))
-    end
-    if typeof(destination) ~= "CFrame" then return false end
-    character:PivotTo(destination)
-    return true
-end
-
-local function findNamedWorldObject(names)
-    for _, item in ipairs(Workspace:GetDescendants()) do
-        local lower = string.lower(item.Name)
-        for _, name in ipairs(names) do
-            if string.find(lower, string.lower(name), 1, true) then
-                if item:IsA("BasePart") then return item end
-                if item:IsA("Model") then
-                    local part = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)
-                    if part then return part end
-                end
-            end
-        end
-    end
-end
-
-local function removeBucket(bucket)
-    for object, adornment in pairs(bucket) do
-        if adornment and adornment.Parent then adornment:Destroy() end
-        bucket[object] = nil
-    end
-end
-
-local function makeHighlight(object, color, bucket)
-    if bucket[object] or not object or not object.Parent then return end
-    local h = Instance.new("Highlight")
-    h.FillColor = color
-    h.OutlineColor = COLORS.white
-    h.FillTransparency = 0.65
-    h.Adornee = object
-    h.Parent = Screen
-    bucket[object] = h
-end
-
-local function isEnemyModel(model)
-    if not model:IsA("Model") or Players:GetPlayerFromCharacter(model) then return false end
-    if not getHumanoid(model) or not getRoot(model) then return false end
-    local name = string.lower(model.Name)
-    return string.find(name, "enemy", 1, true)
-        or string.find(name, "bandit", 1, true)
-        or string.find(name, "boss", 1, true)
-        or string.find(name, "npc", 1, true)
-end
-
-local function refreshVisuals()
-    removeBucket(playerHighlights)
-
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            local character = player.Character
-            if espPlayers then
-                makeHighlight(character, COLORS.purple, playerHighlights)
-            end
-
-            if showNames or showDistances then
-                local head = character:FindFirstChild("Head")
-                if head then
-                    local oldTag = head:FindFirstChild("BloxFTalesTag")
-                    if oldTag then oldTag:Destroy() end
-
-                    local tag = Instance.new("BillboardGui")
-                    tag.Name = "BloxFTalesTag"
-                    tag.Size = UDim2.fromOffset(190, 28)
-                    tag.StudsOffset = Vector3.new(0, 2.5, 0)
-                    tag.AlwaysOnTop = true
-                    tag.Adornee = head
-                    tag.Parent = head
-
-                    local text = Instance.new("TextLabel")
-                    text.Size = UDim2.fromScale(1, 1)
-                    text.BackgroundTransparency = 1
-                    text.TextColor3 = COLORS.white
-                    text.TextStrokeTransparency = 0.2
-                    text.Font = Enum.Font.GothamBold
-                    text.TextSize = 12
-                    text.Parent = tag
-
-                    local a = getRoot(getCharacter())
-                    local b = getRoot(character)
-                    local distance = (a and b) and math.floor((a.Position - b.Position).Magnitude) or 0
-
-                    text.Text = (showNames and player.DisplayName or "")
-                        .. ((showNames and showDistances) and " | " or "")
-                        .. (showDistances and (distance .. " studs") or "")
-                    playerHighlights[tag] = tag
-                end
-            end
-        end
-    end
-end
-
-local function scanWorld()
-    for _, item in ipairs(Workspace:GetDescendants()) do
-        local name = string.lower(item.Name)
-
-        if fruitFinder and (string.find(name, "fruit", 1, true) or string.find(name, "fruta", 1, true)) then
-            if item:IsA("Model") or item:IsA("BasePart") then
-                makeHighlight(item, COLORS.green, objectHighlights)
-            end
-        end
-
-        if chestFinder and (string.find(name, "chest", 1, true) or string.find(name, "baú", 1, true)) then
-            if item:IsA("Model") or item:IsA("BasePart") then
-                makeHighlight(item, COLORS.purple, objectHighlights)
-            end
-        end
-
-        if espEnemies and isEnemyModel(item) then
-            makeHighlight(item, COLORS.red, objectHighlights)
-        end
-    end
-
-    for object, adornment in pairs(objectHighlights) do
-        if not object.Parent then
-            if adornment then adornment:Destroy() end
-            objectHighlights[object] = nil
-        end
-    end
-end
-
-local function makeSpeedControl()
-    makeLabel("Velocidade de caminhada:", 26)
-    local box = Instance.new("TextBox")
-    box.Size = UDim2.new(1, -4, 0, 38)
-    box.BackgroundColor3 = COLORS.row
-    box.TextColor3 = COLORS.white
-    box.Text = tostring(walkSpeed)
-    box.ClearTextOnFocus = false
-    box.Parent = Content
-    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
-
-    box.FocusLost:Connect(function()
-        local value = tonumber(box.Text)
-        if not value then box.Text = tostring(walkSpeed) return end
-        walkSpeed = math.clamp(value, 0, 100)
-        local hum = getHumanoid(getCharacter())
-        if hum then hum.WalkSpeed = walkSpeed end
-        box.Text = tostring(walkSpeed)
-        setStatus("Velocidade definida: " .. walkSpeed)
-    end)
-
-    makeLabel("Força do pulo:", 26)
-    local jumpBox = Instance.new("TextBox")
-    jumpBox.Size = UDim2.new(1, -4, 0, 38)
-    jumpBox.BackgroundColor3 = COLORS.row
-    jumpBox.TextColor3 = COLORS.white
-    jumpBox.Text = tostring(jumpPower)
-    jumpBox.ClearTextOnFocus = false
-    jumpBox.Parent = Content
-    Instance.new("UICorner", jumpBox).CornerRadius = UDim.new(0, 7)
-
-    jumpBox.FocusLost:Connect(function()
-        local value = tonumber(jumpBox.Text)
-        if not value then jumpBox.Text = tostring(jumpPower) return end
-        jumpPower = math.clamp(value, 0, 150)
-        local hum = getHumanoid(getCharacter())
-        if hum then
-            hum.UseJumpPower = true
-            hum.JumpPower = jumpPower
-        end
-        jumpBox.Text = tostring(jumpPower)
-        setStatus("Pulo definido: " .. jumpPower)
-    end)
-end
-
-local function stopFlight()
-    flying = false
-    if flyConnection then flyConnection:Disconnect() flyConnection = nil end
-
-    local root = getRoot(getCharacter())
-    if root then
-        local bv = root:FindFirstChild("BloxFTalesVelocity")
-        local bg = root:FindFirstChild("BloxFTalesGyro")
-        if bv then bv:Destroy() end
-        if bg then bg:Destroy() end
-    end
-    bodyVelocity = nil
-    bodyGyro = nil
-    setStatus("Voo desligado.")
-end
-
-local function startFlight()
-    local character = getCharacter()
-    local root = getRoot(character)
-    local hum = getHumanoid(character)
-
-    if not root or not hum then
-        setStatus("Personagem indisponível para voar.")
-        return
-    end
-
-    stopFlight()
-    flying = true
-    hum.PlatformStand = false
-
-    bodyVelocity = Instance.new("BodyVelocity")
-    bodyVelocity.Name = "BloxFTalesVelocity"
-    bodyVelocity.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-    bodyVelocity.Velocity = Vector3.zero
-    bodyVelocity.Parent = root
-
-    bodyGyro = Instance.new("BodyGyro")
-    bodyGyro.Name = "BloxFTalesGyro"
-    bodyGyro.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
-    bodyGyro.P = 1e4
-    bodyGyro.CFrame = root.CFrame
-    bodyGyro.Parent = root
-
-    flyConnection = RunService.RenderStepped:Connect(function()
-        if not flying or not root.Parent then
-            stopFlight()
-            return
-        end
-
-        local camera = Workspace.CurrentCamera
-        if not camera then return end
-
-        local direction = Vector3.zero
-        if UIS:IsKeyDown(Enum.KeyCode.W) then direction += camera.CFrame.LookVector end
-        if UIS:IsKeyDown(Enum.KeyCode.S) then direction -= camera.CFrame.LookVector end
-        if UIS:IsKeyDown(Enum.KeyCode.D) then direction += camera.CFrame.RightVector end
-        if UIS:IsKeyDown(Enum.KeyCode.A) then direction -= camera.CFrame.RightVector end
-        if UIS:IsKeyDown(Enum.KeyCode.Space) then direction += Vector3.yAxis end
-        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then direction -= Vector3.yAxis end
-
-        bodyVelocity.Velocity = direction.Magnitude > 0 and direction.Unit * flySpeed or Vector3.zero
-        bodyGyro.CFrame = camera.CFrame
-    end)
-
-    setStatus("Voo ligado: WASD, espaço sobe, Ctrl desce.")
-end
-
-local function makePlayerSelection()
-    makeLabel("Selecione um jogador:", 28)
-    local selectedLabel = makeLabel("Selecionado: nenhum", 28)
-
-    for _, target in ipairs(Players:GetPlayers()) do
-        if target ~= LocalPlayer then
-            makeButton(target.DisplayName .. " (@" .. target.Name .. ")", function()
-                selectedPlayer = target
-                selectedLabel.Text = "Selecionado: " .. target.Name
-                setStatus("Jogador selecionado.")
-            end)
-        end
-    end
-
-    makeButton("CONFIRMAR: IR ATÉ O JOGADOR", function()
-        if not selectedPlayer or not selectedPlayer.Parent then
-            setStatus("Selecione um jogador válido.")
-            return
-        end
-        local root = getRoot(selectedPlayer.Character)
-        if not root then setStatus("Personagem do jogador indisponível.") return end
-        teleportLocal(root.CFrame * CFrame.new(0, 0, 5))
-        setStatus("Teleporte local solicitado.")
-    end, COLORS.purple)
-end
-
-local function makeCoordinateControls()
-    makeLabel("Digite as coordenadas de destino:", 30)
-    local boxes = {}
-
-    for _, axis in ipairs({"X", "Y", "Z"}) do
-        local box = Instance.new("TextBox")
-        box.Size = UDim2.new(1, -4, 0, 36)
-        box.BackgroundColor3 = COLORS.row
-        box.TextColor3 = COLORS.white
-        box.PlaceholderText = axis
-        box.ClearTextOnFocus = false
-        box.Parent = Content
-        Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
-        boxes[axis] = box
-    end
-
-    makeButton("IR PARA AS COORDENADAS", function()
-        local x, y, z = tonumber(boxes.X.Text), tonumber(boxes.Y.Text), tonumber(boxes.Z.Text)
-        if not x or not y or not z then
-            setStatus("Preencha X, Y e Z com números.")
-            return
-        end
-        local ok = teleportLocal(Vector3.new(
-            math.clamp(x, -100000, 100000),
-            math.clamp(y, -100000, 100000),
-            math.clamp(z, -100000, 100000)
-        ))
-        setStatus(ok and "Teleporte solicitado." or "Falha no teleporte.")
-    end, COLORS.purple)
-end
-
--- Integração opcional para a experiência que você controla:
--- ReplicatedStorage/BloxFTalesRemotes/<NomeDaAcao>
--- Cada RemoteEvent deve ser criado e validado pelo servidor.
-local function requestOwnedGameFeature(featureName, enabled)
-    local folder = ReplicatedStorage:FindFirstChild("BloxFTalesRemotes")
-    if not folder then
-        setStatus(featureName .. ": integração do servidor não encontrada.")
-        return
-    end
-
-    local remote = folder:FindFirstChild(featureName)
-    if not remote or not remote:IsA("RemoteEvent") then
-        setStatus(featureName .. ": RemoteEvent não configurado.")
-        return
-    end
-
-    remote:FireServer(enabled)
-    setStatus(featureName .. ": solicitação enviada ao servidor.")
-end
-
-local function showCategory(category)
-    clearContent()
-    Content.CanvasPosition = Vector2.zero
-
-    if category == "Início" then
-        makeLabel("BLOX F' - TALES 3.2", 36)
-        makeLabel("Painel atualizado. Arraste pelo cabeçalho; use – para minimizar.", 48)
-        local status = makeLabel("Status: pronto", 28)
-        _G.BloxFTalesStatus = status
-
-        local coords = makeLabel("Coordenadas: aguardando personagem...", 28)
-        task.spawn(function()
-            while Screen.Parent and coords.Parent do
-                local root = getRoot(getCharacter())
-                coords.Text = root
-                    and ("Coordenadas: " .. math.floor(root.Position.X) .. ", "
-                    .. math.floor(root.Position.Y) .. ", " .. math.floor(root.Position.Z))
-                    or "Coordenadas: personagem indisponível"
-                task.wait(0.25)
-            end
-        end)
-
-        makeLabel("Recursos que dependem do servidor precisam da integração oficial da sua experiência.", 55)
-
-    elseif category == "Combate" then
-        makeLabel("Opções de combate. As ações de servidor precisam dos RemoteEvents configurados na sua experiência.", 55)
-
-        makeToggle("Mira assistida", function(on)
-            requestOwnedGameFeature("MiraAssistida", on)
-        end)
-
-        makeToggle("Área de acerto visual", function(on)
-            setStatus(on and "Área visual ligada." or "Área visual desligada.")
-        end)
-
-        makeToggle("Haki automático", function(on)
-            requestOwnedGameFeature("HakiAutomatico", on)
-        end)
-
-        makeToggle("Habilidades automáticas", function(on)
-            requestOwnedGameFeature("HabilidadesAutomaticas", on)
-        end)
-
-        makeToggle("Ataque automático", function(on)
-            requestOwnedGameFeature("AtaqueAutomatico", on)
-        end)
-
-    elseif category == "Frutas" then
-        makeToggle("Localizador de frutas", function(on)
-            fruitFinder = on
-            if not on then removeBucket(objectHighlights) end
-            setStatus(on and "Procurando frutas replicadas no mapa." or "Localizador desligado.")
-        end)
-
-        makeToggle("Detector de frutas", function(on)
-            fruitFinder = on
-            setStatus(on and "Detector ligado." or "Detector desligado.")
-        end)
-
-        makeLabel("O detector procura objetos replicados com 'fruit' ou 'fruta' no nome.", 48)
-
-    elseif category == "Jogador" then
-        makeSpeedControl()
-
-        makeToggle("Voar", function(on)
-            if on then startFlight() else stopFlight() end
-        end)
-
-        makeToggle("Pulo infinito", function(on)
-            infiniteJump = on
-            setStatus(on and "Pulo infinito ligado." or "Pulo infinito desligado.")
-        end)
-
-        makeToggle("Atravessar paredes", function(on)
-            noclip = on
-            setStatus(on and "Noclip local ligado." or "Noclip local desligado.")
-        end)
-
-        makeLabel("Voo: use WASD, espaço para subir e Ctrl para descer.", 45)
-
-    elseif category == "Teletransporte" then
-        makeLabel("Teletransporte por nomes de objetos encontrados no Workspace:", 45)
-
-        local islands = {
-            {"Ilha 1", {"Island1", "Ilha1", "Island 1", "Ilha 1"}},
-            {"Ilha 2", {"Island2", "Ilha2", "Island 2", "Ilha 2"}},
-            {"Ilha 3", {"Island3", "Ilha3", "Island 3", "Ilha 3"}}
-        }
-
-        for _, data in ipairs(islands) do
-            makeButton("TELETRANSPORTE " .. string.upper(data[1]), function()
-                local target = findNamedWorldObject(data[2])
-                if target then
-                    teleportLocal(target.CFrame * CFrame.new(0, 5, 0))
-                    setStatus("Indo para " .. data[1] .. ".")
-                else
-                    setStatus(data[1] .. " não encontrada pelo nome.")
-                end
-            end)
-        end
-
-        makeLabel("Teletransporte por coordenadas:", 28)
-        makeCoordinateControls()
-        makeLabel("Teletransporte até jogador:", 28)
-        makePlayerSelection()
-
-    elseif category == "Coleta e evolução" then
-        makeLabel("Ações de coleta e progressão via integração oficial do servidor.", 48)
-
-        makeToggle("Coleta automática", function(on)
-            requestOwnedGameFeature("ColetaAutomatica", on)
-        end)
-
-        makeToggle("Missões automáticas", function(on)
-            requestOwnedGameFeature("MissoesAutomaticas", on)
-        end)
-
-        makeToggle("Evolução automática", function(on)
-            requestOwnedGameFeature("EvolucaoAutomatica", on)
-        end)
-
-        makeToggle("Coleta de recompensas", function(on)
-            requestOwnedGameFeature("ColetaRecompensas", on)
-        end)
-
-    elseif category == "Visualização" then
-        makeToggle("Destacar jogadores", function(on)
-            espPlayers = on
-            refreshVisuals()
-        end)
-
-        makeToggle("Destacar inimigos", function(on)
-            espEnemies = on
-            if not on then removeBucket(objectHighlights) end
-            scanWorld()
-        end)
-
-        makeToggle("Destacar frutas", function(on)
-            fruitFinder = on
-            if not on then removeBucket(objectHighlights) end
-            scanWorld()
-        end)
-
-        makeToggle("Destacar baús", function(on)
-            chestFinder = on
-            if not on then removeBucket(objectHighlights) end
-            scanWorld()
-        end)
-
-        makeToggle("Mostrar nomes", function(on)
-            showNames = on
-            refreshVisuals()
-        end)
-
-        makeToggle("Mostrar distâncias", function(on)
-            showDistances = on
-            refreshVisuals()
-        end)
-
-    elseif category == "Configurações" then
-        makeButton("Recentralizar painel", function()
-            Main.Position = UDim2.new(0.5, -310, 0.5, -215)
-            setStatus("Painel recentralizado.")
-        end)
-
-        makeButton("Reaplicar velocidade e pulo", function()
-            local hum = getHumanoid(getCharacter())
-            if hum then
-                hum.WalkSpeed = walkSpeed
-                hum.UseJumpPower = true
-                hum.JumpPower = jumpPower
-                setStatus("Velocidade e pulo reaplicados.")
-            end
-        end)
-
-        makeButton("Limpar destaques visuais", function()
-            espPlayers = false
-            espEnemies = false
-            showNames = false
-            showDistances = false
-            fruitFinder = false
-            chestFinder = false
-            removeBucket(playerHighlights)
-            removeBucket(objectHighlights)
-            setStatus("Destaques removidos.")
-        end)
-
-        makeToggle("Animações da interface", function(on)
-            setStatus(on and "Animações ativadas." or "Animações desativadas.")
-        end)
-
-        makeToggle("Tema personalizado", function(on)
-            Main.BackgroundColor3 = on and Color3.fromRGB(20, 15, 32) or COLORS.bg
-            setStatus("Tema atualizado.")
-        end)
-
-        makeToggle("Transparência", function(on)
-            Main.BackgroundTransparency = on and 0.12 or 0
-            setStatus("Transparência atualizada.")
-        end)
-
-        makeButton("Salvar configurações desta sessão", function()
-            setStatus("Configurações mantidas enquanto o painel estiver aberto.")
-        end)
-    end
-end
-
-local categories = {
-    "Início",
-    "Combate",
-    "Frutas",
-    "Jogador",
-    "Teletransporte",
-    "Coleta e evolução",
-    "Visualização",
-    "Configurações"
+--============================================================
+-- CATÁLOGOS DE FRUTAS
+--============================================================
+
+local Fruits = {
+	"Foguete (Rocket)", "Giro (Spin)", "Lâmina (Blade)",
+	"Mola (Spring)", "Bomba (Bomb)", "Fumaça (Smoke)",
+	"Espinho (Spike)", "Chama (Flame)", "Falcão (Falcon)",
+	"Gelo (Ice)", "Areia (Sand)", "Escuridão (Dark)",
+	"Diamante (Diamond)", "Luz (Light)", "Amor (Love)",
+	"Borracha (Rubber)", "Barreira (Barrier)", "Porta (Door)",
+	"Terremoto (Quake)", "Buda (Buddha)", "Fio (String)",
+	"Som (Sound)", "Fênix (Phoenix)", "Portal (Portal)",
+	"Rumble (Rumble)", "Pata (Pain)", "Gravidade (Gravity)",
+	"Mamute (Mammoth)", "T-Rex (T-Rex)", "Dragão (Dragon)",
+	"Leopardo (Leopard)", "Espírito (Spirit)", "Controle (Control)",
+	"Veneno (Venom)", "Sombra (Shadow)", "Alma (Soul)",
+	"Kitsune (Kitsune)", "Yeti (Yeti)", "Gás (Gas)",
 }
 
-for index, category in ipairs(categories) do
-    local tab = Instance.new("TextButton")
-    tab.Size = UDim2.new(1, -10, 0, 37)
-    tab.LayoutOrder = index
-    tab.BackgroundColor3 = category == "Início" and COLORS.purple or COLORS.row
-    tab.Text = category
-    tab.TextColor3 = COLORS.white
-    tab.TextSize = 11
-    tab.Font = Enum.Font.GothamBold
-    tab.TextWrapped = true
-    tab.Parent = Sidebar
-    Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 7)
+local Islands = {
+	"Ilha 1", "Ilha 2", "Ilha 3", "Ilha 4", "Ilha 5",
+	"Ilha 6", "Ilha 7", "Ilha 8", "Ilha 9", "Ilha 10",
+	"Ilha 11", "Ilha 12", "Mundo 1", "Mundo 2", "Mundo 3",
+}
 
-    tab.MouseButton1Click:Connect(function()
-        for _, sibling in ipairs(Sidebar:GetChildren()) do
-            if sibling:IsA("TextButton") then sibling.BackgroundColor3 = COLORS.row end
-        end
-        tab.BackgroundColor3 = COLORS.purple
-        showCategory(category)
-    end)
+local function GetPlayers()
+	local result = {}
+	for _, target in ipairs(Players:GetPlayers()) do
+		if target ~= Player then
+			table.insert(result, target.Name)
+		end
+	end
+	return result
 end
 
--- Minimizar e restaurar
-local minimized = false
-local expandedSize = Main.Size
-local expandedPosition = Main.Position
+local function GetNPCs()
+	local result = {}
+	for _, obj in ipairs(Workspace:GetDescendants()) do
+		if obj:IsA("Model")
+			and obj:FindFirstChildOfClass("Humanoid")
+			and not Players:GetPlayerFromCharacter(obj) then
+			table.insert(result, obj.Name)
+		end
+	end
+	return result
+end
 
-Min.MouseButton1Click:Connect(function()
-    minimized = not minimized
+--============================================================
+-- FOV
+--============================================================
 
-    if minimized then
-        expandedPosition = Main.Position
-        Sidebar.Visible = false
-        Content.Visible = false
-        Title.Visible = false
-        Close.Visible = false
-        Min.Position = UDim2.fromOffset(13, 13)
-        Min.Text = "↗"
-        tween(Main, {Size = UDim2.fromOffset(60, 60)}, 0.2)
-        tween(Header, {Size = UDim2.fromOffset(60, 60)}, 0.2)
-    else
-        tween(Main, {Size = expandedSize}, 0.2)
-        tween(Header, {Size = UDim2.new(1, 0, 0, 48)}, 0.2)
-        Main.Position = expandedPosition
-        Min.Position = UDim2.new(1, -78, 0, 8)
-        Min.Text = "–"
-        Sidebar.Visible = true
-        Content.Visible = true
-        Title.Visible = true
-        Close.Visible = true
-    end
+local FOVCircle = Instance.new("Frame")
+FOVCircle.Name = "FOVCircle"
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.BackgroundTransparency = 1
+FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
+FOVCircle.Size = UDim2.fromOffset(Config.FOVSize * 2, Config.FOVSize * 2)
+FOVCircle.Parent = Gui
+
+Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
+
+local FOVStroke = Instance.new("UIStroke")
+FOVStroke.Color = Color3.fromRGB(175, 90, 255)
+FOVStroke.Thickness = 2
+FOVStroke.Parent = FOVCircle
+
+RunService.RenderStepped:Connect(function()
+	if not Camera then return end
+
+	FOVCircle.Position = UDim2.fromOffset(
+		Camera.ViewportSize.X / 2,
+		Camera.ViewportSize.Y / 2
+	)
+
+	FOVCircle.Size = UDim2.fromOffset(
+		Config.FOVSize * 2,
+		Config.FOVSize * 2
+	)
+
+	FOVCircle.Visible = Config.FOVEnabled
 end)
 
--- Arrastar painel com mouse ou toque
+--============================================================
+-- AIM ASSIST
+--============================================================
+
+local function GetAimTarget()
+	if Config.AimTarget then
+		local selected = Players:FindFirstChild(Config.AimTarget)
+
+		if selected and selected.Character then
+			local targetRoot = selected.Character:FindFirstChild("HumanoidRootPart")
+			local targetHumanoid = selected.Character:FindFirstChildOfClass("Humanoid")
+
+			if targetRoot and targetHumanoid and targetHumanoid.Health > 0 then
+				return targetRoot
+			end
+		end
+	end
+
+	local bestTarget
+	local bestDistance = Config.AimDistance
+
+	for _, target in ipairs(Players:GetPlayers()) do
+		if target ~= Player and target.Character then
+			local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
+			local targetHumanoid = target.Character:FindFirstChildOfClass("Humanoid")
+
+			if targetRoot and targetHumanoid and targetHumanoid.Health > 0 and Root then
+				local distance = (Root.Position - targetRoot.Position).Magnitude
+				local screenPoint, visible = Camera:WorldToViewportPoint(targetRoot.Position)
+
+				local center = Vector2.new(
+					Camera.ViewportSize.X / 2,
+					Camera.ViewportSize.Y / 2
+				)
+
+				local screenDistance = (
+					Vector2.new(screenPoint.X, screenPoint.Y) - center
+				).Magnitude
+
+				local withinFOV = not Config.AimFOVLimit
+					or screenDistance <= Config.FOVSize
+
+				if visible and withinFOV and distance < bestDistance then
+					bestDistance = distance
+					bestTarget = targetRoot
+				end
+			end
+		end
+	end
+
+	return bestTarget
+end
+
+RunService.RenderStepped:Connect(function()
+	if not Config.AimAssist or not Root then return end
+
+	local target = GetAimTarget()
+
+	if target then
+		Camera.CFrame = CFrame.new(
+			Camera.CFrame.Position,
+			target.Position
+		)
+	end
+end)
+
+--============================================================
+-- FLY — TECLADO E ANALÓGICO
+--============================================================
+
+local FlyVelocity
+local FlyGyro
+local FlyConnection
+
+local function StopFly()
+	Config.Fly = false
+
+	if FlyConnection then
+		FlyConnection:Disconnect()
+		FlyConnection = nil
+	end
+
+	if FlyVelocity then
+		FlyVelocity:Destroy()
+		FlyVelocity = nil
+	end
+
+	if FlyGyro then
+		FlyGyro:Destroy()
+		FlyGyro = nil
+	end
+
+	if Humanoid then
+		Humanoid.PlatformStand = false
+	end
+end
+
+local function StartFly()
+	if not Root or not Humanoid then return end
+
+	StopFly()
+	Config.Fly = true
+	Humanoid.PlatformStand = true
+
+	FlyVelocity = Instance.new("BodyVelocity")
+	FlyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+	FlyVelocity.Velocity = Vector3.zero
+	FlyVelocity.Parent = Root
+
+	FlyGyro = Instance.new("BodyGyro")
+	FlyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+	FlyGyro.P = 10000
+	FlyGyro.CFrame = Camera.CFrame
+	FlyGyro.Parent = Root
+
+	FlyConnection = RunService.RenderStepped:Connect(function()
+		if not Config.Fly or not Root then return end
+
+		local direction = Humanoid.MoveDirection
+
+		if UIS:IsKeyDown(Enum.KeyCode.Space) then
+			direction += Vector3.new(0, 1, 0)
+		end
+
+		if UIS:IsKeyDown(Enum.KeyCode.LeftControl)
+			or UIS:IsKeyDown(Enum.KeyCode.C) then
+			direction -= Vector3.new(0, 1, 0)
+		end
+
+		FlyVelocity.Velocity = direction * Config.FlySpeed
+		FlyGyro.CFrame = Camera.CFrame
+	end)
+end
+
+--============================================================
+-- NOCLIP
+--============================================================
+
+local NoclipConnection
+
+local function SetNoclip(enabled)
+	Config.Noclip = enabled
+
+	if NoclipConnection then
+		NoclipConnection:Disconnect()
+		NoclipConnection = nil
+	end
+
+	if enabled then
+		NoclipConnection = RunService.Stepped:Connect(function()
+			if not Character then return end
+
+			for _, part in ipairs(Character:GetDescendants()) do
+				if part:IsA("BasePart") then
+					part.CanCollide = false
+				end
+			end
+		end)
+	else
+		if Character then
+			for _, part in ipairs(Character:GetDescendants()) do
+				if part:IsA("BasePart") then
+					part.CanCollide = true
+				end
+			end
+		end
+	end
+end
+
+--============================================================
+-- INFINITE JUMP
+--============================================================
+
+UIS.JumpRequest:Connect(function()
+	if Config.InfiniteJump and Humanoid then
+		Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	end
+end)
+
+--============================================================
+-- ESP
+--============================================================
+
+local ESPObjects = {}
+
+local function ClearESP()
+	for _, highlight in pairs(ESPObjects) do
+		if highlight then
+			highlight:Destroy()
+		end
+	end
+
+	table.clear(ESPObjects)
+end
+
+local function AddESP(obj, color)
+	if not obj or ESPObjects[obj] then return end
+
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "BloxFTalesESP"
+	highlight.Adornee = obj
+	highlight.FillColor = color
+	highlight.OutlineColor = color
+	highlight.FillTransparency = 0.8
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.Parent = Gui
+
+	ESPObjects[obj] = highlight
+end
+
+local function RefreshESP()
+	ClearESP()
+
+	for _, target in ipairs(Players:GetPlayers()) do
+		if target ~= Player and target.Character and Config.ESPPlayers then
+			AddESP(target.Character, Color3.fromRGB(80, 170, 255))
+		end
+	end
+
+	for _, obj in ipairs(Workspace:GetDescendants()) do
+		if not obj:IsA("Model") then continue end
+
+		local isPlayer = Players:GetPlayerFromCharacter(obj)
+		local humanoid = obj:FindFirstChildOfClass("Humanoid")
+		local name = string.lower(obj.Name)
+
+		if humanoid and not isPlayer then
+			if Config.ESPBosses and string.find(name, "boss") then
+				AddESP(obj, Color3.fromRGB(255, 50, 50))
+			elseif Config.ESPNPCs then
+				AddESP(obj, Color3.fromRGB(255, 190, 70))
+			end
+		end
+
+		if Config.ESPFruits and string.find(name, "fruit") then
+			AddESP(obj, Color3.fromRGB(80, 255, 130))
+		end
+
+		if Config.ESPChests and string.find(name, "chest") then
+			AddESP(obj, Color3.fromRGB(255, 220, 70))
+		end
+	end
+end
+
+task.spawn(function()
+	while Gui.Parent do
+		RefreshESP()
+		task.wait(2)
+	end
+end)
+
+--============================================================
+-- LOCALIZADOR
+--============================================================
+
+local function FindObjects(keyword)
+	local found = {}
+
+	for _, obj in ipairs(Workspace:GetDescendants()) do
+		if string.find(string.lower(obj.Name), string.lower(keyword)) then
+			local part = obj:IsA("BasePart") and obj
+				or obj:FindFirstChildWhichIsA("BasePart", true)
+
+			if part then
+				table.insert(found, {
+					Name = obj.Name,
+					Position = part.Position,
+					Object = obj,
+				})
+			end
+		end
+	end
+
+	return found
+end
+
+--============================================================
+-- AUTOMAÇÕES
+--============================================================
+
+local AutoConnection
+
+local function RunAutomation()
+	if AutoConnection then
+		AutoConnection:Disconnect()
+		AutoConnection = nil
+	end
+
+	AutoConnection = RunService.Heartbeat:Connect(function()
+		if Config.AutoAttack then
+			ServerAction("AutoAttack", {
+				Enabled = true,
+				Distance = Config.CombatDistance,
+			})
+		end
+
+		if Config.AutoHaki then
+			ServerAction("AutoHaki", {Enabled = true})
+		end
+
+		if Config.AutoSkills then
+			ServerAction("AutoSkills", {Enabled = true})
+		end
+
+		if Config.AutoFarm then
+			ServerAction("AutoFarm", {
+				Enabled = true,
+				Enemy = Config.SelectedEnemy,
+				Distance = Config.CombatDistance,
+			})
+		end
+
+		if Config.AutoChest then
+			ServerAction("AutoChest", {Enabled = true})
+		end
+
+		if Config.AutoFruit then
+			ServerAction("AutoFruit", {
+				Enabled = true,
+				Fruit = Config.SelectedFruit,
+			})
+		end
+
+		if Config.AutoMission then
+			ServerAction("AutoMission", {
+				Enabled = true,
+				Mission = Config.SelectedMission,
+			})
+		end
+
+		if Config.AutoEvolution then
+			ServerAction("AutoEvolution", {Enabled = true})
+		end
+
+		if Config.AutoRewards then
+			ServerAction("AutoRewards", {Enabled = true})
+		end
+	end)
+end
+
+--============================================================
+-- ABAS
+--============================================================
+
+local TabNames = {
+	"Início",
+	"Combate",
+	"Frutas",
+	"Jogador",
+	"Teletransporte",
+	"Coleta e evolução",
+	"Visualização",
+	"Configurações",
+}
+
+local function BuildTab(name)
+	ClearContent()
+
+	if name == "Início" then
+		Label("BLOX F' - TALES 3.5")
+		Label("Painel de controle")
+		Button("Atualizar personagem", UpdateCharacter)
+
+		Button("Mostrar coordenadas X / Y / Z", function()
+			if Root then
+				local p = Root.Position
+				print(string.format(
+					"X: %.2f | Y: %.2f | Z: %.2f",
+					p.X, p.Y, p.Z
+				))
+			end
+		end)
+
+	elseif name == "Combate" then
+		Toggle("Mira assistida (Aim Assist)", Config.AimAssist, function(v)
+			Config.AimAssist = v
+		end)
+
+		Catalog("Selecionar alvo da mira", GetPlayers(), function(item)
+			Config.AimTarget = item
+		end)
+
+		Slider("Distância da mira", 50, 2000, Config.AimDistance, function(v)
+			Config.AimDistance = v
+		end)
+
+		Toggle("Área de acerto visual (FOV)", Config.FOVEnabled, function(v)
+			Config.FOVEnabled = v
+		end)
+
+		Slider("Tamanho do FOV", 30, 600, Config.FOVSize, function(v)
+			Config.FOVSize = v
+		end)
+
+		Toggle("Usar FOV como limite da mira", Config.AimFOVLimit, function(v)
+			Config.AimFOVLimit = v
+		end)
+
+		Slider("Distância de combate", 30, 1500, Config.CombatDistance, function(v)
+			Config.CombatDistance = v
+		end)
+
+		Toggle("Ataque automático", Config.AutoAttack, function(v)
+			Config.AutoAttack = v
+			ServerAction("AutoAttack", {Enabled = v})
+			RunAutomation()
+		end)
+
+		Toggle("Haki automático", Config.AutoHaki, function(v)
+			Config.AutoHaki = v
+			ServerAction("AutoHaki", {Enabled = v})
+			RunAutomation()
+		end)
+
+		Toggle("Habilidades automáticas", Config.AutoSkills, function(v)
+			Config.AutoSkills = v
+			ServerAction("AutoSkills", {Enabled = v})
+			RunAutomation()
+		end)
+
+	elseif name == "Frutas" then
+		Toggle("Localizador de frutas", Config.ESPFruits, function(v)
+			Config.ESPFruits = v
+		end)
+
+		Catalog("Selecionar fruta para busca automática", Fruits, function(item)
+			Config.SelectedFruit = item
+		end)
+
+		Toggle("Busca automática da fruta selecionada", Config.AutoFruit, function(v)
+			Config.AutoFruit = v
+			ServerAction("AutoFruit", {
+				Enabled = v,
+				Fruit = Config.SelectedFruit,
+			})
+			RunAutomation()
+		end)
+
+		Button("Procurar frutas no mapa", function()
+			for _, item in ipairs(FindObjects("fruit")) do
+				print(item.Name, item.Position)
+			end
+		end)
+
+	elseif name == "Jogador" then
+		Slider("Velocidade (WalkSpeed)", 16, 500, Config.WalkSpeed, function(v)
+			Config.WalkSpeed = v
+			if Humanoid then Humanoid.WalkSpeed = v end
+		end)
+
+		Slider("Força do pulo", 50, 500, Config.JumpPower, function(v)
+			Config.JumpPower = v
+			if Humanoid then Humanoid.JumpPower = v end
+		end)
+
+		Toggle("Fly", Config.Fly, function(v)
+			if v then StartFly() else StopFly() end
+		end)
+
+		Slider("Velocidade do Fly", 10, 300, Config.FlySpeed, function(v)
+			Config.FlySpeed = v
+		end)
+
+		Toggle("Pulo infinito", Config.InfiniteJump, function(v)
+			Config.InfiniteJump = v
+		end)
+
+		Toggle("Noclip", Config.Noclip, SetNoclip)
+
+	elseif name == "Teletransporte" then
+		Label("Teleporte para jogador")
+
+		Catalog("Selecionar jogador", GetPlayers(), function(item)
+			Config.SelectedPlayer = item
+		end)
+
+		Button("CONFIRMAR TELEPORTE PARA JOGADOR", function()
+			if Config.SelectedPlayer then
+				ServerAction("TeleportPlayer", {
+					PlayerName = Config.SelectedPlayer,
+				})
+			end
+		end)
+
+		Label("Teleporte para ilha, cidade ou mundo")
+
+		Catalog("Selecionar destino", Islands, function(item)
+			Config.SelectedIsland = item
+		end)
+
+		Button("CONFIRMAR TELEPORTE", function()
+			if Config.SelectedIsland then
+				ServerAction("TeleportIsland", {
+					Island = Config.SelectedIsland,
+				})
+			end
+		end)
+
+		Button("Teletransportar para coordenadas salvas", function()
+			ServerAction("TeleportCoordinates", {})
+		end)
+
+	elseif name == "Coleta e evolução" then
+		Catalog("Selecionar inimigo", GetNPCs(), function(item)
+			Config.SelectedEnemy = item
+		end)
+
+		Toggle("Coleta automática / Auto Farm", Config.AutoFarm, function(v)
+			Config.AutoFarm = v
+			ServerAction("AutoFarm", {
+				Enabled = v,
+				Enemy = Config.SelectedEnemy,
+			})
+			RunAutomation()
+		end)
+
+		Toggle("Coletar baús automaticamente", Config.AutoChest, function(v)
+			Config.AutoChest = v
+			ServerAction("AutoChest", {Enabled = v})
+			RunAutomation()
+		end)
+
+		Catalog("Selecionar missão", {
+			"Missão 1", "Missão 2", "Missão 3",
+			"Missão 4", "Missão 5",
+		}, function(item)
+			Config.SelectedMission = item
+		end)
+
+		Toggle("Missões automáticas", Config.AutoMission, function(v)
+			Config.AutoMission = v
+			ServerAction("AutoMission", {
+				Enabled = v,
+				Mission = Config.SelectedMission,
+			})
+			RunAutomation()
+		end)
+
+		Toggle("Evolução automática", Config.AutoEvolution, function(v)
+			Config.AutoEvolution = v
+			ServerAction("AutoEvolution", {Enabled = v})
+			RunAutomation()
+		end)
+
+		Toggle("Recompensas automáticas", Config.AutoRewards, function(v)
+			Config.AutoRewards = v
+			ServerAction("AutoRewards", {Enabled = v})
+			RunAutomation()
+		end)
+
+	elseif name == "Visualização" then
+		Toggle("ESP de jogadores", Config.ESPPlayers, function(v)
+			Config.ESPPlayers = v
+		end)
+
+		Toggle("ESP de NPCs", Config.ESPNPCs, function(v)
+			Config.ESPNPCs = v
+		end)
+
+		Toggle("ESP de Bosses", Config.ESPBosses, function(v)
+			Config.ESPBosses = v
+		end)
+
+		Toggle("ESP de frutas", Config.ESPFruits, function(v)
+			Config.ESPFruits = v
+		end)
+
+		Toggle("ESP de baús", Config.ESPChests, function(v)
+			Config.ESPChests = v
+		end)
+
+		Button("Atualizar ESP agora", RefreshESP)
+
+	elseif name == "Configurações" then
+		Button("Parar todas as automações", function()
+			Config.AutoAttack = false
+			Config.AutoHaki = false
+			Config.AutoSkills = false
+			Config.AutoFarm = false
+			Config.AutoChest = false
+			Config.AutoFruit = false
+			Config.AutoMission = false
+			Config.AutoEvolution = false
+			Config.AutoRewards = false
+
+			ServerAction("StopAll", {})
+
+			if AutoConnection then
+				AutoConnection:Disconnect()
+				AutoConnection = nil
+			end
+		end)
+
+		Button("Desativar ESP", function()
+			Config.ESPPlayers = false
+			Config.ESPNPCs = false
+			Config.ESPBosses = false
+			Config.ESPFruits = false
+			Config.ESPChests = false
+			ClearESP()
+		end)
+
+		Button("Restaurar velocidade e pulo", function()
+			Config.WalkSpeed = 16
+			Config.JumpPower = 50
+
+			if Humanoid then
+				Humanoid.WalkSpeed = 16
+				Humanoid.JumpPower = 50
+			end
+		end)
+
+		Button("Desativar Fly e Noclip", function()
+			StopFly()
+			SetNoclip(false)
+		end)
+
+		Button("Fechar painel", function()
+			Gui.Enabled = false
+		end)
+	end
+end
+
+--============================================================
+-- CRIAÇÃO DAS ABAS
+--============================================================
+
+for _, tabName in ipairs(TabNames) do
+	local tab = Instance.new("TextButton")
+	tab.Size = UDim2.new(1, 0, 0, 34)
+	tab.BackgroundColor3 = Color3.fromRGB(55, 30, 85)
+	tab.TextColor3 = Color3.new(1, 1, 1)
+	tab.Text = tabName
+	tab.Font = Enum.Font.Gotham
+	tab.TextSize = 11
+	tab.Parent = Tabs
+
+	tab.MouseButton1Click:Connect(function()
+		BuildTab(tabName)
+	end)
+end
+
+BuildTab("Início")
+
+--============================================================
+-- ARRASTAR JANELA
+--============================================================
+
 local dragging = false
 local dragStart
 local startPosition
 
 Header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPosition = Main.Position
-    end
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPosition = Main.Position
+	end
 end)
 
-table.insert(connections, UIS.InputChanged:Connect(function(input)
-    if dragging and (
-        input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch
-    ) then
-        local delta = input.Position - dragStart
-        Main.Position = UDim2.new(
-            startPosition.X.Scale,
-            startPosition.X.Offset + delta.X,
-            startPosition.Y.Scale,
-            startPosition.Y.Offset + delta.Y
-        )
-    end
-end))
+UIS.InputChanged:Connect(function(input)
+	if dragging and (
+		input.UserInputType == Enum.UserInputType.MouseMovement
+		or input.UserInputType == Enum.UserInputType.Touch
+	) then
+		local delta = input.Position - dragStart
 
-table.insert(connections, UIS.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
-    end
-end))
-
--- Pulo infinito
-table.insert(connections, UIS.JumpRequest:Connect(function()
-    if infiniteJump then
-        local hum = getHumanoid(getCharacter())
-        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-    end
-end))
-
--- Noclip local com restauração das colisões
-table.insert(connections, RunService.Stepped:Connect(function()
-    local character = getCharacter()
-
-    if noclip and character then
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                if collisionCache[part] == nil then
-                    collisionCache[part] = part.CanCollide
-                end
-                part.CanCollide = false
-            end
-        end
-    elseif not noclip and next(collisionCache) then
-        for part, original in pairs(collisionCache) do
-            if part and part.Parent then part.CanCollide = original end
-            collisionCache[part] = nil
-        end
-    end
-end))
-
--- Atualização contínua dos localizadores e ESP
-table.insert(connections, RunService.Heartbeat:Connect(function()
-    if fruitFinder or chestFinder or espEnemies then
-        scanWorld()
-    end
-end))
-
--- Atualização periódica dos jogadores
-task.spawn(function()
-    while Screen.Parent do
-        if espPlayers or showNames or showDistances then
-            refreshVisuals()
-        end
-        task.wait(1.5)
-    end
+		Main.Position = UDim2.new(
+			startPosition.X.Scale,
+			startPosition.X.Offset + delta.X,
+			startPosition.Y.Scale,
+			startPosition.Y.Offset + delta.Y
+		)
+	end
 end)
 
-table.insert(connections, Players.PlayerAdded:Connect(function()
-    task.delay(0.5, refreshVisuals)
-end))
+UIS.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = false
+	end
+end)
 
-table.insert(connections, Players.PlayerRemoving:Connect(function()
-    task.delay(0.2, refreshVisuals)
-end))
+--============================================================
+-- MINIMIZAR / FECHAR
+--============================================================
 
--- Respawn: reaplica velocidade e pulo
-table.insert(connections, LocalPlayer.CharacterAdded:Connect(function(character)
-    task.wait(0.5)
-    local hum = getHumanoid(character)
-    if hum then
-        hum.WalkSpeed = walkSpeed
-        hum.UseJumpPower = true
-        hum.JumpPower = jumpPower
-    end
-end))
+local minimized = false
+
+Minimize.MouseButton1Click:Connect(function()
+	minimized = not minimized
+
+	Tabs.Visible = not minimized
+	Content.Visible = not minimized
+
+	Main.Size = minimized
+		and UDim2.fromOffset(570, 42)
+		or UDim2.fromOffset(570, 430)
+end)
 
 Close.MouseButton1Click:Connect(function()
-    destroyed = true
-    stopFlight()
-    noclip = false
+	StopFly()
+	SetNoclip(false)
 
-    for part, original in pairs(collisionCache) do
-        if part and part.Parent then part.CanCollide = original end
-        collisionCache[part] = nil
-    end
+	if AutoConnection then
+		AutoConnection:Disconnect()
+	end
 
-    for _, connection in ipairs(connections) do
-        pcall(function() connection:Disconnect() end)
-    end
-
-    removeBucket(playerHighlights)
-    removeBucket(objectHighlights)
-    Screen:Destroy()
+	ClearESP()
+	Gui:Destroy()
 end)
 
-showCategory("Início")
-print("Blox F' - Tales 3.2 carregado.")
+print("[BLOX F' - TALES 3.5] Carregado.")
