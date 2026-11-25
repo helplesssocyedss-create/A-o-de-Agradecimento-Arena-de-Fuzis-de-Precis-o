@@ -13,8 +13,9 @@
     - Suavidade de 0% a 100%, passos de 5% ou 10%.
     - Selecao estavel de alvo.
     - FOV, perseguicao, IA Assist e minimizacao.
-    - Indicador verde na cabeca quando ha linha de visao livre.
-    - Tiro automatico condicionado a cabeca visivel.
+    - Indicador verde na cabeca e no nick quando ha linha de visao livre.
+    - Tiro automatico via ativacao da ferramenta equipada, condicionado
+      a cabeca visivel do jogador acompanhado.
 ]]
 
 local Players = game:GetService("Players")
@@ -614,15 +615,27 @@ local function UpdatePlayerHeadHighlight(target, character)
     end
 
     local visible = HasClearHeadLineOfSight(character, head)
-
-    objects.HeadHighlight.FillColor = visible
+    local visibilityColor = visible
         and Color3.fromRGB(0, 255, 70)
         or BLUE
 
+    objects.HeadHighlight.FillColor = visibilityColor
     objects.HeadHighlight.OutlineColor = visible
         and Color3.fromRGB(0, 255, 70)
         or BLUE_OUTLINE
 
+    -- O nome acompanha exatamente o estado de visibilidade da cabeca.
+    local billboard = objects.Billboard
+    local nameLabel = billboard and billboard:FindFirstChild("NameLabel")
+
+    if nameLabel then
+        nameLabel.TextColor3 = visibilityColor
+        nameLabel.TextStrokeColor3 = visible
+            and Color3.fromRGB(0, 90, 25)
+            or Color3.fromRGB(0, 35, 90)
+    end
+
+    objects.HeadVisible = visible
     return visible
 end
 
@@ -1700,7 +1713,10 @@ RunService.RenderStepped:Connect(function(deltaTime)
         and Settings.PursuitActive
         and CombatAllowed()
 
-    if wantsAim or wantsPursuit then
+    local wantsAutoFire = Settings.AutoFire
+        and CombatAllowed()
+
+    if wantsAim or wantsPursuit or wantsAutoFire then
         local previousTarget = CurrentTarget
 
         CurrentTarget = GetStableTarget()
@@ -1733,11 +1749,11 @@ RunService.RenderStepped:Connect(function(deltaTime)
         targetPart = nil
     end
 
-    -- Dispara somente no jogador acompanhado quando a cabeca esta visivel.
+    -- Disparo automatico no alvo acompanhado quando a cabeca esta visivel.
+    -- Nao depende do ESP estar ligado: a visibilidade e verificada por raycast.
     autoFireTimer += deltaTime
 
     if Settings.AutoFire
-        and Settings.ESPPlayers
         and CombatAllowed()
         and CurrentTarget
         and CurrentTarget:IsA("Player")
@@ -1746,20 +1762,37 @@ RunService.RenderStepped:Connect(function(deltaTime)
 
         local targetHead = targetCharacter:FindFirstChild("Head")
         local headIsGreen = targetHead
+            and targetHead:IsA("BasePart")
             and HasClearHeadLineOfSight(targetCharacter, targetHead)
 
         if headIsGreen then
-            autoFireTimer = 0
-
             local localCharacter = Player.Character
             local equippedTool = localCharacter
                 and localCharacter:FindFirstChildOfClass("Tool")
 
-            if equippedTool then
-                pcall(function()
+            if equippedTool
+                and equippedTool.Parent == localCharacter
+                and equippedTool.Enabled then
+
+                -- Respeita o intervalo minimo entre ativacoes.
+                autoFireTimer = 0
+
+                local activated, activationError = pcall(function()
                     equippedTool:Activate()
                 end)
+
+                if not activated then
+                    SetAIEvent(
+                        "falha ao ativar a ferramenta: "
+                        .. tostring(activationError)
+                    )
+                end
+            else
+                autoFireTimer = 0
             end
+        else
+            -- Rearma o disparo assim que a cabeca voltar a ficar visivel.
+            autoFireTimer = 0
         end
     else
         autoFireTimer = 0
