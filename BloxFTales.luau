@@ -1,5 +1,5 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 3.0
+-- BLOX F' - TALES | VERSAO 3.1
 -- Interface responsiva e recursos locais genéricos.
 -- Compatível com LocalScript em uma experiência sua.
 --========================================================
@@ -32,7 +32,8 @@ local selectedPlayer = nil
 local selectedIsland = nil
 local connections = {}
 local playerHighlights = {}
-local objectHighlights = {}
+local fruitHighlights = {}
+local chestHighlights = {}
 local infiniteJump = false
 local noclip = false
 local showNames = false
@@ -77,7 +78,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  3.0"
+Title.Text = "Blox F' - Tales  |  3.1"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -460,12 +461,14 @@ local function applyPlayerVisuals()
 end
 
 local function refreshObjectHighlights(kind, enabled)
-    for object, adornment in pairs(objectHighlights) do
+    local bucket = kind == "fruit" and fruitHighlights or chestHighlights
+
+    for object, adornment in pairs(bucket) do
         if adornment and adornment.Parent then
             adornment:Destroy()
         end
 
-        objectHighlights[object] = nil
+        bucket[object] = nil
     end
 
     if not enabled then
@@ -490,7 +493,7 @@ local function refreshObjectHighlights(kind, enabled)
             h.Adornee = item
             h.Parent = Screen
 
-            objectHighlights[item] = h
+            bucket[item] = h
         end
     end
 end
@@ -728,7 +731,7 @@ local function showCategory(category)
     Content.CanvasPosition = Vector2.new(0, 0)
 
     if category == "Início" then
-        makeLabel("BLOX F' - TALES 3.0", 36)
+        makeLabel("BLOX F' - TALES 3.1", 36)
 
         makeLabel(
             "Interface responsiva. Arraste pelo cabeçalho. Use o botão – para recolher e ↗ para restaurar.",
@@ -804,7 +807,7 @@ local function showCategory(category)
                     local target = findNamedWorldObject(data[2])
 
                     if target then
-                        teleportLocal(target.CFrame)
+                        teleportLocal(target.CFrame * CFrame.new(0, 5, 0))
                         setStatus("Indo para " .. data[1])
                     else
                         setStatus(
@@ -814,6 +817,44 @@ local function showCategory(category)
                 end
             )
         end
+
+        makeLabel("Teletransporte por coordenadas:", 30)
+        local coordinateBoxes = {}
+
+        for _, axis in ipairs({"X", "Y", "Z"}) do
+            local box = Instance.new("TextBox")
+            box.Size = UDim2.new(1, -4, 0, 36)
+            box.BackgroundColor3 = COLORS.row
+            box.TextColor3 = COLORS.white
+            box.PlaceholderText = "Coordenada " .. axis
+            box.Text = ""
+            box.ClearTextOnFocus = false
+            box.Font = Enum.Font.Gotham
+            box.TextSize = 13
+            box.Parent = Content
+
+            Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
+            coordinateBoxes[axis] = box
+        end
+
+        makeButton("IR PARA AS COORDENADAS", function()
+            local x = tonumber(coordinateBoxes.X.Text)
+            local y = tonumber(coordinateBoxes.Y.Text)
+            local z = tonumber(coordinateBoxes.Z.Text)
+
+            if not x or not y or not z then
+                setStatus("Informe valores numéricos para X, Y e Z.")
+                return
+            end
+
+            local ok = teleportLocal(Vector3.new(
+                math.clamp(x, -100000, 100000),
+                math.clamp(y, -100000, 100000),
+                math.clamp(z, -100000, 100000)
+            ))
+
+            setStatus(ok and "Teleporte local solicitado." or "Não foi possível teletransportar.")
+        end, COLORS.purple)
 
         makeLabel("Ir até um jogador:", 28)
         makePlayerSelection()
@@ -905,7 +946,8 @@ local function showCategory(category)
                 false, false, false, false, false
 
             removeHighlights(playerHighlights)
-            removeHighlights(objectHighlights)
+            removeHighlights(fruitHighlights)
+            removeHighlights(chestHighlights)
 
             setStatus("Destaques removidos.")
         end)
@@ -962,7 +1004,8 @@ Close.MouseButton1Click:Connect(function()
     end
 
     removeHighlights(playerHighlights)
-    removeHighlights(objectHighlights)
+    removeHighlights(fruitHighlights)
+    removeHighlights(chestHighlights)
     Screen:Destroy()
 end)
 
@@ -1094,6 +1137,37 @@ table.insert(connections, RunService.Stepped:Connect(function()
     end
 end))
 
+table.insert(connections, LocalPlayer.CharacterAdded:Connect(function(character)
+    task.wait(0.5)
+
+    local hum = character:FindFirstChildOfClass("Humanoid")
+
+    if hum then
+        hum.WalkSpeed = walkSpeed
+        hum.UseJumpPower = true
+        hum.JumpPower = jumpPower
+    end
+
+    for part in pairs(collisionCache) do
+        collisionCache[part] = nil
+    end
+end))
+
+-- Atualiza os destaques para acompanhar respawns e mudanças de distância.
+task.spawn(function()
+    while Screen.Parent do
+        task.wait(1.25)
+
+        if not Screen.Parent then
+            break
+        end
+
+        if espPlayers or showNames or showDistances then
+            applyPlayerVisuals()
+        end
+    end
+end)
+
 table.insert(connections, Players.PlayerAdded:Connect(function()
     if espPlayers or showNames or showDistances then
         task.delay(0.5, applyPlayerVisuals)
@@ -1108,4 +1182,4 @@ end))
 
 showCategory("Início")
 
-print("Blox F' - Tales 3.0 carregado.")
+print("Blox F' - Tales 3.1 carregado.")
