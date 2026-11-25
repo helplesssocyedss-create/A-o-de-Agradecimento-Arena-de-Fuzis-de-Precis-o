@@ -1,5 +1,5 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 3.4
+-- BLOX F' - TALES | VERSAO 3.5
 -- Interface responsiva e recursos locais.
 --========================================================
 
@@ -100,7 +100,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  3.4"
+Title.Text = "Blox F' - Tales  |  3.5"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -432,7 +432,6 @@ local function endSection()
     activeContainer = Content
 end
 
--- Opções em formato de botão, sem a caixa quadrada antiga.
 local function makeOption(labelText, isSelected, callback)
     local button = Instance.new("TextButton")
     button.Name = "SelectionOption"
@@ -1096,7 +1095,7 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 3.4", 36)
+        makeLabel("BLOX F' - TALES 3.5", 36)
         makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
@@ -1137,7 +1136,7 @@ local function showCategory(category)
             setStatus("Velocidade do Fly: " .. flySpeed)
         end)
 
-        makeLabel("O Fly acompanha a direção para a qual a câmera está apontando. Use o controle de movimento para avançar.", 48)
+        makeLabel("O Fly acompanha a direção para a qual a câmera está apontando. No celular, use o controle de movimento para avançar e direcione a câmera para cima ou para baixo.", 58)
         endSection()
 
         beginSection("Colisão")
@@ -1366,14 +1365,17 @@ local function showCategory(category)
             setStatus("Raio do FOV: " .. aimFovRadius)
         end)
 
-        local typeButton = makeButton("▼  Tipo de alvo: " .. selectedAimTarget, function()
+        -- Declaração antecipada para o callback acessar as variáveis locais.
+        local typeButton, targetTypeDropdown
+
+        typeButton = makeButton("▼  Tipo de alvo: " .. selectedAimTarget, function()
             targetTypeDropdownOpen = not targetTypeDropdownOpen
             targetTypeDropdown.Visible = targetTypeDropdownOpen
             typeButton.Text = (targetTypeDropdownOpen and "▼  " or "▶  ")
                 .. "Tipo de alvo: " .. selectedAimTarget
         end)
 
-        local targetTypeDropdown = Instance.new("Frame")
+        targetTypeDropdown = Instance.new("Frame")
         targetTypeDropdown.Size = UDim2.new(1, -4, 0, 114)
         targetTypeDropdown.BackgroundColor3 = COLORS.panel
         targetTypeDropdown.Visible = false
@@ -1415,7 +1417,10 @@ local function showCategory(category)
 
         beginSection("Ataque, habilidades e Haki", false)
 
-        local attackButton = makeButton("▼  Selecionar alvos para ataque", function()
+        -- Declaração antecipada para o callback acessar as variáveis locais.
+        local attackButton, attackList
+
+        attackButton = makeButton("▼  Selecionar alvos para ataque", function()
             attackDropdownOpen = not attackDropdownOpen
             attackList.Visible = attackDropdownOpen
             attackButton.Text = (attackDropdownOpen and "▼  " or "▶  ")
@@ -1424,7 +1429,7 @@ local function showCategory(category)
 
         local attackStatus = makeLabel("Alvos selecionados: 0", 25)
 
-        local attackList = Instance.new("ScrollingFrame")
+        attackList = Instance.new("ScrollingFrame")
         attackList.Name = "AttackTargetList"
         attackList.Size = UDim2.new(1, -4, 0, 170)
         attackList.BackgroundColor3 = COLORS.panel
@@ -1800,8 +1805,8 @@ table.insert(connections, Players.PlayerRemoving:Connect(function(player)
     end
 end))
 
--- Fly: movimento alinhado à direção completa da câmera,
--- incluindo inclinação para cima e para baixo.
+-- Fly: controles de teclado e celular alinhados à câmera,
+-- incluindo a inclinação vertical da câmera no celular.
 table.insert(connections, RunService.Heartbeat:Connect(function()
     if not flyEnabled then return end
 
@@ -1816,28 +1821,40 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
     local look = cameraCFrame.LookVector
     local right = cameraCFrame.RightVector
 
-    local moveDirection = hum.MoveDirection
     local forwardInput = 0
     local sideInput = 0
 
-    if UIS:IsKeyDown(Enum.KeyCode.W) then forwardInput += 1 end
-    if UIS:IsKeyDown(Enum.KeyCode.S) then forwardInput -= 1 end
-    if UIS:IsKeyDown(Enum.KeyCode.D) then sideInput += 1 end
-    if UIS:IsKeyDown(Enum.KeyCode.A) then sideInput -= 1 end
-
-    local direction
-
     if UIS.TouchEnabled then
-        direction = moveDirection
+        local moveDirection = hum.MoveDirection
+
+        local flatLook = Vector3.new(look.X, 0, look.Z)
+        local flatRight = Vector3.new(right.X, 0, right.Z)
+
+        if flatLook.Magnitude > 0.001 then
+            flatLook = flatLook.Unit
+            forwardInput = moveDirection:Dot(flatLook)
+        end
+
+        if flatRight.Magnitude > 0.001 then
+            flatRight = flatRight.Unit
+            sideInput = moveDirection:Dot(flatRight)
+        end
     else
-        direction = look * forwardInput + right * sideInput
+        if UIS:IsKeyDown(Enum.KeyCode.W) then forwardInput += 1 end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then forwardInput -= 1 end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then sideInput += 1 end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then sideInput -= 1 end
     end
 
-    if direction.Magnitude > 0 then
+    local direction = look * forwardInput + right * sideInput
+
+    if direction.Magnitude > 1 then
         direction = direction.Unit
     end
 
+    root.AssemblyAngularVelocity = Vector3.zero
     root.AssemblyLinearVelocity = direction * flySpeed
+
     hum:ChangeState(Enum.HumanoidStateType.Physics)
 end))
 
@@ -1905,4 +1922,4 @@ end))
 
 showCategory("Início")
 
-print("Blox F' - Tales 3.4 carregado.")
+print("Blox F' - Tales 3.5 carregado.")
