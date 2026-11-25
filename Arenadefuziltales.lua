@@ -16,10 +16,11 @@
     - FOV, perseguicao e IA Assist.
     - Indicador verde quando existe linha de visao livre.
     - Categoria exclusiva de TIRO AUTOMATICO.
-    - Sensor AutoFire independente da perseguicao.
+    - Sensor AutoFire independente da perseguicao e do Aimbot.
+    - AutoFire procura jogadores diretamente dentro do seu sensor.
     - Sensor arrastavel, redimensionavel e travavel.
-    - Sensor verde somente quando todas as condicoes
-      locais de prontidao forem atendidas.
+    - Sensor verde somente quando as condicoes locais
+      de prontidao forem atendidas.
     - Painel principal reduzido.
     - Botao minimizado pequeno e arrastavel.
 
@@ -470,7 +471,9 @@ ChestOption.Visible = false
 
 local SmoothLabel = CreateInfo(AimTab, "Suavidade: 20%", 157, 22)
 
-local StepOption = CreateOption(
+local StepOption
+
+StepOption = CreateOption(
     AimTab,
     "PASSO: 5% (TOQUE PARA 10%)",
     181,
@@ -632,7 +635,7 @@ end
 
 local function RefreshPlayerSelectionList()
     for _, child in ipairs(SelectionScroll:GetChildren()) do
-        if child:IsA("TextButton") then
+        if child:IsA("TextButton") or child:IsA("TextLabel") then
             child:Destroy()
         end
     end
@@ -1310,7 +1313,7 @@ local function UpdateAutoFireSensor()
     if not Settings.AutoFire then
         SetAutoFireSensorState("OFF", "Alvo: aguardando")
     else
-        SetAutoFireSensorState("SEARCH", "Alvo: procurando")
+        SetAutoFireSensorState("SEARCH", "Alvo: procurando dentro do sensor")
     end
 
     AutoFireStatus.Text = Settings.AutoFire
@@ -1720,6 +1723,66 @@ local function GetStableTarget()
 end
 
 --==================================================
+-- DETECCAO INDEPENDENTE DO SENSOR AUTOFIRE
+--==================================================
+
+local function GetAutoFireCandidate()
+    Camera = workspace.CurrentCamera
+
+    if not Camera
+        or not Settings.AutoFire
+        or not AutoFireSensor.Visible
+        or not CombatAllowed() then
+        return nil
+    end
+
+    local center = AutoFireSensor.AbsolutePosition
+        + AutoFireSensor.AbsoluteSize / 2
+
+    local radius = math.min(
+        AutoFireSensor.AbsoluteSize.X,
+        AutoFireSensor.AbsoluteSize.Y
+    ) / 2
+
+    local bestTarget = nil
+    local bestCharacter = nil
+    local bestHead = nil
+    local bestDistance = math.huge
+
+    for _, target in ipairs(Players:GetPlayers()) do
+        if target ~= Player and IsPlayerSelected(target) then
+            local character = target.Character
+            local head = character and character:FindFirstChild("Head")
+
+            if character
+                and IsAlive(character)
+                and head
+                and head:IsA("BasePart") then
+
+                local point, onScreen = Camera:WorldToViewportPoint(head.Position)
+
+                if onScreen and point.Z > 0 then
+                    local screenPoint = Vector2.new(point.X, point.Y)
+                    local distance = (screenPoint - center).Magnitude
+
+                    if distance <= radius
+                        and distance < bestDistance
+                        and HasClearHeadLineOfSight(character, head) then
+
+                        bestDistance = distance
+                        bestTarget = target
+                        bestCharacter = character
+                        bestHead = head
+                    end
+                end
+            end
+        end
+    end
+
+    return bestTarget, bestCharacter, bestHead
+end
+
+--==================================================
 -- ARRASTAR JANELA PRINCIPAL
 --==================================================
 
@@ -1995,7 +2058,10 @@ RunService.RenderStepped:Connect(function(deltaTime)
     local wantsAutoFire = Settings.AutoFire
         and CombatAllowed()
 
-    if wantsAim or wantsPursuit or wantsAutoFire then
+    -- O alvo compartilhado continua sendo usado pelo Aimbot
+    -- e pela perseguicao. O AutoFire faz sua propria busca.
+
+    if wantsAim or wantsPursuit then
         local previousTarget = CurrentTarget
         CurrentTarget = GetStableTarget()
 
@@ -2022,94 +2088,105 @@ RunService.RenderStepped:Connect(function(deltaTime)
     end
 
     --==================================================
-    -- TIRO AUTOMATICO: VALIDACAO DE PRONTIDAO
+    -- TIRO AUTOMATICO INDEPENDENTE DO AIMBOT
     --==================================================
 
     autoFireTimer += deltaTime
 
     local autoFireReady = false
+    local autoFireTarget = nil
+    local autoFireCharacter = nil
+    local autoFireHead = nil
     local equippedTool = nil
 
-    if wantsAutoFire
-        and CurrentTarget
-        and CurrentTarget:IsA("Player")
-        and targetCharacter then
+    if not Settings.AutoFire then
+        autoFireTimer = 0
+        SetAutoFireSensorState("OFF", "Tiro automatico desligado")
 
-        local targetHead = targetCharacter:FindFirstChild("Head")
-        local headIsVisible = targetHead
-            and targetHead:IsA("BasePart")
-            and HasClearHeadLineOfSight(targetCharacter, targetHead)
+    elseif not CombatAllowed() then
+        autoFireTimer = 0
+        SetAutoFireSensorState("OFF", "Protecao civil ativa")
 
-        local localCharacter = Player.Character
+    else
+        autoFireTarget, autoFireCharacter, autoFireHead =
+            GetAutoFireCandidate()
 
-        if localCharacter then
-            equippedTool = localCharacter:FindFirstChildOfClass("Tool")
-        end
-
-        local toolIsReady = equippedTool ~= nil
-            and equippedTool.Parent == localCharacter
-            and equippedTool.Enabled == true
-
-        if not headIsVisible then
-            SetAutoFireSensorState(
-                "OFF",
-                "Alvo: sem linha de visao"
-            )
+        if not autoFireTarget then
             autoFireTimer = 0
-
-        elseif not toolIsReady then
             SetAutoFireSensorState(
                 "SEARCH",
-                "Alvo visivel - equipe uma ferramenta"
+                "BUSCANDO: coloque um player dentro do sensor"
             )
-            autoFireTimer = 0
-
         else
-            autoFireReady = true
+            local localCharacter = Player.Character
 
-            SetAutoFireSensorState(
-                "READY",
-                "Alvo visivel: " .. GetTargetName(CurrentTarget)
-            )
+            if localCharacter then
+                equippedTool = localCharacter:FindFirstChildOfClass("Tool")
+            end
 
-            if autoFireTimer >= 0.18 then
+            local toolIsReady = equippedTool ~= nil
+                and equippedTool.Parent == localCharacter
+                and equippedTool.Enabled == true
+
+            if not toolIsReady then
                 autoFireTimer = 0
+                SetAutoFireSensorState(
+                    "SEARCH",
+                    "ALVO VISIVEL: equipe uma ferramenta"
+                )
 
-                local activated, activationError = pcall(function()
-                    equippedTool:Activate()
-                end)
+            elseif not IsAlive(autoFireCharacter) then
+                autoFireTimer = 0
+                SetAutoFireSensorState(
+                    "SEARCH",
+                    "Alvo eliminado ou indisponivel"
+                )
 
-                if activated then
-                    SetAIEvent(
-                        "Tool:Activate solicitado para "
-                        .. GetTargetName(CurrentTarget)
-                    )
-                else
-                    SetAIEvent(
-                        "falha ao ativar ferramenta: "
-                        .. tostring(activationError)
-                    )
+            elseif not autoFireHead
+                or not HasClearHeadLineOfSight(
+                    autoFireCharacter,
+                    autoFireHead
+                ) then
 
-                    SetAutoFireSensorState(
-                        "OFF",
-                        "Falha ao ativar ferramenta"
-                    )
+                autoFireTimer = 0
+                SetAutoFireSensorState(
+                    "SEARCH",
+                    "Alvo sem linha de visao"
+                )
 
-                    autoFireReady = false
+            else
+                autoFireReady = true
+
+                SetAutoFireSensorState(
+                    "READY",
+                    "ALVO VISIVEL: " .. GetTargetName(autoFireTarget)
+                )
+
+                if autoFireTimer >= 0.18 then
+                    autoFireTimer = 0
+
+                    local activated, activationError = pcall(function()
+                        equippedTool:Activate()
+                    end)
+
+                    if activated then
+                        SetAIEvent(
+                            "Ativacao solicitada: "
+                            .. GetTargetName(autoFireTarget)
+                        )
+                    else
+                        autoFireReady = false
+
+                        SetAutoFireSensorState(
+                            "OFF",
+                            "Erro na ferramenta: "
+                                .. tostring(activationError)
+                        )
+
+                        SetAIEvent("Falha na ativacao da ferramenta")
+                    end
                 end
             end
-        end
-    else
-        autoFireTimer = 0
-
-        if not Settings.AutoFire then
-            SetAutoFireSensorState("OFF", "Alvo: aguardando")
-        elseif not CombatAllowed() then
-            SetAutoFireSensorState("OFF", "Bloqueado pela protecao civil")
-        elseif CurrentTarget and CurrentTarget:IsA("Model") then
-            SetAutoFireSensorState("SEARCH", "Alvo NPC - AutoFire exige Player")
-        else
-            SetAutoFireSensorState("SEARCH", "Alvo: procurando player")
         end
     end
 
@@ -2164,7 +2241,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
             LastAIStatus = "ALVO ACOMPANHADO - "
                 .. GetTargetName(CurrentTarget)
         elseif wantsAim or wantsPursuit or wantsAutoFire then
-            LastAIStatus = "PROCURANDO ALVO NO FOV"
+            LastAIStatus = "PROCURANDO ALVO"
         elseif Settings.ESPPlayers or Settings.ESPBots then
             LastAIStatus = "MONITORANDO ESP"
         else
@@ -2188,7 +2265,9 @@ RunService.RenderStepped:Connect(function(deltaTime)
             .. (Settings.SmartRecovery and "ON" or "OFF")
 
         SelectionInfo.Text = Settings.PlayerSelectionEnabled
-            and ("Selecao ativa: " .. tostring(CountSelectedPlayers()) .. " player(s)")
+            and ("Selecao ativa: "
+                .. tostring(CountSelectedPlayers())
+                .. " player(s)")
             or "Selecao desativada: todos os alvos elegiveis"
     end
 end)
@@ -2207,7 +2286,7 @@ print("Tales Mod Menu IA Assist carregado.")
 print("ESP Player azul + Name: pronto.")
 print("ESP Bot amarelo com nome BOT: pronto.")
 print("Selecao de players por checkbox: pronta.")
-print("Busca de alvos: pronta.")
-print("Categoria exclusiva de AutoFire: pronta.")
+print("Busca de alvos do Aimbot e perseguicao: pronta.")
+print("Busca independente do sensor AutoFire: pronta.")
 print("Sensor AutoFire com estado de prontidao: pronto.")
 print("Painel reduzido e minimizacao: pronto.")
