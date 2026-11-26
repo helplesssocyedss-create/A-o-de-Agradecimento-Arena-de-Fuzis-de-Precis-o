@@ -1,5 +1,5 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 4.0
+-- BLOX F' - TALES | VERSAO 4.1
 -- Speed geral ajustável para caminhada, perseguição, Fly e Dash.
 --========================================================
 
@@ -56,9 +56,11 @@ local flySpeed = 65
 -- 0 mantém a velocidade normal configurada.
 -- Valores maiores aumentam caminhada, perseguição, Fly e Dash.
 local globalSpeed = 0
+local playerTeleportSpeed = 100
+local playerTeleportSequence = 0
 
 local function getGlobalSpeedMultiplier()
-    return 1 + (globalSpeed / 100)
+    return 1 + (math.clamp(globalSpeed, 0, 500) / 100)
 end
 
 local function getAdjustedWalkSpeed()
@@ -74,8 +76,6 @@ local function getAdjustedTeleportSpeed()
 end
 
 -- NOVO: velocidade da aproximação até o jogador.
-local playerTeleportSpeed = 100
-local playerTeleportSequence = 0
 
 local aimAssistEnabled = false
 local aimFovEnabled = false
@@ -165,7 +165,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  4.0"
+Title.Text = "Blox F' - Tales  |  4.1"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -624,14 +624,14 @@ local teleportSequence = 0
 local function teleportLocal(destination)
     local character = getCharacter()
     local root = getRoot(character)
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
-    if not root then
+    if not root or not humanoid then
         setStatus("Personagem ainda não carregou.")
         return false
     end
 
     local targetCFrame
-
     if typeof(destination) == "CFrame" then
         targetCFrame = destination
     elseif typeof(destination) == "Vector3" then
@@ -644,84 +644,39 @@ local function teleportLocal(destination)
     local thisSequence = teleportSequence
 
     task.spawn(function()
-        local currentCharacter = getCharacter()
-        local currentRoot = getRoot(currentCharacter)
-        local currentHumanoid = currentCharacter
-            and currentCharacter:FindFirstChildOfClass("Humanoid")
-
-        if not currentRoot or not currentHumanoid then return end
-
-        local startPosition = currentRoot.Position
+        local startPosition = root.Position
         local destinationPosition = targetCFrame.Position
         local distance = (destinationPosition - startPosition).Magnitude
-        local steps = math.clamp(math.ceil(distance / 35), 1, 45)
+        local steps = math.clamp(math.ceil(distance / 24), 1, 60)
+
+        setStatus("Movendo gradualmente até o destino...")
 
         for step = 1, steps do
             if not Screen.Parent or thisSequence ~= teleportSequence then
                 return
             end
 
-            currentCharacter = getCharacter()
-            currentRoot = getRoot(currentCharacter)
-            currentHumanoid = currentCharacter
-                and currentCharacter:FindFirstChildOfClass("Humanoid")
-
-            if not currentRoot or not currentHumanoid then return end
-
-            local alpha = step / steps
-            local nextPosition = startPosition:Lerp(destinationPosition, alpha)
-
-            currentHumanoid:MoveTo(nextPosition)
-
-            pcall(function()
-                currentCharacter:PivotTo(
-                    CFrame.new(nextPosition) * targetCFrame.Rotation
-                )
-            end)
-
-            task.wait(0.045)
-        end
-
-        if not Screen.Parent or thisSequence ~= teleportSequence then
-            return
-        end
-
-        currentCharacter = getCharacter()
-        currentRoot = getRoot(currentCharacter)
-
-        if not currentCharacter or not currentRoot then return end
-
-        for attempt = 1, 8 do
-            if not Screen.Parent or thisSequence ~= teleportSequence then
+            character = getCharacter()
+            root = getRoot(character)
+            humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            if not root or not humanoid or humanoid.Health <= 0 then
+                setStatus("Movimento interrompido: personagem indisponível.")
                 return
             end
 
-            currentRoot = getRoot(getCharacter())
-            currentCharacter = getCharacter()
-
-            if not currentRoot or not currentCharacter then break end
-
-            if (currentRoot.Position - targetCFrame.Position).Magnitude <= 6 then
-                break
-            end
-
-            pcall(function()
-                currentCharacter:PivotTo(targetCFrame)
-            end)
-
-            task.wait(0.12)
+            local alpha = step / steps
+            local nextPosition = startPosition:Lerp(destinationPosition, alpha)
+            humanoid:MoveTo(nextPosition)
+            task.wait(0.08)
         end
 
+        if thisSequence ~= teleportSequence then return end
+
         local finalRoot = getRoot(getCharacter())
-
-        if finalRoot then
-            local remaining = (finalRoot.Position - targetCFrame.Position).Magnitude
-
-            if remaining <= 12 then
-                setStatus("Chegou próximo ao destino.")
-            else
-                setStatus("O servidor pode corrigir a posição.")
-            end
+        if finalRoot and (finalRoot.Position - destinationPosition).Magnitude <= 12 then
+            setStatus("Chegou próximo ao destino.")
+        else
+            setStatus("Movimento solicitado; o servidor pode limitar ou corrigir a posição.")
         end
     end)
 
@@ -756,7 +711,7 @@ local function teleportToPlayer(target)
             return
         end
 
-        local originalSpeed = humanoid.WalkSpeed
+        local originalSpeed = getAdjustedWalkSpeed()
         local finished = false
         local startTime = os.clock()
 
@@ -814,7 +769,7 @@ local function teleportToPlayer(target)
         humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
         if humanoid then
-            humanoid.WalkSpeed = originalSpeed
+            humanoid.WalkSpeed = getAdjustedWalkSpeed()
         end
 
         if thisSequence ~= playerTeleportSequence then
@@ -1275,6 +1230,8 @@ local attackLoopRunning = false
 local lastToolUse = 0
 local lastDodge = 0
 local dodgeSide = 1
+local lastTargetCycle = 0
+local currentTargetModel = nil
 
 local function getCombatTools(character)
     local tools = {}
@@ -1463,7 +1420,6 @@ local function getCurrentSelectedTarget()
 
             if targetHum and targetHum.Health > 0 and targetRoot
                 and isValidAimType(model) then
-
                 table.insert(validTargets, {
                     model = model,
                     humanoid = targetHum,
@@ -1478,24 +1434,38 @@ local function getCurrentSelectedTarget()
     end
 
     if #validTargets == 0 then
+        currentTargetModel = nil
         return nil
     end
 
-    local myRoot = getRoot(getCharacter())
-    if not myRoot then return validTargets[1] end
+    table.sort(validTargets, function(a, b)
+        return a.model:GetFullName() < b.model:GetFullName()
+    end)
 
-    local nearest, nearestDistance = nil, math.huge
-
-    for _, target in ipairs(validTargets) do
-        local distance = (myRoot.Position - target.root.Position).Magnitude
-
-        if distance < nearestDistance then
-            nearest = target
-            nearestDistance = distance
+    local now = os.clock()
+    local currentIndex = nil
+    for index, target in ipairs(validTargets) do
+        if target.model == currentTargetModel then
+            currentIndex = index
+            break
         end
     end
 
-    return nearest
+    if not currentIndex or now - lastTargetCycle >= 2.5 then
+        local nextIndex = currentIndex and (currentIndex % #validTargets + 1) or 1
+        currentTargetModel = validTargets[nextIndex].model
+        lastTargetCycle = now
+    end
+
+    for _, target in ipairs(validTargets) do
+        if target.model == currentTargetModel then
+            return target
+        end
+    end
+
+    currentTargetModel = validTargets[1].model
+    lastTargetCycle = now
+    return validTargets[1]
 end
 
 local function performCombatDodge(humanoid, root, targetRoot)
@@ -1616,7 +1586,7 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 4.0", 36)
+        makeLabel("BLOX F' - TALES 4.1", 36)
         makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
@@ -2509,13 +2479,13 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
         if distance > 2 then
             local direction = offset.Unit
             local speed = math.clamp(
-                distance * 2.2,
-                adjustedFlySpeed * 0.65,
-                adjustedFlySpeed * 1.8
+                distance * 1.6,
+                adjustedFlySpeed * 0.25,
+                adjustedFlySpeed
             )
 
             if distance < 7 then
-                speed = math.min(speed, adjustedFlySpeed * 0.55)
+                speed = math.min(speed, adjustedFlySpeed * 0.35)
             end
 
             root.AssemblyLinearVelocity = direction * speed
@@ -2713,4 +2683,4 @@ end)
 
 showCategory("Início")
 
-print("Blox F' - Tales 4.0 carregado.")
+print("Blox F' - Tales 4.1 carregado.")
