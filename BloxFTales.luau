@@ -1,7 +1,6 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 3.9
--- Teletransporte gradual para jogadores com velocidade ajustável
--- Seleção manual da fruta equipada e habilidades automáticas.
+-- BLOX F' - TALES | VERSAO 4.0
+-- Speed geral ajustável para caminhada, perseguição, Fly e Dash.
 --========================================================
 
 local Players = game:GetService("Players")
@@ -53,6 +52,27 @@ local jumpPower = 50
 local flyEnabled = false
 local flySpeed = 65
 
+-- SPEED GERAL:
+-- 0 mantém a velocidade normal configurada.
+-- Valores maiores aumentam caminhada, perseguição, Fly e Dash.
+local globalSpeed = 0
+
+local function getGlobalSpeedMultiplier()
+    return 1 + (globalSpeed / 100)
+end
+
+local function getAdjustedWalkSpeed()
+    return walkSpeed * getGlobalSpeedMultiplier()
+end
+
+local function getAdjustedFlySpeed()
+    return flySpeed * getGlobalSpeedMultiplier()
+end
+
+local function getAdjustedTeleportSpeed()
+    return playerTeleportSpeed * getGlobalSpeedMultiplier()
+end
+
 -- NOVO: velocidade da aproximação até o jogador.
 local playerTeleportSpeed = 100
 local playerTeleportSequence = 0
@@ -74,56 +94,20 @@ local selectedAimTarget = "NPCs"
 local attackDropdownOpen = false
 local targetTypeDropdownOpen = false
 
--- NOVO: fruta escolhida manualmente pelo usuário.
 local selectedFruitName = nil
 local pendingFruitName = nil
 local fruitDropdownOpen = false
 
 local fruitCatalog = {
-    "Rocket",
-    "Spin",
-    "Blade",
-    "Spring",
-    "Bomb",
-    "Smoke",
-    "Spike",
-    "Flame",
-    "Falcon",
-    "Ice",
-    "Sand",
-    "Dark",
-    "Diamond",
-    "Light",
-    "Rubber",
-    "Barrier",
-    "Ghost",
-    "Magma",
-    "Quake",
-    "Buddha",
-    "Love",
-    "Spider",
-    "Sound",
-    "Phoenix",
-    "Portal",
-    "Rumble",
-    "Pain",
-    "Blizzard",
-    "Gravity",
-    "Mammoth",
-    "T-Rex",
-    "Dough",
-    "Shadow",
-    "Venom",
-    "Control",
-    "Spirit",
-    "Dragon",
-    "Leopard",
-    "Kitsune",
-    "Gas",
-    "Yeti"
+    "Rocket", "Spin", "Blade", "Spring", "Bomb", "Smoke",
+    "Spike", "Flame", "Falcon", "Ice", "Sand", "Dark",
+    "Diamond", "Light", "Rubber", "Barrier", "Ghost", "Magma",
+    "Quake", "Buddha", "Love", "Spider", "Sound", "Phoenix",
+    "Portal", "Rumble", "Pain", "Blizzard", "Gravity", "Mammoth",
+    "T-Rex", "Dough", "Shadow", "Venom", "Control", "Spirit",
+    "Dragon", "Leopard", "Kitsune", "Gas", "Yeti"
 }
 
--- Variáveis compartilhadas pela perseguição e pelo Fly.
 local combatFollowTarget = nil
 local lastFollowJump = 0
 local followJumpCooldown = 0.85
@@ -181,7 +165,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  3.9"
+Title.Text = "Blox F' - Tales  |  4.0"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -745,8 +729,7 @@ local function teleportLocal(destination)
 end
 
 --========================================================
--- NOVO TELETRANSPORTE PLAYER COM SPEED AJUSTÁVEL
--- Aproximação contínua usando MoveTo, sem PivotTo no jogador.
+-- TELETRANSPORTE PLAYER COM SPEED AJUSTÁVEL
 --========================================================
 
 local function teleportToPlayer(target)
@@ -777,7 +760,7 @@ local function teleportToPlayer(target)
         local finished = false
         local startTime = os.clock()
 
-        humanoid.WalkSpeed = playerTeleportSpeed
+        humanoid.WalkSpeed = getAdjustedTeleportSpeed()
 
         setStatus("Correndo até " .. target.DisplayName .. "...")
 
@@ -797,7 +780,7 @@ local function teleportToPlayer(target)
                 break
             end
 
-            humanoid.WalkSpeed = playerTeleportSpeed
+            humanoid.WalkSpeed = getAdjustedTeleportSpeed()
 
             local offset = targetRoot.Position - root.Position
             local distance = offset.Magnitude
@@ -807,13 +790,11 @@ local function teleportToPlayer(target)
                 break
             end
 
-            -- Atualiza o destino constantemente para acompanhar o jogador.
             local approachPosition = targetRoot.Position
                 - targetRoot.CFrame.LookVector * 4
 
             humanoid:MoveTo(approachPosition)
 
-            -- Pulo automático quando o jogador está em uma posição superior.
             local verticalDifference = targetRoot.Position.Y - root.Position.Y
             local horizontalDifference = Vector3.new(
                 offset.X,
@@ -1136,8 +1117,8 @@ local function makeSpeedControl()
         walkSpeed = value
         local character = getCharacter()
         local hum = character and character:FindFirstChildOfClass("Humanoid")
-        if hum then hum.WalkSpeed = walkSpeed end
-        setStatus("Velocidade local: " .. walkSpeed)
+        if hum then hum.WalkSpeed = getAdjustedWalkSpeed() end
+        setStatus("Velocidade de caminhada: " .. walkSpeed)
     end)
 
     makeSlider("Força do pulo", 0, 150, jumpPower, function(value)
@@ -1349,7 +1330,6 @@ local function equipCombatTool(character, humanoid)
     return equipped
 end
 
--- NOVO: procura a fruta escolhida na interface.
 local function getEquippedFruitTool(character)
     if not selectedFruitName then
         return nil
@@ -1583,6 +1563,9 @@ local function startAttackLoop()
                 continue
             end
 
+            -- Mantém a velocidade geral aplicada durante a perseguição.
+            hum.WalkSpeed = getAdjustedWalkSpeed()
+
             local selectedTarget = getCurrentSelectedTarget()
 
             if selectedTarget then
@@ -1633,7 +1616,7 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 3.9", 36)
+        makeLabel("BLOX F' - TALES 4.0", 36)
         makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
@@ -1657,7 +1640,23 @@ local function showCategory(category)
 
     elseif category == "Jogador" then
         beginSection("Movimentação")
+
         makeSpeedControl()
+
+        -- NOVO SLIDER SPEED GERAL
+        -- Zero = velocidade original; 500 = até 6 vezes a velocidade base.
+        makeSlider("Speed geral", 0, 500, globalSpeed, function(value)
+            globalSpeed = value
+
+            local character = getCharacter()
+            local hum = character and character:FindFirstChildOfClass("Humanoid")
+
+            if hum then
+                hum.WalkSpeed = getAdjustedWalkSpeed()
+            end
+
+            setStatus("Speed geral: " .. value .. "%")
+        end)
 
         makeToggle("Pulo infinito", function(on)
             infiniteJump = on
@@ -1677,6 +1676,7 @@ local function showCategory(category)
             setStatus("Velocidade do Fly: " .. flySpeed)
         end)
 
+        makeLabel("O Speed geral também multiplica a velocidade do Fly. Quando estiver em zero, o Fly usa somente a velocidade configurada acima.", 54)
         makeLabel("O Fly acompanha a direção da câmera. Quando o ataque automático está perseguindo um alvo selecionado, o Fly também acompanha esse alvo.", 62)
         endSection()
 
@@ -1841,7 +1841,7 @@ local function showCategory(category)
 
         beginSection("Teletransporte para jogador", false)
 
-        makeLabel("Ajuste a velocidade com que seu personagem vai correr até o jogador selecionado.", 42)
+        makeLabel("Ajuste a velocidade com que seu personagem vai correr até o jogador. O Speed geral também multiplica esse valor.", 48)
 
         makeSlider("Speed", 16, 500, playerTeleportSpeed, function(value)
             playerTeleportSpeed = value
@@ -2016,10 +2016,6 @@ local function showCategory(category)
         end, COLORS.purple)
 
         refreshAttackTargetList(attackList, attackStatus)
-
-        --================================================
-        -- NOVO: SELEÇÃO MANUAL DA FRUTA EQUIPADA
-        --================================================
 
         makeLabel("Selecione a fruta que você está equipado.", 30)
 
@@ -2220,7 +2216,7 @@ local function showCategory(category)
             local hum = character and character:FindFirstChildOfClass("Humanoid")
 
             if hum then
-                hum.WalkSpeed = walkSpeed
+                hum.WalkSpeed = getAdjustedWalkSpeed()
                 hum.UseJumpPower = true
                 hum.JumpPower = jumpPower
                 setStatus("Configurações locais reaplicadas.")
@@ -2426,7 +2422,7 @@ table.insert(connections, LocalPlayer.CharacterAdded:Connect(function(character)
     local hum = character:FindFirstChildOfClass("Humanoid")
 
     if hum then
-        hum.WalkSpeed = walkSpeed
+        hum.WalkSpeed = getAdjustedWalkSpeed()
         hum.UseJumpPower = true
         hum.JumpPower = jumpPower
     end
@@ -2490,6 +2486,7 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
 
     if not root or not hum or not currentCamera then return end
 
+    local adjustedFlySpeed = getAdjustedFlySpeed()
     local target = nil
 
     if autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled then
@@ -2511,10 +2508,14 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
 
         if distance > 2 then
             local direction = offset.Unit
-            local speed = math.clamp(distance * 2.2, flySpeed * 0.65, flySpeed * 1.8)
+            local speed = math.clamp(
+                distance * 2.2,
+                adjustedFlySpeed * 0.65,
+                adjustedFlySpeed * 1.8
+            )
 
             if distance < 7 then
-                speed = math.min(speed, flySpeed * 0.55)
+                speed = math.min(speed, adjustedFlySpeed * 0.55)
             end
 
             root.AssemblyLinearVelocity = direction * speed
@@ -2566,7 +2567,7 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
     end
 
     root.AssemblyAngularVelocity = Vector3.zero
-    root.AssemblyLinearVelocity = direction * flySpeed
+    root.AssemblyLinearVelocity = direction * adjustedFlySpeed
     hum:ChangeState(Enum.HumanoidStateType.Physics)
 end))
 
@@ -2712,4 +2713,4 @@ end)
 
 showCategory("Início")
 
-print("Blox F' - Tales 3.9 carregado.")
+print("Blox F' - Tales 4.0 carregado.")
