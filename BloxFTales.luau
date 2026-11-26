@@ -1,6 +1,7 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 3.6
--- Interface responsiva, combate automático e recursos locais.
+-- BLOX F' - TALES | VERSAO 3.7
+-- Mira com seleção individual de alvos e teleporte com
+-- múltiplas tentativas locais.
 --========================================================
 
 local Players = game:GetService("Players")
@@ -64,6 +65,7 @@ local autoFruitEnabled = false
 local autoMissionEnabled = false
 local autoEvolutionEnabled = false
 local autoRewardsEnabled = false
+
 local selectedAimTarget = "NPCs"
 local attackDropdownOpen = false
 local targetTypeDropdownOpen = false
@@ -121,7 +123,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  3.6"
+Title.Text = "Blox F' - Tales  |  3.7"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -571,6 +573,10 @@ local function getRoot(character)
     return character and character:FindFirstChild("HumanoidRootPart")
 end
 
+-- TELEPORTE LOCAL COM TENTATIVAS REPETIDAS.
+-- A posição final ainda depende da autoridade do servidor do jogo.
+local teleportSequence = 0
+
 local function teleportLocal(destination)
     local character = getCharacter()
     local root = getRoot(character)
@@ -580,19 +586,68 @@ local function teleportLocal(destination)
         return false
     end
 
+    local targetCFrame
+
     if typeof(destination) == "CFrame" then
-        character:PivotTo(destination)
-        return true
+        targetCFrame = destination
     elseif typeof(destination) == "Vector3" then
-        character:PivotTo(CFrame.new(destination + Vector3.new(0, 4, 0)))
+        targetCFrame = CFrame.new(destination + Vector3.new(0, 4, 0))
+    else
+        return false
+    end
+
+    teleportSequence += 1
+    local thisSequence = teleportSequence
+
+    local function applyLocalTeleport()
+        local currentCharacter = getCharacter()
+        local currentRoot = getRoot(currentCharacter)
+
+        if not currentCharacter or not currentRoot then
+            return false
+        end
+
+        pcall(function()
+            currentCharacter:PivotTo(targetCFrame)
+        end)
+
+        pcall(function()
+            currentRoot.CFrame = targetCFrame
+            currentRoot.AssemblyLinearVelocity = Vector3.zero
+            currentRoot.AssemblyAngularVelocity = Vector3.zero
+        end)
+
         return true
     end
 
-    return false
+    if not applyLocalTeleport() then
+        return false
+    end
+
+    -- Repete a solicitação local por um curto período para detectar
+    -- correções de posição e tentar reaplicar o destino.
+    task.spawn(function()
+        for attempt = 1, 10 do
+            task.wait(0.12)
+
+            if not Screen.Parent or thisSequence ~= teleportSequence then
+                break
+            end
+
+            local currentRoot = getRoot(getCharacter())
+            if not currentRoot then break end
+
+            if (currentRoot.Position - targetCFrame.Position).Magnitude > 7 then
+                applyLocalTeleport()
+            else
+                break
+            end
+        end
+    end)
+
+    return true
 end
 
--- TENTA MANTER O TELEPORTE PARA O JOGADOR POR ALGUNS INSTANTES.
--- A posição ainda pode ser corrigida pelo servidor da experiência.
 local function teleportToPlayer(target)
     if not target or not target.Parent then
         setStatus("Jogador indisponível.")
@@ -606,13 +661,21 @@ local function teleportToPlayer(target)
     end
 
     local destination = targetRoot.CFrame * CFrame.new(0, 0, 4)
+    destination = CFrame.lookAt(
+        destination.Position + Vector3.new(0, 2, 0),
+        targetRoot.Position
+    )
+
     if not teleportLocal(destination) then return end
 
-    setStatus("Tentando manter o teletransporte próximo ao jogador...")
+    setStatus("Tentando teletransportar até " .. target.DisplayName .. "...")
 
     task.spawn(function()
-        for attempt = 1, 8 do
-            task.wait(0.2)
+        local attempts = 0
+
+        while attempts < 12 do
+            attempts += 1
+            task.wait(0.18)
 
             if not Screen.Parent or not target.Parent then break end
 
@@ -622,17 +685,39 @@ local function teleportToPlayer(target)
 
             if not latestTargetRoot or not currentRoot then break end
 
-            local desiredPosition = latestTargetRoot.Position
-                - latestTargetRoot.CFrame.LookVector * 4
-                + Vector3.new(0, 2, 0)
+            local desiredCFrame = latestTargetRoot.CFrame * CFrame.new(0, 0, 4)
+            local desiredPosition = desiredCFrame.Position + Vector3.new(0, 2, 0)
 
-            if (currentRoot.Position - desiredPosition).Magnitude > 8 then
-                currentCharacter:PivotTo(CFrame.new(desiredPosition, latestTargetRoot.Position))
+            if (currentRoot.Position - desiredPosition).Magnitude > 7 then
+                pcall(function()
+                    currentCharacter:PivotTo(
+                        CFrame.lookAt(desiredPosition, latestTargetRoot.Position)
+                    )
+                end)
+
+                pcall(function()
+                    currentRoot.CFrame = CFrame.lookAt(
+                        desiredPosition,
+                        latestTargetRoot.Position
+                    )
+                    currentRoot.AssemblyLinearVelocity = Vector3.zero
+                    currentRoot.AssemblyAngularVelocity = Vector3.zero
+                end)
+            else
+                break
             end
         end
 
         if Screen.Parent then
-            setStatus("Tentativa de teletransporte concluída.")
+            local finalRoot = getRoot(getCharacter())
+            local finalTargetRoot = getRoot(target.Character)
+
+            if finalRoot and finalTargetRoot
+                and (finalRoot.Position - finalTargetRoot.Position).Magnitude < 12 then
+                setStatus("Você chegou próximo ao jogador.")
+            else
+                setStatus("Tentativa local concluída; o servidor pode corrigir a posição.")
+            end
         end
     end)
 end
@@ -939,6 +1024,33 @@ local function makeSpeedControl()
     end)
 end
 
+-- Identifica se um Model pertence a um jogador.
+local function getPlayerFromModel(model)
+    if not model then return nil end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character == model then
+            return player
+        end
+    end
+
+    return nil
+end
+
+local function isValidAimType(model)
+    local player = getPlayerFromModel(model)
+
+    if selectedAimTarget == "NPCs" then
+        return player == nil
+    elseif selectedAimTarget == "Jogadores" then
+        return player ~= nil
+    elseif selectedAimTarget == "Todos" then
+        return true
+    end
+
+    return false
+end
+
 local function getAttackableTargets()
     local targets = {}
 
@@ -963,7 +1075,7 @@ local function getAttackableTargets()
     if selectedAimTarget == "NPCs" or selectedAimTarget == "Todos" then
         for _, item in ipairs(Workspace:GetDescendants()) do
             if item:IsA("Model") and item ~= getCharacter()
-                and not Players:GetPlayerFromCharacter(item) then
+                and not getPlayerFromModel(item) then
 
                 local hum = item:FindFirstChildOfClass("Humanoid")
                 local root = getRoot(item)
@@ -1036,7 +1148,12 @@ local function refreshAttackTargetList(container, statusLabel)
                 .. target.name
 
             local count = 0
-            for _ in pairs(selectedAttackTargets) do count += 1 end
+            for model in pairs(selectedAttackTargets) do
+                if model and model.Parent and isValidAimType(model) then
+                    count += 1
+                end
+            end
+
             statusLabel.Text = "Alvos selecionados: " .. count
         end)
     end
@@ -1047,7 +1164,6 @@ local attackLoopRunning = false
 local lastToolUse = 0
 local lastDodge = 0
 local dodgeSide = 1
-local lastTargetRefresh = 0
 
 local function getCombatTools(character)
     local tools = {}
@@ -1153,7 +1269,6 @@ local function performCombatDodge(humanoid, root, targetRoot)
     local sidePosition = targetRoot.Position
         + right * (dodgeSide * 7)
         - forward * 3
-        + Vector3.new(0, 0, 0)
 
     humanoid:MoveTo(sidePosition)
 end
@@ -1189,8 +1304,6 @@ local function startAttackLoop()
                         activateCombatTools(character, hum)
                     end
 
-                    -- Movimento lateral simples para tentar evitar ficar parado
-                    -- na frente do inimigo.
                     if distance < 6 then
                         performCombatDodge(hum, root, targetRoot)
                     else
@@ -1215,7 +1328,7 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 3.6", 36)
+        makeLabel("BLOX F' - TALES 3.7", 36)
         makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
@@ -1530,7 +1643,12 @@ local function showCategory(category)
                     end
                 end
 
-                setStatus("Alvo selecionado: " .. targetType)
+                -- Atualiza a lista para mostrar somente a categoria escolhida.
+                if attackList and attackList.Parent then
+                    refreshAttackTargetList(attackList, attackStatus)
+                end
+
+                setStatus("Mira configurada para: " .. targetType)
             end)
         end
 
@@ -1539,6 +1657,7 @@ local function showCategory(category)
         beginSection("Ataque, habilidades e Haki", false)
 
         local attackButton, attackList
+        local attackStatus
 
         attackButton = makeButton("▼  Selecionar alvos para ataque", function()
             attackDropdownOpen = not attackDropdownOpen
@@ -1547,7 +1666,7 @@ local function showCategory(category)
                 .. "Selecionar alvos para ataque"
         end)
 
-        local attackStatus = makeLabel("Alvos selecionados: 0", 25)
+        attackStatus = makeLabel("Alvos selecionados: 0", 25)
 
         attackList = Instance.new("ScrollingFrame")
         attackList.Name = "AttackTargetList"
@@ -1571,8 +1690,14 @@ local function showCategory(category)
 
         makeButton("ATUALIZAR LISTA DE ALVOS", function()
             refreshAttackTargetList(attackList, attackStatus)
+
             local count = 0
-            for _ in pairs(selectedAttackTargets) do count += 1 end
+            for model in pairs(selectedAttackTargets) do
+                if model and model.Parent and isValidAimType(model) then
+                    count += 1
+                end
+            end
+
             attackStatus.Text = "Alvos selecionados: " .. count
         end, COLORS.purple)
 
@@ -1763,6 +1888,7 @@ Close.MouseButton1Click:Connect(function()
     autoHakiEnabled = false
     autoSkillsEnabled = false
     flyEnabled = false
+    teleportSequence += 1
 
     for _, connection in ipairs(connections) do
         pcall(function()
@@ -1988,7 +2114,83 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
     hum:ChangeState(Enum.HumanoidStateType.Physics)
 end))
 
+--========================================================
+-- AIM ASSIST 3.7
+-- Regras:
+-- 1. NPCs: somente NPCs.
+-- 2. Jogadores: somente jogadores.
+-- 3. Todos: NPCs e jogadores.
+-- 4. Sem seleção individual: considera todos da categoria.
+-- 5. Com seleção individual: considera somente os marcados.
+--========================================================
+
+local function getAimCandidates()
+    local candidates = {}
+    local selectedCount = 0
+
+    -- Conta apenas seleções válidas dentro do tipo de alvo atual.
+    for model in pairs(selectedAttackTargets) do
+        if model and model.Parent and isValidAimType(model) then
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            local root = getRoot(model)
+
+            if hum and hum.Health > 0 and root then
+                selectedCount += 1
+            end
+        end
+    end
+
+    local function addCandidate(model)
+        if not model or model == getCharacter() then return end
+        if not isValidAimType(model) then return end
+
+        -- Quando existe seleção individual, ignora todos os não selecionados.
+        if selectedCount > 0 and selectedAttackTargets[model] ~= true then
+            return
+        end
+
+        local hum = model:FindFirstChildOfClass("Humanoid")
+        local head = model:FindFirstChild("Head")
+        local root = getRoot(model)
+        local part = head or root
+
+        if not hum or hum.Health <= 0 or not part or not root then
+            return
+        end
+
+        table.insert(candidates, {
+            model = model,
+            humanoid = hum,
+            root = root,
+            part = part
+        })
+    end
+
+    if selectedAimTarget == "NPCs" or selectedAimTarget == "Todos" then
+        for _, item in ipairs(Workspace:GetDescendants()) do
+            if item:IsA("Model")
+                and item ~= getCharacter()
+                and not getPlayerFromModel(item)
+                and item:FindFirstChildOfClass("Humanoid") then
+
+                addCandidate(item)
+            end
+        end
+    end
+
+    if selectedAimTarget == "Jogadores" or selectedAimTarget == "Todos" then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                addCandidate(player.Character)
+            end
+        end
+    end
+
+    return candidates, selectedCount
+end
+
 -- FOV: acompanha o centro da tela e o raio configurado.
+-- A mira não percorre personagens de outra categoria.
 table.insert(connections, RunService.RenderStepped:Connect(function()
     local currentCamera = Workspace.CurrentCamera
 
@@ -2004,47 +2206,38 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
     local myRoot = getRoot(getCharacter())
     if not currentCamera or not myRoot then return end
 
-    local bestPart, bestDistance = nil, math.huge
+    local candidates = getAimCandidates()
+    local bestPart = nil
+    local bestScreenDistance = math.huge
 
-    local function consider(model)
-        if not model or model == getCharacter() then return end
+    local center = Vector2.new(
+        currentCamera.ViewportSize.X / 2,
+        currentCamera.ViewportSize.Y / 2
+    )
 
-        local hum = model:FindFirstChildOfClass("Humanoid")
-        local part = model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart")
+    local maxRadius = aimFovEnabled and aimFovRadius or 500
 
-        if not hum or hum.Health <= 0 or not part then return end
+    for _, candidate in ipairs(candidates) do
+        local part = candidate.part
 
-        local worldDistance = (part.Position - myRoot.Position).Magnitude
-        if worldDistance > 600 then return end
+        if part and part.Parent then
+            local worldDistance = (part.Position - myRoot.Position).Magnitude
 
-        local point, visible = currentCamera:WorldToViewportPoint(part.Position)
-        if not visible then return end
+            if worldDistance <= 600 then
+                local point, visible = currentCamera:WorldToViewportPoint(part.Position)
 
-        local center = Vector2.new(
-            currentCamera.ViewportSize.X / 2,
-            currentCamera.ViewportSize.Y / 2
-        )
+                if visible and point.Z > 0 then
+                    local screenDistance = (
+                        Vector2.new(point.X, point.Y) - center
+                    ).Magnitude
 
-        local screenDistance = (Vector2.new(point.X, point.Y) - center).Magnitude
-        local maxRadius = aimFovEnabled and aimFovRadius or 500
+                    if screenDistance <= maxRadius
+                        and screenDistance < bestScreenDistance then
 
-        if screenDistance <= maxRadius and screenDistance < bestDistance then
-            bestPart, bestDistance = part, screenDistance
-        end
-    end
-
-    if selectedAimTarget == "NPCs" or selectedAimTarget == "Todos" then
-        for _, item in ipairs(Workspace:GetDescendants()) do
-            if item:IsA("Model") and item:FindFirstChildOfClass("Humanoid") then
-                consider(item)
-            end
-        end
-    end
-
-    if selectedAimTarget == "Jogadores" or selectedAimTarget == "Todos" then
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                consider(player.Character)
+                        bestPart = part
+                        bestScreenDistance = screenDistance
+                    end
+                end
             end
         end
     end
@@ -2057,7 +2250,7 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
     end
 end))
 
--- Atualiza a lista de alvos selecionados sem apagar as escolhas válidas.
+-- Remove seleções que deixaram de existir.
 task.spawn(function()
     while Screen.Parent do
         task.wait(2)
@@ -2074,4 +2267,4 @@ end)
 
 showCategory("Início")
 
-print("Blox F' - Tales 3.6 carregado.")
+print("Blox F' - Tales 3.7 carregado.")
