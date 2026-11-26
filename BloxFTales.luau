@@ -1,7 +1,7 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 3.7
--- Mira com seleção individual de alvos e teleporte com
--- múltiplas tentativas locais.
+-- BLOX F' - TALES | VERSAO 3.8
+-- Teleporte com movimento gradual, perseguição com pulo
+-- e Fly, ativação automática de habilidades por teclas.
 --========================================================
 
 local Players = game:GetService("Players")
@@ -70,6 +70,12 @@ local selectedAimTarget = "NPCs"
 local attackDropdownOpen = false
 local targetTypeDropdownOpen = false
 
+-- Variáveis compartilhadas pela perseguição e pelo Fly.
+local combatFollowTarget = nil
+local lastFollowJump = 0
+local followJumpCooldown = 0.85
+local followFlyActive = false
+
 local Screen = Instance.new("ScreenGui")
 Screen.Name = "BloxFTales"
 Screen.ResetOnSpawn = false
@@ -123,7 +129,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  3.7"
+Title.Text = "Blox F' - Tales  |  3.8"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -573,13 +579,19 @@ local function getRoot(character)
     return character and character:FindFirstChild("HumanoidRootPart")
 end
 
--- TELEPORTE LOCAL COM TENTATIVAS REPETIDAS.
--- A posição final ainda depende da autoridade do servidor do jogo.
+--========================================================
+-- TELEPORTE 3.8
+-- Primeiro tenta deslocamento gradual em etapas.
+-- Depois faz uma tentativa local de ajuste de posição.
+-- A posição final continua sujeita à autoridade do servidor.
+--========================================================
+
 local teleportSequence = 0
 
 local function teleportLocal(destination)
     local character = getCharacter()
     local root = getRoot(character)
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
     if not root then
         setStatus("Personagem ainda não carregou.")
@@ -599,48 +611,95 @@ local function teleportLocal(destination)
     teleportSequence += 1
     local thisSequence = teleportSequence
 
-    local function applyLocalTeleport()
+    task.spawn(function()
         local currentCharacter = getCharacter()
         local currentRoot = getRoot(currentCharacter)
+        local currentHumanoid = currentCharacter
+            and currentCharacter:FindFirstChildOfClass("Humanoid")
 
-        if not currentCharacter or not currentRoot then
-            return false
+        if not currentRoot or not currentHumanoid then return end
+
+        local startPosition = currentRoot.Position
+        local destinationPosition = targetCFrame.Position
+        local distance = (destinationPosition - startPosition).Magnitude
+
+        -- Movimento gradual em etapas para evitar uma única mudança brusca.
+        local steps = math.clamp(math.ceil(distance / 35), 1, 45)
+
+        for step = 1, steps do
+            if not Screen.Parent or thisSequence ~= teleportSequence then
+                return
+            end
+
+            currentCharacter = getCharacter()
+            currentRoot = getRoot(currentCharacter)
+            currentHumanoid = currentCharacter
+                and currentCharacter:FindFirstChildOfClass("Humanoid")
+
+            if not currentRoot or not currentHumanoid then return end
+
+            local alpha = step / steps
+            local nextPosition = startPosition:Lerp(destinationPosition, alpha)
+
+            currentHumanoid:MoveTo(nextPosition)
+            currentRoot.AssemblyLinearVelocity = Vector3.zero
+
+            -- Pequeno ajuste de posição por etapa.
+            pcall(function()
+                currentCharacter:PivotTo(
+                    CFrame.new(nextPosition) * targetCFrame.Rotation
+                )
+            end)
+
+            task.wait(0.045)
         end
 
-        pcall(function()
-            currentCharacter:PivotTo(targetCFrame)
-        end)
+        if not Screen.Parent or thisSequence ~= teleportSequence then
+            return
+        end
 
-        pcall(function()
-            currentRoot.CFrame = targetCFrame
-            currentRoot.AssemblyLinearVelocity = Vector3.zero
-            currentRoot.AssemblyAngularVelocity = Vector3.zero
-        end)
+        currentCharacter = getCharacter()
+        currentRoot = getRoot(currentCharacter)
 
-        return true
-    end
+        if not currentCharacter or not currentRoot then return end
 
-    if not applyLocalTeleport() then
-        return false
-    end
-
-    -- Repete a solicitação local por um curto período para detectar
-    -- correções de posição e tentar reaplicar o destino.
-    task.spawn(function()
-        for attempt = 1, 10 do
-            task.wait(0.12)
-
+        -- Ajuste final e algumas verificações contra correção local.
+        for attempt = 1, 8 do
             if not Screen.Parent or thisSequence ~= teleportSequence then
+                return
+            end
+
+            currentRoot = getRoot(getCharacter())
+            currentCharacter = getCharacter()
+
+            if not currentRoot or not currentCharacter then break end
+
+            if (currentRoot.Position - destinationPosition).Magnitude <= 6 then
                 break
             end
 
-            local currentRoot = getRoot(getCharacter())
-            if not currentRoot then break end
+            pcall(function()
+                currentCharacter:PivotTo(targetCFrame)
+            end)
 
-            if (currentRoot.Position - targetCFrame.Position).Magnitude > 7 then
-                applyLocalTeleport()
+            pcall(function()
+                currentRoot.CFrame = targetCFrame
+                currentRoot.AssemblyLinearVelocity = Vector3.zero
+                currentRoot.AssemblyAngularVelocity = Vector3.zero
+            end)
+
+            task.wait(0.12)
+        end
+
+        local finalRoot = getRoot(getCharacter())
+
+        if finalRoot then
+            local remaining = (finalRoot.Position - destinationPosition).Magnitude
+
+            if remaining <= 12 then
+                setStatus("Chegou próximo ao destino.")
             else
-                break
+                setStatus("Movimento tentado; o servidor pode corrigir a posição.")
             end
         end
     end)
@@ -668,41 +727,33 @@ local function teleportToPlayer(target)
 
     if not teleportLocal(destination) then return end
 
-    setStatus("Tentando teletransportar até " .. target.DisplayName .. "...")
+    setStatus("Tentando alcançar " .. target.DisplayName .. "...")
 
     task.spawn(function()
         local attempts = 0
 
         while attempts < 12 do
             attempts += 1
-            task.wait(0.18)
+            task.wait(0.25)
 
             if not Screen.Parent or not target.Parent then break end
 
             local latestTargetRoot = getRoot(target.Character)
-            local currentCharacter = getCharacter()
-            local currentRoot = getRoot(currentCharacter)
+            local currentRoot = getRoot(getCharacter())
 
             if not latestTargetRoot or not currentRoot then break end
 
             local desiredCFrame = latestTargetRoot.CFrame * CFrame.new(0, 0, 4)
             local desiredPosition = desiredCFrame.Position + Vector3.new(0, 2, 0)
 
-            if (currentRoot.Position - desiredPosition).Magnitude > 7 then
-                pcall(function()
-                    currentCharacter:PivotTo(
-                        CFrame.lookAt(desiredPosition, latestTargetRoot.Position)
-                    )
-                end)
+            if (currentRoot.Position - desiredPosition).Magnitude > 9 then
+                local currentCharacter = getCharacter()
+                local currentHumanoid = currentCharacter
+                    and currentCharacter:FindFirstChildOfClass("Humanoid")
 
-                pcall(function()
-                    currentRoot.CFrame = CFrame.lookAt(
-                        desiredPosition,
-                        latestTargetRoot.Position
-                    )
-                    currentRoot.AssemblyLinearVelocity = Vector3.zero
-                    currentRoot.AssemblyAngularVelocity = Vector3.zero
-                end)
+                if currentHumanoid then
+                    currentHumanoid:MoveTo(desiredPosition)
+                end
             else
                 break
             end
@@ -713,10 +764,10 @@ local function teleportToPlayer(target)
             local finalTargetRoot = getRoot(target.Character)
 
             if finalRoot and finalTargetRoot
-                and (finalRoot.Position - finalTargetRoot.Position).Magnitude < 12 then
+                and (finalRoot.Position - finalTargetRoot.Position).Magnitude < 14 then
                 setStatus("Você chegou próximo ao jogador.")
             else
-                setStatus("Tentativa local concluída; o servidor pode corrigir a posição.")
+                setStatus("Tentativa concluída; o servidor pode corrigir a posição.")
             end
         end
     end)
@@ -1024,7 +1075,6 @@ local function makeSpeedControl()
     end)
 end
 
--- Identifica se um Model pertence a um jogador.
 local function getPlayerFromModel(model)
     if not model then return nil end
 
@@ -1159,7 +1209,10 @@ local function refreshAttackTargetList(container, statusLabel)
     end
 end
 
--- COMBATE AUTOMÁTICO
+--========================================================
+-- COMBATE AUTOMÁTICO 3.8
+--========================================================
+
 local attackLoopRunning = false
 local lastToolUse = 0
 local lastDodge = 0
@@ -1219,8 +1272,126 @@ local function equipCombatTool(character, humanoid)
     return equipped
 end
 
+-- Tenta localizar a fruta equipada ou guardada.
+local function getEquippedFruitTool(character)
+    local fruitNames = {
+        "rocket", "spin", "chop", "spring", "bomb", "smoke",
+        "spike", "flame", "falcon", "ice", "sand", "dark",
+        "diamond", "light", "rubber", "barrier", "ghost",
+        "magma", "quake", "buddha", "love", "spider", "sound",
+        "phoenix", "portal", "rumble", "pain", "blizzard",
+        "gravity", "mammoth", "trex", "dough", "shadow",
+        "venom", "control", "spirit", "dragon", "leopard",
+        "kitsune", "t rex"
+    }
+
+    local tools = getCombatTools(character)
+
+    for _, tool in ipairs(tools) do
+        local normalized = string.lower(tool.Name):gsub("[%s_%-]", "")
+
+        for _, fruitName in ipairs(fruitNames) do
+            local key = fruitName:gsub("[%s_%-]", "")
+
+            if string.find(normalized, key, 1, true)
+                or string.find(key, normalized, 1, true) then
+                return tool
+            end
+        end
+    end
+
+    return nil
+end
+
+-- Ativação das teclas de habilidade.
+-- O jogo ainda valida internamente a fruta e a maestria necessária.
+local skillKeys = {
+    Enum.KeyCode.Z,
+    Enum.KeyCode.X,
+    Enum.KeyCode.C,
+    Enum.KeyCode.V,
+    Enum.KeyCode.F
+}
+
+local skillKeyIndex = 0
+local lastSkillUse = 0
+local skillCooldown = 1.35
+local virtualInputManager
+
+pcall(function()
+    virtualInputManager = game:GetService("VirtualInputManager")
+end)
+
+local function sendSkillKey(keyCode)
+    if not virtualInputManager then
+        return false
+    end
+
+    local sent = false
+
+    local ok = pcall(function()
+        virtualInputManager:SendKeyEvent(true, keyCode, false, game)
+        task.wait(0.08)
+        virtualInputManager:SendKeyEvent(false, keyCode, false, game)
+        sent = true
+    end)
+
+    return ok and sent
+end
+
+local function activateFruitSkills(character)
+    if not autoSkillsEnabled then return end
+
+    local now = os.clock()
+    if now - lastSkillUse < skillCooldown then return end
+
+    local fruitTool = getEquippedFruitTool(character)
+
+    if not fruitTool then
+        return
+    end
+
+    -- Mantém a fruta equipada antes de tentar usar a habilidade.
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+    if humanoid and fruitTool.Parent ~= character then
+        pcall(function()
+            humanoid:EquipTool(fruitTool)
+        end)
+        return
+    end
+
+    if fruitTool.Parent ~= character then
+        return
+    end
+
+    skillKeyIndex += 1
+
+    if skillKeyIndex > #skillKeys then
+        skillKeyIndex = 1
+    end
+
+    local keyCode = skillKeys[skillKeyIndex]
+    lastSkillUse = now
+
+    if sendSkillKey(keyCode) then
+        setStatus("Tentando habilidade da fruta: " .. keyCode.Name)
+    else
+        -- Fallback para ferramentas que ativam pelo próprio Tool.
+        pcall(function()
+            fruitTool:Activate()
+        end)
+        setStatus("Ativação direta da fruta tentada.")
+    end
+end
+
 local function activateCombatTools(character, humanoid)
     local now = os.clock()
+
+    if autoSkillsEnabled then
+        activateFruitSkills(character)
+    end
+
     if now - lastToolUse < 0.45 then return end
     lastToolUse = now
 
@@ -1234,17 +1405,21 @@ local function activateCombatTools(character, humanoid)
 end
 
 local function getCurrentSelectedTarget()
+    local validTargets = {}
+
     for model in pairs(selectedAttackTargets) do
         if model and model.Parent then
             local targetHum = model:FindFirstChildOfClass("Humanoid")
             local targetRoot = getRoot(model)
 
-            if targetHum and targetHum.Health > 0 and targetRoot then
-                return {
+            if targetHum and targetHum.Health > 0 and targetRoot
+                and isValidAimType(model) then
+
+                table.insert(validTargets, {
                     model = model,
                     humanoid = targetHum,
                     root = targetRoot
-                }
+                })
             else
                 selectedAttackTargets[model] = nil
             end
@@ -1253,7 +1428,26 @@ local function getCurrentSelectedTarget()
         end
     end
 
-    return nil
+    if #validTargets == 0 then
+        return nil
+    end
+
+    -- Escolhe o alvo selecionado mais próximo do personagem.
+    local myRoot = getRoot(getCharacter())
+    if not myRoot then return validTargets[1] end
+
+    local nearest, nearestDistance = nil, math.huge
+
+    for _, target in ipairs(validTargets) do
+        local distance = (myRoot.Position - target.root.Position).Magnitude
+
+        if distance < nearestDistance then
+            nearest = target
+            nearestDistance = distance
+        end
+    end
+
+    return nearest
 end
 
 local function performCombatDodge(humanoid, root, targetRoot)
@@ -1273,17 +1467,52 @@ local function performCombatDodge(humanoid, root, targetRoot)
     humanoid:MoveTo(sidePosition)
 end
 
+local function handleFollowJump(humanoid, root, targetRoot)
+    if not humanoid or not root or not targetRoot then return end
+
+    local now = os.clock()
+    if now - lastFollowJump < followJumpCooldown then return end
+
+    local verticalDifference = targetRoot.Position.Y - root.Position.Y
+    local horizontalDistance = Vector3.new(
+        targetRoot.Position.X - root.Position.X,
+        0,
+        targetRoot.Position.Z - root.Position.Z
+    ).Magnitude
+
+    local state = humanoid:GetState()
+    local grounded =
+        state == Enum.HumanoidStateType.Running
+        or state == Enum.HumanoidStateType.RunningNoPhysics
+        or state == Enum.HumanoidStateType.Landed
+
+    -- Pula quando o alvo está acima ou quando há uma diferença
+    -- vertical relevante durante a perseguição.
+    if verticalDifference > 3.2 and horizontalDistance < 45 then
+        lastFollowJump = now
+        humanoid.Jump = true
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    elseif grounded and verticalDifference > 1.8 and horizontalDistance < 16 then
+        lastFollowJump = now
+        humanoid.Jump = true
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end
+
 local function startAttackLoop()
     if attackLoopRunning then return end
     attackLoopRunning = true
 
     task.spawn(function()
-        while autoAttackEnabled and Screen.Parent do
+        while (autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled)
+            and Screen.Parent do
+
             local character = getCharacter()
             local root = getRoot(character)
             local hum = character and character:FindFirstChildOfClass("Humanoid")
 
             if not root or not hum or hum.Health <= 0 then
+                combatFollowTarget = nil
                 task.wait(0.5)
                 continue
             end
@@ -1292,13 +1521,18 @@ local function startAttackLoop()
 
             if selectedTarget then
                 local targetRoot = selectedTarget.root
+                combatFollowTarget = selectedTarget
                 local distance = (root.Position - targetRoot.Position).Magnitude
+
+                handleFollowJump(hum, root, targetRoot)
 
                 if distance > 8 then
                     local approachPosition = targetRoot.Position
                         - targetRoot.CFrame.LookVector * 4
 
-                    hum:MoveTo(approachPosition)
+                    if not flyEnabled then
+                        hum:MoveTo(approachPosition)
+                    end
                 else
                     if autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled then
                         activateCombatTools(character, hum)
@@ -1306,17 +1540,22 @@ local function startAttackLoop()
 
                     if distance < 6 then
                         performCombatDodge(hum, root, targetRoot)
-                    else
+                    elseif not flyEnabled then
                         hum:MoveTo(targetRoot.Position - targetRoot.CFrame.LookVector * 4)
                     end
                 end
             else
-                hum:MoveTo(root.Position)
+                combatFollowTarget = nil
+
+                if not flyEnabled then
+                    hum:MoveTo(root.Position)
+                end
             end
 
-            task.wait(0.15)
+            task.wait(0.12)
         end
 
+        combatFollowTarget = nil
         attackLoopRunning = false
     end)
 end
@@ -1328,7 +1567,7 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 3.7", 36)
+        makeLabel("BLOX F' - TALES 3.8", 36)
         makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
@@ -1361,6 +1600,9 @@ local function showCategory(category)
 
         makeToggle("Fly / Voar", function(on)
             flyEnabled = on
+            if not on then
+                followFlyActive = false
+            end
             setStatus(on and "Fly ligado" or "Fly desligado")
         end)
 
@@ -1369,7 +1611,7 @@ local function showCategory(category)
             setStatus("Velocidade do Fly: " .. flySpeed)
         end)
 
-        makeLabel("O Fly acompanha a direção para a qual a câmera está apontando. No celular, use o controle de movimento para avançar e direcione a câmera para cima ou para baixo.", 58)
+        makeLabel("O Fly acompanha a direção da câmera. Quando o ataque automático está perseguindo um alvo selecionado, o Fly também acompanha esse alvo.", 62)
         endSection()
 
         beginSection("Colisão")
@@ -1483,7 +1725,7 @@ local function showCategory(category)
 
             if destination then
                 local ok = teleportLocal(destination * CFrame.new(0, 5, 0))
-                setStatus(ok and ("Indo para " .. selectedIsland) or "Não foi possível mover o personagem.")
+                setStatus(ok and ("Tentando ir para " .. selectedIsland) or "Não foi possível mover o personagem.")
             else
                 setStatus("Não encontrei " .. selectedIsland .. " no mapa carregado. O nome interno pode ser diferente.")
             end
@@ -1526,7 +1768,7 @@ local function showCategory(category)
                 math.clamp(z, -100000, 100000)
             ))
 
-            setStatus(ok and "Teleporte local solicitado." or "Não foi possível teletransportar.")
+            setStatus(ok and "Movimento para as coordenadas solicitado." or "Não foi possível teletransportar.")
         end, COLORS.purple)
 
         endSection()
@@ -1600,6 +1842,9 @@ local function showCategory(category)
             setStatus("Raio do FOV: " .. aimFovRadius)
         end)
 
+        -- Declaração antecipada para o callback acessar as variáveis locais.
+        local attackButton, attackList, attackStatus
+
         local typeButton, targetTypeDropdown
 
         typeButton = makeButton("▼  Tipo de alvo: " .. selectedAimTarget, function()
@@ -1643,7 +1888,6 @@ local function showCategory(category)
                     end
                 end
 
-                -- Atualiza a lista para mostrar somente a categoria escolhida.
                 if attackList and attackList.Parent then
                     refreshAttackTargetList(attackList, attackStatus)
                 end
@@ -1655,9 +1899,6 @@ local function showCategory(category)
         endSection()
 
         beginSection("Ataque, habilidades e Haki", false)
-
-        local attackButton, attackList
-        local attackStatus
 
         attackButton = makeButton("▼  Selecionar alvos para ataque", function()
             attackDropdownOpen = not attackDropdownOpen
@@ -1888,6 +2129,7 @@ Close.MouseButton1Click:Connect(function()
     autoHakiEnabled = false
     autoSkillsEnabled = false
     flyEnabled = false
+    combatFollowTarget = nil
     teleportSequence += 1
 
     for _, connection in ipairs(connections) do
@@ -2024,6 +2266,8 @@ table.insert(connections, LocalPlayer.CharacterAdded:Connect(function(character)
         hum.JumpPower = jumpPower
     end
 
+    combatFollowTarget = nil
+
     for part in pairs(collisionCache) do
         collisionCache[part] = nil
     end
@@ -2064,9 +2308,18 @@ table.insert(connections, Players.PlayerRemoving:Connect(function(player)
     end
 end))
 
--- Fly: teclado e celular, seguindo a direção da câmera.
+--========================================================
+-- FLY 3.8
+-- Quando há alvo selecionado e combate automático ligado,
+-- o Fly passa a acompanhar a posição do alvo.
+-- Sem alvo, mantém os controles normais de câmera.
+--========================================================
+
 table.insert(connections, RunService.Heartbeat:Connect(function()
-    if not flyEnabled then return end
+    if not flyEnabled then
+        followFlyActive = false
+        return
+    end
 
     local character = getCharacter()
     local root = getRoot(character)
@@ -2074,6 +2327,47 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
     local currentCamera = Workspace.CurrentCamera
 
     if not root or not hum or not currentCamera then return end
+
+    local target = nil
+
+    if autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled then
+        target = combatFollowTarget
+    end
+
+    if target and target.root and target.root.Parent
+        and target.humanoid and target.humanoid.Health > 0 then
+
+        followFlyActive = true
+
+        local targetRoot = target.root
+        local followPosition = targetRoot.Position
+            - targetRoot.CFrame.LookVector * 4
+            + Vector3.new(0, 2.5, 0)
+
+        local offset = followPosition - root.Position
+        local distance = offset.Magnitude
+
+        if distance > 2 then
+            local direction = offset.Unit
+            local speed = math.clamp(distance * 2.2, flySpeed * 0.65, flySpeed * 1.8)
+
+            if distance < 7 then
+                speed = math.min(speed, flySpeed * 0.55)
+            end
+
+            root.AssemblyLinearVelocity = direction * speed
+        else
+            root.AssemblyLinearVelocity = Vector3.zero
+        end
+
+        root.AssemblyAngularVelocity = Vector3.zero
+        hum:ChangeState(Enum.HumanoidStateType.Physics)
+
+        handleFollowJump(hum, root, targetRoot)
+        return
+    end
+
+    followFlyActive = false
 
     local cameraCFrame = currentCamera.CFrame
     local look = cameraCFrame.LookVector
@@ -2115,7 +2409,7 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
 end))
 
 --========================================================
--- AIM ASSIST 3.7
+-- AIM ASSIST 3.8
 -- Regras:
 -- 1. NPCs: somente NPCs.
 -- 2. Jogadores: somente jogadores.
@@ -2128,7 +2422,6 @@ local function getAimCandidates()
     local candidates = {}
     local selectedCount = 0
 
-    -- Conta apenas seleções válidas dentro do tipo de alvo atual.
     for model in pairs(selectedAttackTargets) do
         if model and model.Parent and isValidAimType(model) then
             local hum = model:FindFirstChildOfClass("Humanoid")
@@ -2144,7 +2437,6 @@ local function getAimCandidates()
         if not model or model == getCharacter() then return end
         if not isValidAimType(model) then return end
 
-        -- Quando existe seleção individual, ignora todos os não selecionados.
         if selectedCount > 0 and selectedAttackTargets[model] ~= true then
             return
         end
@@ -2189,8 +2481,6 @@ local function getAimCandidates()
     return candidates, selectedCount
 end
 
--- FOV: acompanha o centro da tela e o raio configurado.
--- A mira não percorre personagens de outra categoria.
 table.insert(connections, RunService.RenderStepped:Connect(function()
     local currentCamera = Workspace.CurrentCamera
 
@@ -2250,7 +2540,6 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
     end
 end))
 
--- Remove seleções que deixaram de existir.
 task.spawn(function()
     while Screen.Parent do
         task.wait(2)
@@ -2267,4 +2556,4 @@ end)
 
 showCategory("Início")
 
-print("Blox F' - Tales 3.7 carregado.")
+print("Blox F' - Tales 3.8 carregado.")
