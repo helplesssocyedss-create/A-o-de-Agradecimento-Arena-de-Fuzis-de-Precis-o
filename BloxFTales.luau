@@ -1,7 +1,7 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 3.8
--- Teleporte com movimento gradual, perseguição com pulo
--- e Fly, ativação automática de habilidades por teclas.
+-- BLOX F' - TALES | VERSAO 3.9
+-- Teletransporte gradual para jogadores com velocidade ajustável
+-- Seleção manual da fruta equipada e habilidades automáticas.
 --========================================================
 
 local Players = game:GetService("Players")
@@ -53,6 +53,10 @@ local jumpPower = 50
 local flyEnabled = false
 local flySpeed = 65
 
+-- NOVO: velocidade da aproximação até o jogador.
+local playerTeleportSpeed = 100
+local playerTeleportSequence = 0
+
 local aimAssistEnabled = false
 local aimFovEnabled = false
 local aimFovRadius = 140
@@ -70,6 +74,55 @@ local selectedAimTarget = "NPCs"
 local attackDropdownOpen = false
 local targetTypeDropdownOpen = false
 
+-- NOVO: fruta escolhida manualmente pelo usuário.
+local selectedFruitName = nil
+local pendingFruitName = nil
+local fruitDropdownOpen = false
+
+local fruitCatalog = {
+    "Rocket",
+    "Spin",
+    "Blade",
+    "Spring",
+    "Bomb",
+    "Smoke",
+    "Spike",
+    "Flame",
+    "Falcon",
+    "Ice",
+    "Sand",
+    "Dark",
+    "Diamond",
+    "Light",
+    "Rubber",
+    "Barrier",
+    "Ghost",
+    "Magma",
+    "Quake",
+    "Buddha",
+    "Love",
+    "Spider",
+    "Sound",
+    "Phoenix",
+    "Portal",
+    "Rumble",
+    "Pain",
+    "Blizzard",
+    "Gravity",
+    "Mammoth",
+    "T-Rex",
+    "Dough",
+    "Shadow",
+    "Venom",
+    "Control",
+    "Spirit",
+    "Dragon",
+    "Leopard",
+    "Kitsune",
+    "Gas",
+    "Yeti"
+}
+
 -- Variáveis compartilhadas pela perseguição e pelo Fly.
 local combatFollowTarget = nil
 local lastFollowJump = 0
@@ -83,7 +136,6 @@ Screen.IgnoreGuiInset = true
 Screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Screen.Parent = PlayerGui
 
--- CÍRCULO VISUAL DO FOV
 local FOVCircle = Instance.new("Frame")
 FOVCircle.Name = "AimFOVCircle"
 FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -129,7 +181,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  3.8"
+Title.Text = "Blox F' - Tales  |  3.9"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -580,10 +632,7 @@ local function getRoot(character)
 end
 
 --========================================================
--- TELEPORTE 3.8
--- Primeiro tenta deslocamento gradual em etapas.
--- Depois faz uma tentativa local de ajuste de posição.
--- A posição final continua sujeita à autoridade do servidor.
+-- TELETRANSPORTE GRADUAL PARA ILHAS E COORDENADAS
 --========================================================
 
 local teleportSequence = 0
@@ -591,7 +640,6 @@ local teleportSequence = 0
 local function teleportLocal(destination)
     local character = getCharacter()
     local root = getRoot(character)
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
     if not root then
         setStatus("Personagem ainda não carregou.")
@@ -622,8 +670,6 @@ local function teleportLocal(destination)
         local startPosition = currentRoot.Position
         local destinationPosition = targetCFrame.Position
         local distance = (destinationPosition - startPosition).Magnitude
-
-        -- Movimento gradual em etapas para evitar uma única mudança brusca.
         local steps = math.clamp(math.ceil(distance / 35), 1, 45)
 
         for step = 1, steps do
@@ -642,9 +688,7 @@ local function teleportLocal(destination)
             local nextPosition = startPosition:Lerp(destinationPosition, alpha)
 
             currentHumanoid:MoveTo(nextPosition)
-            currentRoot.AssemblyLinearVelocity = Vector3.zero
 
-            -- Pequeno ajuste de posição por etapa.
             pcall(function()
                 currentCharacter:PivotTo(
                     CFrame.new(nextPosition) * targetCFrame.Rotation
@@ -663,7 +707,6 @@ local function teleportLocal(destination)
 
         if not currentCharacter or not currentRoot then return end
 
-        -- Ajuste final e algumas verificações contra correção local.
         for attempt = 1, 8 do
             if not Screen.Parent or thisSequence ~= teleportSequence then
                 return
@@ -674,18 +717,12 @@ local function teleportLocal(destination)
 
             if not currentRoot or not currentCharacter then break end
 
-            if (currentRoot.Position - destinationPosition).Magnitude <= 6 then
+            if (currentRoot.Position - targetCFrame.Position).Magnitude <= 6 then
                 break
             end
 
             pcall(function()
                 currentCharacter:PivotTo(targetCFrame)
-            end)
-
-            pcall(function()
-                currentRoot.CFrame = targetCFrame
-                currentRoot.AssemblyLinearVelocity = Vector3.zero
-                currentRoot.AssemblyAngularVelocity = Vector3.zero
             end)
 
             task.wait(0.12)
@@ -694,12 +731,12 @@ local function teleportLocal(destination)
         local finalRoot = getRoot(getCharacter())
 
         if finalRoot then
-            local remaining = (finalRoot.Position - destinationPosition).Magnitude
+            local remaining = (finalRoot.Position - targetCFrame.Position).Magnitude
 
             if remaining <= 12 then
                 setStatus("Chegou próximo ao destino.")
             else
-                setStatus("Movimento tentado; o servidor pode corrigir a posição.")
+                setStatus("O servidor pode corrigir a posição.")
             end
         end
     end)
@@ -707,68 +744,108 @@ local function teleportLocal(destination)
     return true
 end
 
+--========================================================
+-- NOVO TELETRANSPORTE PLAYER COM SPEED AJUSTÁVEL
+-- Aproximação contínua usando MoveTo, sem PivotTo no jogador.
+--========================================================
+
 local function teleportToPlayer(target)
     if not target or not target.Parent then
         setStatus("Jogador indisponível.")
         return
     end
 
-    local targetRoot = getRoot(target.Character)
-    if not targetRoot then
+    if not getRoot(target.Character) then
         setStatus("O personagem do jogador não está disponível.")
         return
     end
 
-    local destination = targetRoot.CFrame * CFrame.new(0, 0, 4)
-    destination = CFrame.lookAt(
-        destination.Position + Vector3.new(0, 2, 0),
-        targetRoot.Position
-    )
-
-    if not teleportLocal(destination) then return end
-
-    setStatus("Tentando alcançar " .. target.DisplayName .. "...")
+    playerTeleportSequence += 1
+    local thisSequence = playerTeleportSequence
 
     task.spawn(function()
-        local attempts = 0
+        local character = getCharacter()
+        local root = getRoot(character)
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
-        while attempts < 12 do
-            attempts += 1
-            task.wait(0.25)
-
-            if not Screen.Parent or not target.Parent then break end
-
-            local latestTargetRoot = getRoot(target.Character)
-            local currentRoot = getRoot(getCharacter())
-
-            if not latestTargetRoot or not currentRoot then break end
-
-            local desiredCFrame = latestTargetRoot.CFrame * CFrame.new(0, 0, 4)
-            local desiredPosition = desiredCFrame.Position + Vector3.new(0, 2, 0)
-
-            if (currentRoot.Position - desiredPosition).Magnitude > 9 then
-                local currentCharacter = getCharacter()
-                local currentHumanoid = currentCharacter
-                    and currentCharacter:FindFirstChildOfClass("Humanoid")
-
-                if currentHumanoid then
-                    currentHumanoid:MoveTo(desiredPosition)
-                end
-            else
-                break
-            end
+        if not root or not humanoid then
+            setStatus("Personagem ainda não carregou.")
+            return
         end
 
-        if Screen.Parent then
-            local finalRoot = getRoot(getCharacter())
-            local finalTargetRoot = getRoot(target.Character)
+        local originalSpeed = humanoid.WalkSpeed
+        local finished = false
+        local startTime = os.clock()
 
-            if finalRoot and finalTargetRoot
-                and (finalRoot.Position - finalTargetRoot.Position).Magnitude < 14 then
-                setStatus("Você chegou próximo ao jogador.")
-            else
-                setStatus("Tentativa concluída; o servidor pode corrigir a posição.")
+        humanoid.WalkSpeed = playerTeleportSpeed
+
+        setStatus("Correndo até " .. target.DisplayName .. "...")
+
+        while Screen.Parent
+            and thisSequence == playerTeleportSequence
+            and target.Parent
+            and os.clock() - startTime < 60 do
+
+            character = getCharacter()
+            root = getRoot(character)
+            humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+            local targetCharacter = target.Character
+            local targetRoot = getRoot(targetCharacter)
+
+            if not root or not humanoid or humanoid.Health <= 0 or not targetRoot then
+                break
             end
+
+            humanoid.WalkSpeed = playerTeleportSpeed
+
+            local offset = targetRoot.Position - root.Position
+            local distance = offset.Magnitude
+
+            if distance <= 6 then
+                finished = true
+                break
+            end
+
+            -- Atualiza o destino constantemente para acompanhar o jogador.
+            local approachPosition = targetRoot.Position
+                - targetRoot.CFrame.LookVector * 4
+
+            humanoid:MoveTo(approachPosition)
+
+            -- Pulo automático quando o jogador está em uma posição superior.
+            local verticalDifference = targetRoot.Position.Y - root.Position.Y
+            local horizontalDifference = Vector3.new(
+                offset.X,
+                0,
+                offset.Z
+            ).Magnitude
+
+            if verticalDifference > 3.2 and horizontalDifference < 45 then
+                humanoid.Jump = true
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+
+            task.wait(0.12)
+        end
+
+        character = getCharacter()
+        humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+        if humanoid then
+            humanoid.WalkSpeed = originalSpeed
+        end
+
+        if thisSequence ~= playerTeleportSequence then
+            return
+        end
+
+        if finished then
+            setStatus("Você chegou próximo de " .. target.DisplayName .. ".")
+        elseif not target.Parent then
+            setStatus("O jogador saiu do servidor.")
+        else
+            setStatus("Aproximação encerrada. O servidor pode limitar a velocidade.")
         end
     end)
 end
@@ -988,7 +1065,7 @@ local function makePlayerSelection()
         makeLabel("Nenhum outro jogador está no servidor.", 32)
     end
 
-    confirmButton = makeButton("CONFIRMAR TELETRANSPORTE PARA O JOGADOR", function()
+    confirmButton = makeButton("CONFIRMAR IDA ATÉ O JOGADOR", function()
         local target = selectedPlayer
 
         if not target or not target.Parent then
@@ -1210,7 +1287,7 @@ local function refreshAttackTargetList(container, statusLabel)
 end
 
 --========================================================
--- COMBATE AUTOMÁTICO 3.8
+-- COMBATE AUTOMÁTICO
 --========================================================
 
 local attackLoopRunning = false
@@ -1272,39 +1349,28 @@ local function equipCombatTool(character, humanoid)
     return equipped
 end
 
--- Tenta localizar a fruta equipada ou guardada.
+-- NOVO: procura a fruta escolhida na interface.
 local function getEquippedFruitTool(character)
-    local fruitNames = {
-        "rocket", "spin", "chop", "spring", "bomb", "smoke",
-        "spike", "flame", "falcon", "ice", "sand", "dark",
-        "diamond", "light", "rubber", "barrier", "ghost",
-        "magma", "quake", "buddha", "love", "spider", "sound",
-        "phoenix", "portal", "rumble", "pain", "blizzard",
-        "gravity", "mammoth", "trex", "dough", "shadow",
-        "venom", "control", "spirit", "dragon", "leopard",
-        "kitsune", "t rex"
-    }
+    if not selectedFruitName then
+        return nil
+    end
 
+    local selectedKey = normalizeName(selectedFruitName)
     local tools = getCombatTools(character)
 
     for _, tool in ipairs(tools) do
-        local normalized = string.lower(tool.Name):gsub("[%s_%-]", "")
+        local toolName = normalizeName(tool.Name)
 
-        for _, fruitName in ipairs(fruitNames) do
-            local key = fruitName:gsub("[%s_%-]", "")
-
-            if string.find(normalized, key, 1, true)
-                or string.find(key, normalized, 1, true) then
-                return tool
-            end
+        if toolName == selectedKey
+            or string.find(toolName, selectedKey, 1, true)
+            or string.find(selectedKey, toolName, 1, true) then
+            return tool
         end
     end
 
     return nil
 end
 
--- Ativação das teclas de habilidade.
--- O jogo ainda valida internamente a fruta e a maestria necessária.
 local skillKeys = {
     Enum.KeyCode.Z,
     Enum.KeyCode.X,
@@ -1342,6 +1408,11 @@ end
 local function activateFruitSkills(character)
     if not autoSkillsEnabled then return end
 
+    if not selectedFruitName then
+        setStatus("Selecione e confirme sua fruta na aba Combate.")
+        return
+    end
+
     local now = os.clock()
     if now - lastSkillUse < skillCooldown then return end
 
@@ -1351,7 +1422,6 @@ local function activateFruitSkills(character)
         return
     end
 
-    -- Mantém a fruta equipada antes de tentar usar a habilidade.
     local humanoid = character:FindFirstChildOfClass("Humanoid")
 
     if humanoid and fruitTool.Parent ~= character then
@@ -1375,9 +1445,8 @@ local function activateFruitSkills(character)
     lastSkillUse = now
 
     if sendSkillKey(keyCode) then
-        setStatus("Tentando habilidade da fruta: " .. keyCode.Name)
+        setStatus("Tentando habilidade de " .. selectedFruitName .. ": " .. keyCode.Name)
     else
-        -- Fallback para ferramentas que ativam pelo próprio Tool.
         pcall(function()
             fruitTool:Activate()
         end)
@@ -1432,7 +1501,6 @@ local function getCurrentSelectedTarget()
         return nil
     end
 
-    -- Escolhe o alvo selecionado mais próximo do personagem.
     local myRoot = getRoot(getCharacter())
     if not myRoot then return validTargets[1] end
 
@@ -1486,8 +1554,6 @@ local function handleFollowJump(humanoid, root, targetRoot)
         or state == Enum.HumanoidStateType.RunningNoPhysics
         or state == Enum.HumanoidStateType.Landed
 
-    -- Pula quando o alvo está acima ou quando há uma diferença
-    -- vertical relevante durante a perseguição.
     if verticalDifference > 3.2 and horizontalDistance < 45 then
         lastFollowJump = now
         humanoid.Jump = true
@@ -1567,7 +1633,7 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 3.8", 36)
+        makeLabel("BLOX F' - TALES 3.9", 36)
         makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
@@ -1774,6 +1840,14 @@ local function showCategory(category)
         endSection()
 
         beginSection("Teletransporte para jogador", false)
+
+        makeLabel("Ajuste a velocidade com que seu personagem vai correr até o jogador selecionado.", 42)
+
+        makeSlider("Speed", 16, 500, playerTeleportSpeed, function(value)
+            playerTeleportSpeed = value
+            setStatus("Speed do teletransporte player: " .. value)
+        end)
+
         makePlayerSelection()
         endSection()
 
@@ -1842,7 +1916,6 @@ local function showCategory(category)
             setStatus("Raio do FOV: " .. aimFovRadius)
         end)
 
-        -- Declaração antecipada para o callback acessar as variáveis locais.
         local attackButton, attackList, attackStatus
 
         local typeButton, targetTypeDropdown
@@ -1944,6 +2017,97 @@ local function showCategory(category)
 
         refreshAttackTargetList(attackList, attackStatus)
 
+        --================================================
+        -- NOVO: SELEÇÃO MANUAL DA FRUTA EQUIPADA
+        --================================================
+
+        makeLabel("Selecione a fruta que você está equipado.", 30)
+
+        local fruitSelectionLabel = makeLabel(
+            "Fruta confirmada: " .. (selectedFruitName or "nenhuma"),
+            28
+        )
+
+        local fruitDropdownButton
+        local fruitList
+
+        fruitDropdownButton = makeButton("▼  Selecione a fruta que você está equipado", function()
+            fruitDropdownOpen = not fruitDropdownOpen
+            fruitList.Visible = fruitDropdownOpen
+            fruitDropdownButton.Text = (fruitDropdownOpen and "▼  " or "▶  ")
+                .. "Selecione a fruta que você está equipado"
+        end)
+
+        fruitList = Instance.new("ScrollingFrame")
+        fruitList.Name = "FruitSelectionList"
+        fruitList.Size = UDim2.new(1, -4, 0, 150)
+        fruitList.BackgroundColor3 = COLORS.panel
+        fruitList.BorderSizePixel = 0
+        fruitList.ScrollBarThickness = 4
+        fruitList.ScrollBarImageColor3 = COLORS.purple
+        fruitList.CanvasSize = UDim2.new(0, 0, 0, 0)
+        fruitList.Visible = false
+        fruitList.Parent = activeContainer
+        Instance.new("UICorner", fruitList).CornerRadius = UDim.new(0, 7)
+
+        local fruitListLayout = Instance.new("UIListLayout")
+        fruitListLayout.Padding = UDim.new(0, 4)
+        fruitListLayout.Parent = fruitList
+
+        fruitListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            fruitList.CanvasSize = UDim2.new(
+                0,
+                0,
+                0,
+                fruitListLayout.AbsoluteContentSize.Y + 8
+            )
+        end)
+
+        local fruitOptionButtons = {}
+
+        local function updateFruitOptions()
+            for fruitName, option in pairs(fruitOptionButtons) do
+                if option and option.Parent then
+                    local chosen = pendingFruitName == fruitName
+                    option.BackgroundColor3 = chosen and COLORS.green or COLORS.row
+                    option.Text = (chosen and "✓   " or "○   ") .. fruitName
+                end
+            end
+        end
+
+        for _, fruitName in ipairs(fruitCatalog) do
+            local option = Instance.new("TextButton")
+            option.Name = "FruitOption"
+            option.Size = UDim2.new(1, -4, 0, 32)
+            option.BackgroundColor3 = pendingFruitName == fruitName and COLORS.green or COLORS.row
+            option.Text = (pendingFruitName == fruitName and "✓   " or "○   ") .. fruitName
+            option.TextColor3 = COLORS.white
+            option.TextSize = 12
+            option.Font = Enum.Font.Gotham
+            option.TextXAlignment = Enum.TextXAlignment.Left
+            option.Parent = fruitList
+            Instance.new("UICorner", option).CornerRadius = UDim.new(0, 6)
+
+            fruitOptionButtons[fruitName] = option
+
+            option.MouseButton1Click:Connect(function()
+                pendingFruitName = fruitName
+                updateFruitOptions()
+                setStatus("Fruta selecionada: " .. fruitName .. ". Confirme para salvar.")
+            end)
+        end
+
+        makeButton("CONFIRMAR FRUTA", function()
+            if not pendingFruitName then
+                setStatus("Escolha uma fruta antes de confirmar.")
+                return
+            end
+
+            selectedFruitName = pendingFruitName
+            fruitSelectionLabel.Text = "Fruta confirmada: " .. selectedFruitName
+            setStatus("Fruta configurada: " .. selectedFruitName)
+        end, COLORS.green)
+
         makeToggle("Ataque automático", function(on)
             autoAttackEnabled = on
             if on then
@@ -1991,7 +2155,7 @@ local function showCategory(category)
             setStatus(on and "Coleta automática de frutas ligada" or "Coleta automática de frutas desligada")
         end)
 
-        makeLabel("Catálogo de frutas: Rocket, Spin, Chop, Spring, Bomb, Smoke, Spike, Flame, Falcon, Ice, Sand, Dark, Diamond, Light, Rubber, Barrier, Ghost, Magma, Quake, Buddha, Love, Spider, Sound, Phoenix, Portal, Rumble, Pain, Blizzard, Gravity, Mammoth, T-Rex, Dough, Shadow, Venom, Control, Spirit, Dragon e Leopard.", 100)
+        makeLabel("Catálogo de frutas: Rocket, Spin, Blade, Spring, Bomb, Smoke, Spike, Flame, Falcon, Ice, Sand, Dark, Diamond, Light, Rubber, Barrier, Ghost, Magma, Quake, Buddha, Love, Spider, Sound, Phoenix, Portal, Rumble, Pain, Blizzard, Gravity, Mammoth, T-Rex, Dough, Shadow, Venom, Control, Spirit, Dragon, Leopard, Kitsune, Gas e Yeti.", 110)
 
         endSection()
 
@@ -2131,6 +2295,7 @@ Close.MouseButton1Click:Connect(function()
     flyEnabled = false
     combatFollowTarget = nil
     teleportSequence += 1
+    playerTeleportSequence += 1
 
     for _, connection in ipairs(connections) do
         pcall(function()
@@ -2309,10 +2474,7 @@ table.insert(connections, Players.PlayerRemoving:Connect(function(player)
 end))
 
 --========================================================
--- FLY 3.8
--- Quando há alvo selecionado e combate automático ligado,
--- o Fly passa a acompanhar a posição do alvo.
--- Sem alvo, mantém os controles normais de câmera.
+-- FLY
 --========================================================
 
 table.insert(connections, RunService.Heartbeat:Connect(function()
@@ -2409,13 +2571,7 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
 end))
 
 --========================================================
--- AIM ASSIST 3.8
--- Regras:
--- 1. NPCs: somente NPCs.
--- 2. Jogadores: somente jogadores.
--- 3. Todos: NPCs e jogadores.
--- 4. Sem seleção individual: considera todos da categoria.
--- 5. Com seleção individual: considera somente os marcados.
+-- AIM ASSIST
 --========================================================
 
 local function getAimCandidates()
@@ -2556,4 +2712,4 @@ end)
 
 showCategory("Início")
 
-print("Blox F' - Tales 3.8 carregado.")
+print("Blox F' - Tales 3.9 carregado.")
