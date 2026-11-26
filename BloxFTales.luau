@@ -1,5 +1,5 @@
     --========================================================
-    -- BLOX F' - TALES | VERSAO 4.4
+    -- BLOX F' - TALES | VERSAO 4.5
     -- Interface reorganizada em estilo azul neon.
     -- Recursos e callbacks existentes preservados; ajustes focados no painel.
     --========================================================
@@ -2248,7 +2248,7 @@
             endSection()
 
         elseif category == "Combate" then
-            beginSection("Mira e seleção de alvos", false)
+            beginSection("Mira e seleção de alvos", true)
 
             makeToggle("Aim Assist", function(on)
                 aimAssistEnabled = on
@@ -2322,7 +2322,7 @@
 
             endSection()
 
-            beginSection("Ataque, habilidades e Haki", false)
+            beginSection("Ataque, habilidades e Haki", true)
 
             attackButton = makeButton("▼  Selecionar alvos para ataque", function()
                 attackDropdownOpen = not attackDropdownOpen
@@ -2820,10 +2820,12 @@
         local bottom = 10
         local sideWidth = isSmall and math.clamp(math.floor(width * 0.145), 92, 126)
             or math.min(190, math.max(150, width * 0.17))
-        local rightWidth = 0 -- configuracoes ficam na categoria Configuracoes
+        local rightWidth = isSmall and 0 or math.clamp(math.floor(width * 0.28), 285, 340)
+        -- Em telas amplas, reserva uma coluna real para Configurações/Listas,
+        -- como na referência. Em telas compactas, ela volta para a categoria.
         local gap = 12
         local contentLeft = sideWidth + gap * 2
-        local contentRightGap = gap
+        local contentRightGap = rightWidth > 0 and (rightWidth + gap * 2) or gap
 
         expandedSize = UDim2.fromOffset(width, height)
         Main.Size = expandedSize
@@ -3204,4 +3206,4 @@
 
     showCategory("Combate")
 
-    print("Blox F' - Tales 4.4 carregado.")
+    print("Blox F' - Tales 4.5 carregado.")
