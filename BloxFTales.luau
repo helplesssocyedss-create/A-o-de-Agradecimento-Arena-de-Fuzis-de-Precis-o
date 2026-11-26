@@ -1,6 +1,6 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 3.5
--- Interface responsiva e recursos locais.
+-- BLOX F' - TALES | VERSAO 3.6
+-- Interface responsiva, combate automático e recursos locais.
 --========================================================
 
 local Players = game:GetService("Players")
@@ -75,6 +75,27 @@ Screen.IgnoreGuiInset = true
 Screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Screen.Parent = PlayerGui
 
+-- CÍRCULO VISUAL DO FOV
+local FOVCircle = Instance.new("Frame")
+FOVCircle.Name = "AimFOVCircle"
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
+FOVCircle.Size = UDim2.fromOffset(aimFovRadius * 2, aimFovRadius * 2)
+FOVCircle.BackgroundTransparency = 1
+FOVCircle.Visible = false
+FOVCircle.ZIndex = 20
+FOVCircle.Parent = Screen
+
+local FOVCorner = Instance.new("UICorner")
+FOVCorner.CornerRadius = UDim.new(1, 0)
+FOVCorner.Parent = FOVCircle
+
+local FOVStroke = Instance.new("UIStroke")
+FOVStroke.Color = COLORS.purple
+FOVStroke.Thickness = 2
+FOVStroke.Transparency = 0.15
+FOVStroke.Parent = FOVCircle
+
 local Main = Instance.new("Frame")
 Main.Name = "Main"
 Main.Size = UDim2.fromOffset(620, 430)
@@ -100,7 +121,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  3.5"
+Title.Text = "Blox F' - Tales  |  3.6"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -137,11 +158,7 @@ local expandedPosition = Main.Position
 local function tween(object, props, duration)
     TweenService:Create(
         object,
-        TweenInfo.new(
-            duration or 0.2,
-            Enum.EasingStyle.Quart,
-            Enum.EasingDirection.Out
-        ),
+        TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
         props
     ):Play()
 end
@@ -166,7 +183,6 @@ local function MinimizePanel()
         Min.Position = UDim2.fromOffset(13, 13)
         Min.Size = UDim2.fromOffset(34, 34)
         Min.Text = "↗"
-
         tween(Main, {Size = UDim2.fromOffset(60, 60)}, 0.22)
         tween(Header, {Size = UDim2.fromOffset(60, 60)}, 0.22)
     else
@@ -356,9 +372,7 @@ local function makeToggle(name, callback, initial)
         }, 0.15)
 
         tween(dot, {
-            Position = states[name]
-                and UDim2.fromOffset(26, 3)
-                or UDim2.fromOffset(3, 3)
+            Position = states[name] and UDim2.fromOffset(26, 3) or UDim2.fromOffset(3, 3)
         }, 0.15)
     end
 
@@ -500,17 +514,11 @@ local function makeSlider(labelText, minValue, maxValue, initialValue, callback)
     local value = initialValue
 
     local function setValueFromX(x)
-        local percent = math.clamp(
-            (x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X,
-            0,
-            1
-        )
-
+        local percent = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
         value = math.floor(minValue + (maxValue - minValue) * percent + 0.5)
         fill.Size = UDim2.new(percent, 0, 1, 0)
         knob.Position = UDim2.new(percent, 0, 0.5, 0)
         title.Text = labelText .. ": " .. tostring(value)
-
         if callback then callback(value) end
     end
 
@@ -581,6 +589,52 @@ local function teleportLocal(destination)
     end
 
     return false
+end
+
+-- TENTA MANTER O TELEPORTE PARA O JOGADOR POR ALGUNS INSTANTES.
+-- A posição ainda pode ser corrigida pelo servidor da experiência.
+local function teleportToPlayer(target)
+    if not target or not target.Parent then
+        setStatus("Jogador indisponível.")
+        return
+    end
+
+    local targetRoot = getRoot(target.Character)
+    if not targetRoot then
+        setStatus("O personagem do jogador não está disponível.")
+        return
+    end
+
+    local destination = targetRoot.CFrame * CFrame.new(0, 0, 4)
+    if not teleportLocal(destination) then return end
+
+    setStatus("Tentando manter o teletransporte próximo ao jogador...")
+
+    task.spawn(function()
+        for attempt = 1, 8 do
+            task.wait(0.2)
+
+            if not Screen.Parent or not target.Parent then break end
+
+            local latestTargetRoot = getRoot(target.Character)
+            local currentCharacter = getCharacter()
+            local currentRoot = getRoot(currentCharacter)
+
+            if not latestTargetRoot or not currentRoot then break end
+
+            local desiredPosition = latestTargetRoot.Position
+                - latestTargetRoot.CFrame.LookVector * 4
+                + Vector3.new(0, 2, 0)
+
+            if (currentRoot.Position - desiredPosition).Magnitude > 8 then
+                currentCharacter:PivotTo(CFrame.new(desiredPosition, latestTargetRoot.Position))
+            end
+        end
+
+        if Screen.Parent then
+            setStatus("Tentativa de teletransporte concluída.")
+        end
+    end)
 end
 
 local function normalizeName(value)
@@ -681,7 +735,6 @@ local function applyPlayerVisuals()
 
                     local myRoot = getRoot(getCharacter())
                     local theirRoot = getRoot(character)
-
                     local distance = (myRoot and theirRoot)
                         and math.floor((myRoot.Position - theirRoot.Position).Magnitude)
                         or 0
@@ -699,7 +752,6 @@ end
 
 local function refreshObjectHighlights(kind, enabled)
     local bucket = kind == "fruit" and fruitHighlights or chestHighlights
-
     removeHighlights(bucket)
 
     if not enabled then return end
@@ -728,7 +780,6 @@ end
 
 local function refreshBossESP(enabled)
     removeHighlights(bossHighlights)
-
     if not enabled then return end
 
     for _, item in ipairs(Workspace:GetDescendants()) do
@@ -809,8 +860,7 @@ local function makePlayerSelection()
             return
         end
 
-        local targetRoot = getRoot(target.Character)
-        if not targetRoot then
+        if not getRoot(target.Character) then
             setStatus("O personagem do jogador não está disponível.")
             return
         end
@@ -855,15 +905,7 @@ local function makePlayerSelection()
         no.Parent = dialog
 
         yes.MouseButton1Click:Connect(function()
-            local latestRoot = getRoot(target.Character)
-
-            if latestRoot then
-                teleportLocal(latestRoot.CFrame * CFrame.new(0, 0, 4))
-                setStatus("Teletransporte local solicitado.")
-            else
-                setStatus("O jogador não está mais disponível.")
-            end
-
+            teleportToPlayer(target)
             dialog:Destroy()
         end)
 
@@ -945,6 +987,8 @@ local function refreshAttackTargetList(container, statusLabel)
     for _, child in ipairs(container:GetChildren()) do
         if child:IsA("TextButton") and child.Name == "AttackTargetOption" then
             child:Destroy()
+        elseif child:IsA("TextLabel") and child.Name == "AttackTargetOption" then
+            child:Destroy()
         end
     end
 
@@ -983,8 +1027,7 @@ local function refreshAttackTargetList(container, statusLabel)
         Instance.new("UICorner", option).CornerRadius = UDim.new(0, 6)
 
         option.MouseButton1Click:Connect(function()
-            selectedAttackTargets[target.model] =
-                not selectedAttackTargets[target.model]
+            selectedAttackTargets[target.model] = not selectedAttackTargets[target.model]
 
             option.BackgroundColor3 =
                 selectedAttackTargets[target.model] and COLORS.green or COLORS.row
@@ -999,7 +1042,121 @@ local function refreshAttackTargetList(container, statusLabel)
     end
 end
 
+-- COMBATE AUTOMÁTICO
 local attackLoopRunning = false
+local lastToolUse = 0
+local lastDodge = 0
+local dodgeSide = 1
+local lastTargetRefresh = 0
+
+local function getCombatTools(character)
+    local tools = {}
+    local seen = {}
+
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+
+    local function addTools(container)
+        if not container then return end
+
+        for _, item in ipairs(container:GetChildren()) do
+            if item:IsA("Tool") and not seen[item] then
+                seen[item] = true
+                table.insert(tools, item)
+            end
+        end
+    end
+
+    addTools(character)
+    addTools(backpack)
+
+    return tools
+end
+
+local function equipCombatTool(character, humanoid)
+    local tools = getCombatTools(character)
+    local equipped = nil
+
+    for _, tool in ipairs(tools) do
+        if tool.Parent == character then
+            equipped = tool
+            break
+        end
+    end
+
+    if not equipped then
+        local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+
+        if backpack then
+            for _, tool in ipairs(backpack:GetChildren()) do
+                if tool:IsA("Tool") then
+                    pcall(function()
+                        humanoid:EquipTool(tool)
+                    end)
+
+                    equipped = tool
+                    break
+                end
+            end
+        end
+    end
+
+    return equipped
+end
+
+local function activateCombatTools(character, humanoid)
+    local now = os.clock()
+    if now - lastToolUse < 0.45 then return end
+    lastToolUse = now
+
+    local tool = equipCombatTool(character, humanoid)
+
+    if tool and tool.Parent == character then
+        pcall(function()
+            tool:Activate()
+        end)
+    end
+end
+
+local function getCurrentSelectedTarget()
+    for model in pairs(selectedAttackTargets) do
+        if model and model.Parent then
+            local targetHum = model:FindFirstChildOfClass("Humanoid")
+            local targetRoot = getRoot(model)
+
+            if targetHum and targetHum.Health > 0 and targetRoot then
+                return {
+                    model = model,
+                    humanoid = targetHum,
+                    root = targetRoot
+                }
+            else
+                selectedAttackTargets[model] = nil
+            end
+        else
+            selectedAttackTargets[model] = nil
+        end
+    end
+
+    return nil
+end
+
+local function performCombatDodge(humanoid, root, targetRoot)
+    local now = os.clock()
+    if now - lastDodge < 1.1 then return end
+    lastDodge = now
+
+    dodgeSide = -dodgeSide
+
+    local right = targetRoot.CFrame.RightVector
+    local forward = targetRoot.CFrame.LookVector
+
+    local sidePosition = targetRoot.Position
+        + right * (dodgeSide * 7)
+        - forward * 3
+        + Vector3.new(0, 0, 0)
+
+    humanoid:MoveTo(sidePosition)
+end
 
 local function startAttackLoop()
     if attackLoopRunning then return end
@@ -1016,72 +1173,35 @@ local function startAttackLoop()
                 continue
             end
 
-            local selectedTarget = nil
-
-            for model in pairs(selectedAttackTargets) do
-                if model and model.Parent then
-                    local targetHum = model:FindFirstChildOfClass("Humanoid")
-                    local targetRoot = getRoot(model)
-
-                    if targetHum and targetHum.Health > 0 and targetRoot then
-                        selectedTarget = {
-                            model = model,
-                            humanoid = targetHum,
-                            root = targetRoot
-                        }
-                        break
-                    else
-                        selectedAttackTargets[model] = nil
-                    end
-                else
-                    selectedAttackTargets[model] = nil
-                end
-            end
+            local selectedTarget = getCurrentSelectedTarget()
 
             if selectedTarget then
                 local targetRoot = selectedTarget.root
                 local distance = (root.Position - targetRoot.Position).Magnitude
 
-                if distance > 7 then
-                    hum:MoveTo(targetRoot.Position - targetRoot.CFrame.LookVector * 4)
+                if distance > 8 then
+                    local approachPosition = targetRoot.Position
+                        - targetRoot.CFrame.LookVector * 4
+
+                    hum:MoveTo(approachPosition)
                 else
-                    hum:MoveTo(root.Position)
-
-                    if autoHakiEnabled then
-                        for _, tool in ipairs(character:GetChildren()) do
-                            if tool:IsA("Tool") then
-                                pcall(function()
-                                    tool:Activate()
-                                end)
-                            end
-                        end
+                    if autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled then
+                        activateCombatTools(character, hum)
                     end
 
-                    if autoSkillsEnabled then
-                        for _, tool in ipairs(character:GetChildren()) do
-                            if tool:IsA("Tool") then
-                                pcall(function()
-                                    tool:Activate()
-                                end)
-                            end
-                        end
-                    end
-
-                    if autoAttackEnabled then
-                        for _, tool in ipairs(character:GetChildren()) do
-                            if tool:IsA("Tool") then
-                                pcall(function()
-                                    tool:Activate()
-                                end)
-                            end
-                        end
+                    -- Movimento lateral simples para tentar evitar ficar parado
+                    -- na frente do inimigo.
+                    if distance < 6 then
+                        performCombatDodge(hum, root, targetRoot)
+                    else
+                        hum:MoveTo(targetRoot.Position - targetRoot.CFrame.LookVector * 4)
                     end
                 end
             else
                 hum:MoveTo(root.Position)
             end
 
-            task.wait(0.2)
+            task.wait(0.15)
         end
 
         attackLoopRunning = false
@@ -1095,7 +1215,7 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 3.5", 36)
+        makeLabel("BLOX F' - TALES 3.6", 36)
         makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
@@ -1357,15 +1477,16 @@ local function showCategory(category)
 
         makeToggle("Mostrar FOV", function(on)
             aimFovEnabled = on
+            FOVCircle.Visible = on
             setStatus(on and "FOV ativado" or "FOV desativado")
         end)
 
         makeSlider("Raio do FOV", 30, 500, aimFovRadius, function(value)
             aimFovRadius = value
+            FOVCircle.Size = UDim2.fromOffset(value * 2, value * 2)
             setStatus("Raio do FOV: " .. aimFovRadius)
         end)
 
-        -- Declaração antecipada para o callback acessar as variáveis locais.
         local typeButton, targetTypeDropdown
 
         typeButton = makeButton("▼  Tipo de alvo: " .. selectedAimTarget, function()
@@ -1417,7 +1538,6 @@ local function showCategory(category)
 
         beginSection("Ataque, habilidades e Haki", false)
 
-        -- Declaração antecipada para o callback acessar as variáveis locais.
         local attackButton, attackList
 
         attackButton = makeButton("▼  Selecionar alvos para ataque", function()
@@ -1449,7 +1569,7 @@ local function showCategory(category)
             attackList.CanvasSize = UDim2.new(0, 0, 0, attackListLayout.AbsoluteContentSize.Y + 8)
         end)
 
-        local refreshButton = makeButton("ATUALIZAR LISTA DE ALVOS", function()
+        makeButton("ATUALIZAR LISTA DE ALVOS", function()
             refreshAttackTargetList(attackList, attackStatus)
             local count = 0
             for _ in pairs(selectedAttackTargets) do count += 1 end
@@ -1468,11 +1588,17 @@ local function showCategory(category)
 
         makeToggle("Haki automático", function(on)
             autoHakiEnabled = on
+            if on and not attackLoopRunning then
+                startAttackLoop()
+            end
             setStatus(on and "Haki automático ligado" or "Haki automático desligado")
         end)
 
         makeToggle("Uso automático de habilidades", function(on)
             autoSkillsEnabled = on
+            if on and not attackLoopRunning then
+                startAttackLoop()
+            end
             setStatus(on and "Habilidades automáticas ligadas" or "Habilidades automáticas desligadas")
         end)
 
@@ -1634,6 +1760,8 @@ Min.MouseButton1Click:Connect(MinimizePanel)
 Close.MouseButton1Click:Connect(function()
     destroyed = true
     autoAttackEnabled = false
+    autoHakiEnabled = false
+    autoSkillsEnabled = false
     flyEnabled = false
 
     for _, connection in ipairs(connections) do
@@ -1666,7 +1794,6 @@ end)
 Header.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement
         or input.UserInputType == Enum.UserInputType.Touch then
-
         dragInput = input
     end
 end)
@@ -1691,7 +1818,6 @@ end))
 table.insert(connections, UIS.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
-
         dragging = false
     end
 end))
@@ -1699,6 +1825,7 @@ end))
 local camera = Workspace.CurrentCamera
 
 local function fitToScreen()
+    camera = Workspace.CurrentCamera
     if not camera or minimized then return end
 
     local viewport = camera.ViewportSize
@@ -1726,8 +1853,8 @@ end
 
 table.insert(connections, UIS.JumpRequest:Connect(function()
     if infiniteJump then
-        local hum = getCharacter()
-            and getCharacter():FindFirstChildOfClass("Humanoid")
+        local character = getCharacter()
+        local hum = character and character:FindFirstChildOfClass("Humanoid")
 
         if hum then
             hum:ChangeState(Enum.HumanoidStateType.Jumping)
@@ -1798,15 +1925,20 @@ table.insert(connections, Players.PlayerAdded:Connect(function()
 end))
 
 table.insert(connections, Players.PlayerRemoving:Connect(function(player)
-    selectedAttackTargets[player.Character] = nil
+    if player.Character then
+        selectedAttackTargets[player.Character] = nil
+    end
+
+    if selectedPlayer == player then
+        selectedPlayer = nil
+    end
 
     if espPlayers or showNames or showDistances then
         task.delay(0.2, applyPlayerVisuals)
     end
 end))
 
--- Fly: controles de teclado e celular alinhados à câmera,
--- incluindo a inclinação vertical da câmera no celular.
+-- Fly: teclado e celular, seguindo a direção da câmera.
 table.insert(connections, RunService.Heartbeat:Connect(function()
     if not flyEnabled then return end
 
@@ -1826,7 +1958,6 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
 
     if UIS.TouchEnabled then
         local moveDirection = hum.MoveDirection
-
         local flatLook = Vector3.new(look.X, 0, look.Z)
         local flatRight = Vector3.new(right.X, 0, right.Z)
 
@@ -1854,17 +1985,23 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
 
     root.AssemblyAngularVelocity = Vector3.zero
     root.AssemblyLinearVelocity = direction * flySpeed
-
     hum:ChangeState(Enum.HumanoidStateType.Physics)
 end))
 
--- Aim Assist local: acompanha o alvo mais próximo dentro do raio configurado.
+-- FOV: acompanha o centro da tela e o raio configurado.
 table.insert(connections, RunService.RenderStepped:Connect(function()
+    local currentCamera = Workspace.CurrentCamera
+
+    if currentCamera then
+        local viewport = currentCamera.ViewportSize
+        FOVCircle.Position = UDim2.fromOffset(viewport.X / 2, viewport.Y / 2)
+        FOVCircle.Size = UDim2.fromOffset(aimFovRadius * 2, aimFovRadius * 2)
+        FOVCircle.Visible = aimFovEnabled
+    end
+
     if not aimAssistEnabled then return end
 
-    local currentCamera = Workspace.CurrentCamera
     local myRoot = getRoot(getCharacter())
-
     if not currentCamera or not myRoot then return end
 
     local bestPart, bestDistance = nil, math.huge
@@ -1920,6 +2057,21 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
     end
 end))
 
+-- Atualiza a lista de alvos selecionados sem apagar as escolhas válidas.
+task.spawn(function()
+    while Screen.Parent do
+        task.wait(2)
+
+        if not Screen.Parent then break end
+
+        for model in pairs(selectedAttackTargets) do
+            if not model or not model.Parent then
+                selectedAttackTargets[model] = nil
+            end
+        end
+    end
+end)
+
 showCategory("Início")
 
-print("Blox F' - Tales 3.5 carregado.")
+print("Blox F' - Tales 3.6 carregado.")
