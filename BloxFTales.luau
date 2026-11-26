@@ -1,7 +1,7 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 4.2
--- Interface reorganizada em estilo azul neon.
--- Recursos e callbacks existentes preservados; ajustes focados no painel.
+-- BLOX F' - TALES | VERSAO 4.4
+-- Interface reconstruida para reproduzir a estrutura da referencia BloxF Tales.
+-- Apenas organizacao visual e separacao de categorias; recursos e callbacks preservados.
 --========================================================
 
 local Players = game:GetService("Players")
@@ -20,15 +20,15 @@ local COLORS = {
     bg = Color3.fromRGB(5, 11, 24),
     panel = Color3.fromRGB(9, 20, 39),
     row = Color3.fromRGB(13, 29, 53),
-    purple = Color3.fromRGB(20, 137, 255), -- azul neon principal
+    purple = Color3.fromRGB(0, 116, 255), -- azul eletrico principal
     green = Color3.fromRGB(32, 190, 112),
     gray = Color3.fromRGB(55, 75, 101),
     white = Color3.fromRGB(239, 247, 255),
     red = Color3.fromRGB(225, 66, 82),
     muted = Color3.fromRGB(145, 169, 198),
-    line = Color3.fromRGB(29, 91, 155),
-    header = Color3.fromRGB(7, 24, 49),
-    card = Color3.fromRGB(10, 25, 47)
+    line = Color3.fromRGB(20, 111, 220),
+    header = Color3.fromRGB(4, 18, 43),
+    card = Color3.fromRGB(7, 24, 49)
 }
 
 local states = {}
@@ -147,8 +147,8 @@ FOVStroke.Parent = FOVCircle
 
 local Main = Instance.new("Frame")
 Main.Name = "Main"
-Main.Size = UDim2.fromOffset(760, 510)
-Main.Position = UDim2.new(0.5, -380, 0.5, -255)
+Main.Size = UDim2.fromOffset(920, 520)
+Main.Position = UDim2.new(0.5, -460, 0.5, -260)
 Main.BackgroundColor3 = COLORS.bg
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
@@ -157,8 +157,8 @@ Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 
 local stroke = Instance.new("UIStroke", Main)
 stroke.Color = COLORS.purple
-stroke.Thickness = 2
-stroke.Transparency = 0.08
+stroke.Thickness = 2.5
+stroke.Transparency = 0.02
 
 local mainGradient = Instance.new("UIGradient")
 mainGradient.Color = ColorSequence.new({
@@ -169,27 +169,35 @@ mainGradient.Rotation = 90
 mainGradient.Parent = Main
 
 local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, 62)
+Header.Size = UDim2.new(1, 0, 0, 68)
 Header.BackgroundColor3 = COLORS.header
 Header.BorderSizePixel = 0
 Header.Parent = Main
 Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 12)
+local headerGradient = Instance.new("UIGradient")
+headerGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(5, 37, 91)),
+    ColorSequenceKeypoint.new(0.55, Color3.fromRGB(4, 20, 48)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(3, 12, 31))
+})
+headerGradient.Rotation = 0
+headerGradient.Parent = Header
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -260, 1, 0)
-Title.Position = UDim2.fromOffset(76, 0)
+Title.Size = UDim2.new(1, -300, 1, 0)
+Title.Position = UDim2.fromOffset(86, -4)
 Title.BackgroundTransparency = 1
-Title.Text = "BloxF Tales  |  4.2"
+Title.Text = "BloxF Tales"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBlack
-Title.TextSize = 23
+Title.TextSize = 30
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = Header
 
 local BrandMark = Instance.new("Frame")
-BrandMark.Size = UDim2.fromOffset(48, 48)
-BrandMark.Position = UDim2.fromOffset(14, 7)
-BrandMark.BackgroundColor3 = Color3.fromRGB(8, 49, 91)
+BrandMark.Size = UDim2.fromOffset(68, 64)
+BrandMark.Position = UDim2.fromOffset(8, 1)
+BrandMark.BackgroundColor3 = Color3.fromRGB(5, 35, 88)
 BrandMark.BorderSizePixel = 0
 BrandMark.Parent = Header
 Instance.new("UICorner", BrandMark).CornerRadius = UDim.new(0, 14)
@@ -199,17 +207,17 @@ brandStroke.Thickness = 1.5
 local BrandGlyph = Instance.new("TextLabel")
 BrandGlyph.Size = UDim2.fromScale(1, 1)
 BrandGlyph.BackgroundTransparency = 1
-BrandGlyph.Text = "B"
+BrandGlyph.Text = "🐉"
 BrandGlyph.TextColor3 = Color3.fromRGB(85, 190, 255)
 BrandGlyph.Font = Enum.Font.GothamBlack
-BrandGlyph.TextSize = 30
+BrandGlyph.TextSize = 43
 BrandGlyph.Parent = BrandMark
 
 local BrandSubtitle = Instance.new("TextLabel")
 BrandSubtitle.Size = UDim2.new(1, -270, 0, 18)
-BrandSubtitle.Position = UDim2.fromOffset(78, 38)
+BrandSubtitle.Position = UDim2.fromOffset(88, 43)
 BrandSubtitle.BackgroundTransparency = 1
-BrandSubtitle.Text = "NEON BLUE  •  PAINEL DE CONTROLE"
+BrandSubtitle.Text = "EVOLUA MAIS!"
 BrandSubtitle.TextColor3 = COLORS.muted
 BrandSubtitle.Font = Enum.Font.GothamBold
 BrandSubtitle.TextSize = 9
@@ -218,7 +226,7 @@ BrandSubtitle.Parent = Header
 
 local ActivePill = Instance.new("Frame")
 ActivePill.Size = UDim2.fromOffset(104, 28)
-ActivePill.Position = UDim2.new(1, -190, 0, 17)
+ActivePill.Position = UDim2.new(1, -190, 0, 20)
 ActivePill.BackgroundColor3 = Color3.fromRGB(10, 48, 46)
 ActivePill.BorderSizePixel = 0
 ActivePill.Parent = Header
@@ -243,7 +251,7 @@ ActiveText.Parent = ActivePill
 
 local Min = Instance.new("TextButton")
 Min.Size = UDim2.fromOffset(30, 30)
-Min.Position = UDim2.new(1, -76, 0, 15)
+Min.Position = UDim2.new(1, -76, 0, 19)
 Min.BackgroundColor3 = COLORS.purple
 Min.Text = "–"
 Min.TextColor3 = COLORS.white
@@ -254,7 +262,7 @@ Instance.new("UICorner", Min).CornerRadius = UDim.new(0, 8)
 
 local Close = Instance.new("TextButton")
 Close.Size = UDim2.fromOffset(32, 32)
-Close.Position = UDim2.new(1, -42, 0, 15)
+Close.Position = UDim2.new(1, -42, 0, 19)
 Close.BackgroundColor3 = COLORS.red
 Close.Text = "X"
 Close.TextColor3 = COLORS.white
@@ -263,9 +271,9 @@ Close.TextSize = 14
 Close.Parent = Header
 Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 8)
 
-local Sidebar, Content
+local Sidebar, Content, ConfigPanel, SidebarBrand
 local minimized = false
-local expandedSize = UDim2.fromOffset(760, 510)
+local expandedSize = UDim2.fromOffset(920, 520)
 local expandedPosition = Main.Position
 
 local function tween(object, props, duration)
@@ -277,6 +285,29 @@ local function tween(object, props, duration)
 end
 
 local StatusLabel
+
+-- Neon animation: pulsing outline and active indicator, independent of gameplay logic.
+task.spawn(function()
+    while Screen.Parent do
+        tween(stroke, {Transparency = 0.22, Thickness = 2}, 0.8)
+        tween(brandStroke, {Transparency = 0.35}, 0.8)
+        task.wait(0.82)
+        if not Screen.Parent then break end
+        tween(stroke, {Transparency = 0.02, Thickness = 2.7}, 0.8)
+        tween(brandStroke, {Transparency = 0}, 0.8)
+        task.wait(0.82)
+    end
+end)
+
+task.spawn(function()
+    while Screen.Parent do
+        tween(ActiveDot, {BackgroundTransparency = 0.55}, 0.55)
+        task.wait(0.55)
+        if not Screen.Parent then break end
+        tween(ActiveDot, {BackgroundTransparency = 0}, 0.55)
+        task.wait(0.55)
+    end
+end)
 
 local function setStatus(message)
     if StatusLabel and StatusLabel.Parent then
@@ -290,7 +321,9 @@ local function MinimizePanel()
     if minimized then
         expandedPosition = Main.Position
         Sidebar.Visible = false
+        SidebarBrand.Visible = false
         Content.Visible = false
+        ConfigPanel.Visible = false
         Title.Visible = false
         BrandMark.Visible = false
         BrandSubtitle.Visible = false
@@ -303,13 +336,15 @@ local function MinimizePanel()
         tween(Header, {Size = UDim2.fromOffset(60, 60)}, 0.22)
     else
         tween(Main, {Size = expandedSize}, 0.22)
-        tween(Header, {Size = UDim2.new(1, 0, 0, 62)}, 0.22)
+        tween(Header, {Size = UDim2.new(1, 0, 0, 68)}, 0.22)
         Main.Position = expandedPosition
-        Min.Position = UDim2.new(1, -76, 0, 15)
+        Min.Position = UDim2.new(1, -76, 0, 19)
         Min.Size = UDim2.fromOffset(30, 30)
         Min.Text = "–"
         Sidebar.Visible = true
+        SidebarBrand.Visible = true
         Content.Visible = true
+        ConfigPanel.Visible = expandedSize.X.Offset >= 790
         Title.Visible = true
         BrandMark.Visible = true
         BrandSubtitle.Visible = true
@@ -322,8 +357,8 @@ Sidebar = Instance.new("ScrollingFrame")
 Sidebar.ScrollBarThickness = 3
 Sidebar.ScrollBarImageColor3 = COLORS.purple
 Sidebar.CanvasSize = UDim2.new(0, 0, 0, 0)
-Sidebar.Size = UDim2.new(0, 174, 1, -86)
-Sidebar.Position = UDim2.fromOffset(10, 72)
+Sidebar.Size = UDim2.new(0, 150, 1, -104)
+Sidebar.Position = UDim2.fromOffset(10, 78)
 Sidebar.BackgroundColor3 = COLORS.panel
 Sidebar.BorderSizePixel = 0
 Sidebar.Parent = Main
@@ -334,7 +369,7 @@ sidebarStroke.Transparency = 0.35
 sidebarStroke.Thickness = 1
 
 local tabLayout = Instance.new("UIListLayout")
-tabLayout.Padding = UDim.new(0, 6)
+tabLayout.Padding = UDim.new(0, 7)
 tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
 tabLayout.Parent = Sidebar
@@ -343,9 +378,40 @@ tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     Sidebar.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 12)
 end)
 
+SidebarBrand = Instance.new("Frame")
+SidebarBrand.Name = "SidebarBrand"
+SidebarBrand.AnchorPoint = Vector2.new(0, 0)
+SidebarBrand.Position = UDim2.new(0, 0, 1, -2)
+SidebarBrand.Size = UDim2.new(1, 0, 0, 64)
+SidebarBrand.BackgroundColor3 = Color3.fromRGB(5, 18, 40)
+SidebarBrand.BorderSizePixel = 0
+SidebarBrand.Parent = Main
+Instance.new("UICorner", SidebarBrand).CornerRadius = UDim.new(0, 10)
+local SidebarBrandTitle = Instance.new("TextLabel")
+SidebarBrandTitle.Size = UDim2.new(1, -12, 0, 32)
+SidebarBrandTitle.Position = UDim2.fromOffset(8, 3)
+SidebarBrandTitle.BackgroundTransparency = 1
+SidebarBrandTitle.Text = "BloxF Tales"
+SidebarBrandTitle.TextColor3 = Color3.fromRGB(52, 174, 255)
+SidebarBrandTitle.Font = Enum.Font.GothamBlack
+SidebarBrandTitle.TextSize = 19
+SidebarBrandTitle.TextXAlignment = Enum.TextXAlignment.Left
+SidebarBrandTitle.Parent = SidebarBrand
+local SidebarBrandSub = Instance.new("TextLabel")
+SidebarBrandSub.Size = UDim2.new(1, -12, 0, 20)
+SidebarBrandSub.Position = UDim2.fromOffset(8, 34)
+SidebarBrandSub.BackgroundTransparency = 1
+SidebarBrandSub.Text = "- Evolua mais!"
+SidebarBrandSub.TextColor3 = COLORS.muted
+SidebarBrandSub.Font = Enum.Font.GothamItalic
+SidebarBrandSub.TextSize = 11
+SidebarBrandSub.TextXAlignment = Enum.TextXAlignment.Left
+SidebarBrandSub.Parent = SidebarBrand
+
+
 Content = Instance.new("ScrollingFrame")
-Content.Size = UDim2.new(1, -198, 1, -86)
-Content.Position = UDim2.fromOffset(190, 72)
+Content.Size = UDim2.new(1, -474, 1, -104)
+Content.Position = UDim2.fromOffset(168, 78)
 Content.BackgroundColor3 = COLORS.panel
 Content.BorderSizePixel = 0
 Content.ScrollBarThickness = 4
@@ -375,8 +441,8 @@ contentPadding.Parent = Content
 StatusLabel = Instance.new("TextLabel")
 StatusLabel.Name = "PersistentStatus"
 StatusLabel.LayoutOrder = -100
-StatusLabel.Size = UDim2.new(1, -4, 0, 30)
-StatusLabel.BackgroundColor3 = Color3.fromRGB(7, 37, 68)
+StatusLabel.Size = UDim2.new(1, -4, 0, 28)
+StatusLabel.BackgroundColor3 = Color3.fromRGB(5, 45, 96)
 StatusLabel.BorderSizePixel = 0
 StatusLabel.Text = "  ●  STATUS  •  pronto"
 StatusLabel.TextColor3 = COLORS.white
@@ -386,6 +452,86 @@ StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.Text = "  ●  STATUS  •  pronto"
 StatusLabel.Parent = Content
 Instance.new("UICorner", StatusLabel).CornerRadius = UDim.new(0, 9)
+
+-- Coluna fixa de configuracoes, conforme a referencia visual.
+ConfigPanel = Instance.new("Frame")
+ConfigPanel.Name = "QuickSettingsPanel"
+ConfigPanel.Size = UDim2.new(0, 260, 1, -104)
+ConfigPanel.Position = UDim2.new(1, -270, 0, 78)
+ConfigPanel.BackgroundColor3 = COLORS.panel
+ConfigPanel.BorderSizePixel = 0
+ConfigPanel.Parent = Main
+Instance.new("UICorner", ConfigPanel).CornerRadius = UDim.new(0, 12)
+local configPanelStroke = Instance.new("UIStroke", ConfigPanel)
+configPanelStroke.Color = COLORS.line
+configPanelStroke.Transparency = 0.25
+configPanelStroke.Thickness = 1.2
+
+local ConfigTitle = Instance.new("TextLabel")
+ConfigTitle.Name = "QuickSettingsTitle"
+ConfigTitle.Size = UDim2.new(1, -24, 0, 38)
+ConfigTitle.Position = UDim2.fromOffset(12, 6)
+ConfigTitle.BackgroundTransparency = 1
+ConfigTitle.Text = "⚙  Configurações"
+ConfigTitle.TextColor3 = COLORS.white
+ConfigTitle.Font = Enum.Font.GothamBold
+ConfigTitle.TextSize = 15
+ConfigTitle.TextXAlignment = Enum.TextXAlignment.Left
+ConfigTitle.Parent = ConfigPanel
+
+local ConfigChevron = Instance.new("TextButton")
+ConfigChevron.Name = "ConfigChevron"
+ConfigChevron.Size = UDim2.fromOffset(24, 24)
+ConfigChevron.Position = UDim2.new(1, -32, 0, 10)
+ConfigChevron.BackgroundTransparency = 1
+ConfigChevron.Text = "⌃"
+ConfigChevron.TextColor3 = COLORS.muted
+ConfigChevron.Font = Enum.Font.GothamBold
+ConfigChevron.TextSize = 18
+ConfigChevron.Parent = ConfigPanel
+
+local ConfigHint = Instance.new("TextLabel")
+ConfigHint.Size = UDim2.new(1, -24, 0, 25)
+ConfigHint.Position = UDim2.fromOffset(12, 39)
+ConfigHint.BackgroundTransparency = 1
+ConfigHint.Text = "Personalize sua experiência."
+ConfigHint.TextColor3 = COLORS.muted
+ConfigHint.Font = Enum.Font.Gotham
+ConfigHint.TextSize = 10
+ConfigHint.TextXAlignment = Enum.TextXAlignment.Left
+ConfigHint.Parent = ConfigPanel
+
+local ConfigBody = Instance.new("ScrollingFrame")
+ConfigBody.Name = "QuickSettingsBody"
+ConfigBody.Size = UDim2.new(1, -12, 1, -72)
+ConfigBody.Position = UDim2.fromOffset(6, 66)
+ConfigBody.BackgroundTransparency = 1
+ConfigBody.BorderSizePixel = 0
+ConfigBody.ScrollBarThickness = 3
+ConfigBody.ScrollBarImageColor3 = COLORS.purple
+ConfigBody.CanvasSize = UDim2.new(0, 0, 0, 0)
+ConfigBody.Parent = ConfigPanel
+local configLayout = Instance.new("UIListLayout")
+configLayout.Padding = UDim.new(0, 7)
+configLayout.SortOrder = Enum.SortOrder.LayoutOrder
+configLayout.Parent = ConfigBody
+local configPadding = Instance.new("UIPadding")
+configPadding.PaddingLeft = UDim.new(0, 4)
+configPadding.PaddingRight = UDim.new(0, 4)
+configPadding.PaddingTop = UDim.new(0, 3)
+configPadding.PaddingBottom = UDim.new(0, 8)
+configPadding.Parent = ConfigBody
+configLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    ConfigBody.CanvasSize = UDim2.new(0, 0, 0, configLayout.AbsoluteContentSize.Y + 16)
+end)
+
+local quickSettingsOpen = true
+ConfigChevron.MouseButton1Click:Connect(function()
+    quickSettingsOpen = not quickSettingsOpen
+    ConfigBody.Visible = quickSettingsOpen
+    ConfigChevron.Text = quickSettingsOpen and "⌃" or "⌄"
+    tween(ConfigPanel, {BackgroundColor3 = quickSettingsOpen and COLORS.panel or Color3.fromRGB(5, 15, 31)}, 0.16)
+end)
 local statusStroke = Instance.new("UIStroke", StatusLabel)
 statusStroke.Color = COLORS.line
 statusStroke.Transparency = 0.4
@@ -419,8 +565,8 @@ end
 
 local function makeButton(text, callback, color)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, -4, 0, 38)
-    button.BackgroundColor3 = color or Color3.fromRGB(13, 39, 69)
+    button.Size = UDim2.new(1, -4, 0, 36)
+    button.BackgroundColor3 = color or Color3.fromRGB(8, 47, 91)
     button.Text = text
     button.TextColor3 = COLORS.white
     button.TextSize = 13
@@ -431,7 +577,7 @@ local function makeButton(text, callback, color)
     Instance.new("UICorner", button).CornerRadius = UDim.new(0, 10)
     local buttonStroke = Instance.new("UIStroke", button)
     buttonStroke.Color = Color3.fromRGB(30, 91, 150)
-    buttonStroke.Transparency = 0.45
+    buttonStroke.Transparency = 0.25
     buttonStroke.Thickness = 1
 
     button.MouseButton1Click:Connect(function()
@@ -469,7 +615,7 @@ local function makeToggle(name, callback, initial)
     end
 
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -4, 0, 52)
+    row.Size = UDim2.new(1, -4, 0, 46)
     row.BackgroundColor3 = COLORS.card
     row.BorderSizePixel = 0
     row.Parent = activeContainer
@@ -480,15 +626,66 @@ local function makeToggle(name, callback, initial)
     rowStroke.Thickness = 1
 
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -78, 1, 0)
-    label.Position = UDim2.fromOffset(10, 0)
+    label.Size = UDim2.new(1, -104, 0, 22)
+    label.Position = UDim2.fromOffset(42, 3)
     label.BackgroundTransparency = 1
     label.Text = name
     label.TextColor3 = COLORS.white
-    label.TextSize = 13
+    label.TextSize = 12
     label.Font = Enum.Font.GothamSemibold
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = row
+
+    local descriptions = {
+        ["Ataque automático"] = "Ative o combate automático para atacar alvos.",
+        ["Haki automático"] = "Ativa o Haki durante o combate.",
+        ["Uso automático de habilidades"] = "Usa habilidades disponíveis automaticamente.",
+        ["Fly / Voar"] = "Ative o voo e ajuste a velocidade.",
+        ["Pulo infinito"] = "Permite saltar repetidamente no ar.",
+        ["Destacar jogadores"] = "Realça jogadores no cenário.",
+        ["Mostrar nomes"] = "Exibe os nomes acima dos jogadores.",
+        ["Mostrar distâncias"] = "Exibe a distância até os jogadores.",
+        ["Destacar bosses"] = "Realça chefes encontrados no mapa.",
+        ["Localizador de frutas"] = "Ajuda a localizar frutas no mapa.",
+        ["Localizador de baús"] = "Realça baús encontrados no mapa.",
+        ["Auto Farm"] = "Ativa a rotina de coleta e evolução.",
+        ["Auto Chest"] = "Ativa a busca e coleta de baús.",
+        ["Auto Fruit"] = "Ativa a rotina automática de frutas.",
+        ["Auto Mission"] = "Executa a rotina de missões disponível.",
+        ["Auto Evolution"] = "Ativa a rotina de evolução.",
+        ["Auto Rewards"] = "Coleta recompensas disponíveis.",
+        ["Aim Assist"] = "Auxilia a mirar em alvos selecionados.",
+        ["Mostrar FOV"] = "Exibe o círculo de campo de visão.",
+        ["Atravessar paredes (local)"] = "Desativa colisões localmente."
+    }
+    local description = Instance.new("TextLabel")
+    description.Size = UDim2.new(1, -104, 0, 17)
+    description.Position = UDim2.fromOffset(42, 24)
+    description.BackgroundTransparency = 1
+    description.Text = descriptions[name] or "Controle rápido desta função."
+    description.TextColor3 = COLORS.muted
+    description.TextSize = 9
+    description.Font = Enum.Font.Gotham
+    description.TextXAlignment = Enum.TextXAlignment.Left
+    description.TextTruncate = Enum.TextTruncate.AtEnd
+    description.Parent = row
+
+    local icon = Instance.new("TextLabel")
+    icon.Size = UDim2.fromOffset(25, 32)
+    icon.Position = UDim2.fromOffset(9, 8)
+    icon.BackgroundTransparency = 1
+    icon.Text = string.find(string.lower(name), "ataque") and "⚔"
+        or (string.find(string.lower(name), "fly") and "➤")
+        or (string.find(string.lower(name), "fruta") and "✿")
+        or (string.find(string.lower(name), "nome") and "◉")
+        or (string.find(string.lower(name), "dist") and "⌖")
+        or (string.find(string.lower(name), "boss") and "♛")
+        or (string.find(string.lower(name), "haki") and "✦")
+        or "✧"
+    icon.TextColor3 = Color3.fromRGB(65, 180, 255)
+    icon.Font = Enum.Font.GothamBold
+    icon.TextSize = 17
+    icon.Parent = row
 
     local switch = Instance.new("TextButton")
     switch.Size = UDim2.fromOffset(48, 25)
@@ -507,7 +704,7 @@ local function makeToggle(name, callback, initial)
 
     local function update()
         tween(switch, {
-            BackgroundColor3 = states[name] and COLORS.green or COLORS.gray
+            BackgroundColor3 = states[name] and Color3.fromRGB(0, 125, 255) or Color3.fromRGB(36, 56, 82)
         }, 0.15)
 
         tween(dot, {
@@ -537,8 +734,8 @@ local function beginSection(title, initiallyOpen)
 
     local header = Instance.new("TextButton")
     header.Name = "SectionHeader"
-    header.Size = UDim2.new(1, -4, 0, 42)
-    header.BackgroundColor3 = Color3.fromRGB(8, 45, 82)
+    header.Size = UDim2.new(1, -4, 0, 40)
+    header.BackgroundColor3 = Color3.fromRGB(7, 43, 86)
     header.TextColor3 = COLORS.white
     header.TextSize = 13
     header.Font = Enum.Font.GothamBold
@@ -612,7 +809,7 @@ end
 
 local function makeSlider(labelText, minValue, maxValue, initialValue, callback)
     local holder = Instance.new("Frame")
-    holder.Size = UDim2.new(1, -4, 0, 64)
+    holder.Size = UDim2.new(1, -4, 0, 60)
     holder.BackgroundColor3 = COLORS.row
     holder.BorderSizePixel = 0
     holder.Parent = activeContainer
@@ -1724,8 +1921,80 @@ local function applyPalette(name)
     sidebarStroke.Color = chosen
     contentStroke.Color = chosen
     statusStroke.Color = chosen
+    configPanelStroke.Color = chosen
     setStatus("Paleta " .. name .. " aplicada.")
 end
+
+-- Controles rápidos da coluna direita. Reutilizam as mesmas variáveis e callbacks
+-- das categorias existentes; nenhum recurso de jogo é substituído.
+local previousContainer = activeContainer
+activeContainer = ConfigBody
+makeLabel("Tamanho do painel", 22)
+makeButton("−     100%     +", function()
+    local current = math.floor((Main.AbsoluteSize.X / 920) * 100 + 0.5)
+    local nextValue = current >= 110 and 90 or current + 10
+    local width = math.floor(920 * nextValue / 100)
+    local height = math.floor(520 * nextValue / 100)
+    expandedSize = UDim2.fromOffset(width, height)
+    if not minimized then
+        Main.Size = expandedSize
+        Main.Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2)
+        expandedPosition = Main.Position
+    end
+    setStatus("Tamanho do painel: " .. nextValue .. "%")
+end, Color3.fromRGB(7, 67, 139))
+makeLabel("Tema de cor", 22)
+local swatchRow = Instance.new("Frame")
+swatchRow.Size = UDim2.new(1, -4, 0, 42)
+swatchRow.BackgroundTransparency = 1
+swatchRow.Parent = ConfigBody
+local swatchLayout = Instance.new("UIListLayout")
+swatchLayout.FillDirection = Enum.FillDirection.Horizontal
+swatchLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+swatchLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+swatchLayout.Padding = UDim.new(0, 8)
+swatchLayout.Parent = swatchRow
+for paletteName, paletteColor in pairs(paletteOptions) do
+    local swatch = Instance.new("TextButton")
+    swatch.Name = "Palette_" .. paletteName
+    swatch.Size = UDim2.fromOffset(31, 31)
+    swatch.BackgroundColor3 = paletteColor
+    swatch.Text = ""
+    swatch.AutoButtonColor = true
+    swatch.Parent = swatchRow
+    Instance.new("UICorner", swatch).CornerRadius = UDim.new(0, 8)
+    local swatchStroke = Instance.new("UIStroke", swatch)
+    swatchStroke.Color = Color3.fromRGB(180, 225, 255)
+    swatchStroke.Transparency = 0.35
+    swatch.MouseButton1Click:Connect(function() applyPalette(paletteName) end)
+end
+makeLabel("Listas e visualização", 25)
+makeToggle("Destacar jogadores", function(on)
+    espPlayers = on
+    applyPlayerVisuals()
+end)
+makeToggle("Mostrar nomes", function(on)
+    showNames = on
+    applyPlayerVisuals()
+end)
+makeToggle("Mostrar distâncias", function(on)
+    showDistances = on
+    applyPlayerVisuals()
+end)
+makeToggle("Destacar bosses", function(on)
+    bossESP = on
+    refreshBossESP(on)
+    setStatus(on and "Boss ESP ligado" or "Boss ESP desligado")
+end)
+makeToggle("Localizador de frutas", function(on)
+    fruitFinder = on
+    refreshObjectHighlights("fruit", on)
+end)
+makeToggle("Localizador de baús", function(on)
+    chestFinder = on
+    refreshObjectHighlights("chest", on)
+end)
+activeContainer = previousContainer
 
 local function showCategory(category)
     activeContainer = Content
@@ -1734,7 +2003,7 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 4.2", 36)
+        makeLabel("BLOX F' - TALES 4.4", 36)
         makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
@@ -2327,8 +2596,8 @@ local function showCategory(category)
 
         makeLabel("Ajuste o tamanho e a cor do painel.", 28)
         makeSlider("Tamanho do painel (%)", 80, 115, 100, function(value)
-            local width = math.floor(760 * value / 100)
-            local height = math.floor(510 * value / 100)
+            local width = math.floor(920 * value / 100)
+            local height = math.floor(520 * value / 100)
             expandedSize = UDim2.fromOffset(width, height)
             if not minimized then
                 Main.Size = expandedSize
@@ -2383,14 +2652,14 @@ local function showCategory(category)
 end
 
 local categories = {
-    {name = "Início", icon = "⌂"},
-    {name = "Combate", icon = "⚔"},
-    {name = "Frutas", icon = "✿"},
-    {name = "Jogador", icon = "◉"},
-    {name = "Teletransporte", icon = "⌖"},
-    {name = "Coleta e evolução", icon = "✧"},
-    {name = "Visualização", icon = "▣"},
-    {name = "Configurações", icon = "⚙"}
+    {name = "Combate", label = "Combate", icon = "⚔"},
+    {name = "Jogador", label = "Movimento", icon = "➤"},
+    {name = "Visualização", label = "Render", icon = "▣"},
+    {name = "Teletransporte", label = "Teleporte", icon = "⌖"},
+    {name = "Frutas", label = "Frutas", icon = "✿"},
+    {name = "Configurações", label = "Configurações", icon = "⚙"},
+    {name = "Coleta e evolução", label = "Auto Farm", icon = "✧"},
+    {name = "Início", label = "Início", icon = "⌂"}
 }
 
 local navButtons = {}
@@ -2398,9 +2667,9 @@ for index, item in ipairs(categories) do
     local category = item.name
     local tab = Instance.new("TextButton")
     tab.Name = "Nav_" .. tostring(index)
-    tab.Size = UDim2.new(1, -14, 0, 43)
+    tab.Size = UDim2.new(1, -12, 0, 40)
     tab.LayoutOrder = index
-    tab.BackgroundColor3 = category == "Início" and Color3.fromRGB(10, 94, 171) or COLORS.row
+    tab.BackgroundColor3 = category == "Combate" and Color3.fromRGB(0, 103, 232) or COLORS.row
     tab.Text = ""
     tab.AutoButtonColor = false
     tab.Parent = Sidebar
@@ -2408,7 +2677,7 @@ for index, item in ipairs(categories) do
 
     local tabStroke = Instance.new("UIStroke", tab)
     tabStroke.Color = COLORS.line
-    tabStroke.Transparency = category == "Início" and 0.1 or 0.8
+    tabStroke.Transparency = category == "Combate" and 0.1 or 0.8
     tabStroke.Thickness = 1
 
     local icon = Instance.new("TextLabel")
@@ -2416,7 +2685,7 @@ for index, item in ipairs(categories) do
     icon.Position = UDim2.fromOffset(8, 0)
     icon.BackgroundTransparency = 1
     icon.Text = item.icon
-    icon.TextColor3 = category == "Início" and Color3.fromRGB(130, 214, 255) or COLORS.muted
+    icon.TextColor3 = category == "Combate" and Color3.fromRGB(130, 214, 255) or COLORS.muted
     icon.Font = Enum.Font.GothamBold
     icon.TextSize = 19
     icon.Parent = tab
@@ -2425,7 +2694,7 @@ for index, item in ipairs(categories) do
     caption.Size = UDim2.new(1, -45, 1, 0)
     caption.Position = UDim2.fromOffset(40, 0)
     caption.BackgroundTransparency = 1
-    caption.Text = category
+    caption.Text = item.label or category
     caption.TextColor3 = COLORS.white
     caption.Font = Enum.Font.GothamSemibold
     caption.TextSize = 11
@@ -2435,12 +2704,12 @@ for index, item in ipairs(categories) do
 
     navButtons[category] = {button = tab, stroke = tabStroke, icon = icon}
     tab.MouseEnter:Connect(function()
-        if tab.BackgroundColor3 ~= Color3.fromRGB(10, 94, 171) then
-            tween(tab, {BackgroundColor3 = Color3.fromRGB(17, 48, 79)}, 0.12)
+        if tab.BackgroundColor3 ~= Color3.fromRGB(0, 103, 232) then
+            tween(tab, {BackgroundColor3 = Color3.fromRGB(12, 57, 108)}, 0.12)
         end
     end)
     tab.MouseLeave:Connect(function()
-        if tab.BackgroundColor3 ~= Color3.fromRGB(10, 94, 171) then
+        if tab.BackgroundColor3 ~= Color3.fromRGB(0, 103, 232) then
             tween(tab, {BackgroundColor3 = COLORS.row}, 0.12)
         end
     end)
@@ -2448,7 +2717,7 @@ for index, item in ipairs(categories) do
         for name, entry in pairs(navButtons) do
             local selected = name == category
             tween(entry.button, {
-                BackgroundColor3 = selected and Color3.fromRGB(10, 94, 171) or COLORS.row
+                BackgroundColor3 = selected and Color3.fromRGB(0, 103, 232) or COLORS.row
             }, 0.16)
             entry.stroke.Transparency = selected and 0.1 or 0.8
             entry.icon.TextColor3 = selected and Color3.fromRGB(130, 214, 255) or COLORS.muted
@@ -2534,20 +2803,30 @@ local function fitToScreen()
     if not camera or minimized then return end
 
     local viewport = camera.ViewportSize
-    local width = math.max(520, math.min(760, viewport.X - 24))
-    local height = math.max(390, math.min(510, viewport.Y - 40))
-    local sideWidth = math.min(174, math.max(145, width * 0.235))
-    local contentLeft = sideWidth + 16
+    local width = math.max(520, math.min(960, viewport.X - 24))
+    local height = math.max(390, math.min(530, viewport.Y - 40))
+    local sideWidth = math.min(158, math.max(138, width * 0.17))
+    local showQuickSettings = width >= 790
+    local rightWidth = showQuickSettings and 260 or 0
+    local contentLeft = sideWidth + 18
+    local contentRight = rightWidth > 0 and (rightWidth + 22) or 12
 
     expandedSize = UDim2.fromOffset(width, height)
     Main.Size = expandedSize
     Main.Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2)
     expandedPosition = Main.Position
 
-    Sidebar.Size = UDim2.new(0, sideWidth, 1, -86)
-    Sidebar.Position = UDim2.fromOffset(10, 72)
-    Content.Position = UDim2.fromOffset(contentLeft, 72)
-    Content.Size = UDim2.new(1, -(contentLeft + 12), 1, -86)
+    Sidebar.Size = UDim2.new(0, sideWidth, 1, -176)
+    Sidebar.Position = UDim2.fromOffset(10, 78)
+    SidebarBrand.Size = UDim2.new(0, sideWidth, 0, 64)
+    SidebarBrand.Position = UDim2.fromOffset(10, height - 76)
+    Content.Position = UDim2.fromOffset(contentLeft, 78)
+    Content.Size = UDim2.new(1, -(contentLeft + contentRight), 1, -104)
+    ConfigPanel.Visible = showQuickSettings
+    if showQuickSettings then
+        ConfigPanel.Size = UDim2.new(0, rightWidth, 1, -104)
+        ConfigPanel.Position = UDim2.new(1, -(rightWidth + 10), 0, 78)
+    end
 end
 
 fitToScreen()
@@ -2890,6 +3169,6 @@ task.spawn(function()
     end
 end)
 
-showCategory("Início")
+showCategory("Combate")
 
-print("Blox F' - Tales 4.2 carregado.")
+print("Blox F' - Tales 4.4 carregado.")
