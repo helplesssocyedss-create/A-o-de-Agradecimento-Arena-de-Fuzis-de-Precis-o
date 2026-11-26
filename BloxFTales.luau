@@ -1,935 +1,1154 @@
-    --========================================================
-    -- BLOX F' - TALES | VERSAO 4.5
-    -- Interface reorganizada em estilo azul neon.
-    -- Recursos e callbacks existentes preservados; ajustes focados no painel.
-    --========================================================
+--========================================================
+-- BLOX F' - TALES | VERSAO 4.2
+-- Interface reorganizada em estilo azul neon.
+-- Recursos e callbacks existentes preservados; ajustes focados no painel.
+--========================================================
 
-    local Players = game:GetService("Players")
-    local UIS = game:GetService("UserInputService")
-    local RunService = game:GetService("RunService")
-    local TweenService = game:GetService("TweenService")
-    local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
 
-    local LocalPlayer = Players.LocalPlayer
-    local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-    local old = PlayerGui:FindFirstChild("BloxFTales")
-    if old then old:Destroy() end
+local old = PlayerGui:FindFirstChild("BloxFTales")
+if old then old:Destroy() end
 
-    local COLORS = {
-        bg = Color3.fromRGB(5, 11, 24),
-        panel = Color3.fromRGB(9, 20, 39),
-        row = Color3.fromRGB(13, 29, 53),
-        purple = Color3.fromRGB(20, 137, 255), -- azul neon principal
-        green = Color3.fromRGB(32, 190, 112),
-        gray = Color3.fromRGB(55, 75, 101),
-        white = Color3.fromRGB(239, 247, 255),
-        red = Color3.fromRGB(225, 66, 82),
-        muted = Color3.fromRGB(145, 169, 198),
-        line = Color3.fromRGB(29, 91, 155),
-        header = Color3.fromRGB(7, 24, 49),
-        card = Color3.fromRGB(10, 25, 47)
-    }
+local COLORS = {
+    bg = Color3.fromRGB(5, 11, 24),
+    panel = Color3.fromRGB(9, 20, 39),
+    row = Color3.fromRGB(13, 29, 53),
+    purple = Color3.fromRGB(20, 137, 255), -- azul neon principal
+    green = Color3.fromRGB(32, 190, 112),
+    gray = Color3.fromRGB(55, 75, 101),
+    white = Color3.fromRGB(239, 247, 255),
+    red = Color3.fromRGB(225, 66, 82),
+    muted = Color3.fromRGB(145, 169, 198),
+    line = Color3.fromRGB(29, 91, 155),
+    header = Color3.fromRGB(7, 24, 49),
+    card = Color3.fromRGB(10, 25, 47)
+}
 
-    local states = {}
-    local selectedPlayer = nil
-    local selectedIsland = nil
-    local selectedAttackTargets = {}
-    local connections = {}
-    local playerHighlights = {}
-    local fruitHighlights = {}
-    local chestHighlights = {}
-    local bossHighlights = {}
+local states = {}
+local selectedPlayer = nil
+local selectedIsland = nil
+local selectedAttackTargets = {}
+local connections = {}
+local playerHighlights = {}
+local fruitHighlights = {}
+local chestHighlights = {}
+local bossHighlights = {}
 
-    local infiniteJump = false
-    local noclip = false
-    local showNames = false
-    local showDistances = false
-    local espPlayers = false
-    local bossESP = false
-    local fruitFinder = false
-    local chestFinder = false
-    local destroyed = false
-    local collisionCache = {}
+local infiniteJump = false
+local noclip = false
+local showNames = false
+local showDistances = false
+local espPlayers = false
+local bossESP = false
+local fruitFinder = false
+local chestFinder = false
+local destroyed = false
+local collisionCache = {}
 
-    local walkSpeed = 16
-    local jumpPower = 50
-    local flyEnabled = false
-    local flySpeed = 65
+local walkSpeed = 16
+local jumpPower = 50
+local flyEnabled = false
+local flySpeed = 65
 
-    -- SPEED GERAL:
-    -- 0 mantém a velocidade normal configurada.
-    -- Valores maiores aumentam caminhada, perseguição, Fly e Dash.
-    local globalSpeed = 0
+-- SPEED GERAL:
+-- 0 mantém a velocidade normal configurada.
+-- Valores maiores aumentam caminhada, perseguição, Fly e Dash.
+local globalSpeed = 0
 
-    local function getGlobalSpeedMultiplier()
-        return 1 + (globalSpeed / 100)
+local function getGlobalSpeedMultiplier()
+    return 1 + (globalSpeed / 100)
+end
+
+local function getAdjustedWalkSpeed()
+    return walkSpeed * getGlobalSpeedMultiplier()
+end
+
+local function getAdjustedFlySpeed()
+    return flySpeed * getGlobalSpeedMultiplier()
+end
+
+local function getAdjustedTeleportSpeed()
+    return playerTeleportSpeed * getGlobalSpeedMultiplier()
+end
+
+-- NOVO: velocidade da aproximação até o jogador.
+local playerTeleportSpeed = 100
+local playerTeleportSequence = 0
+
+local aimAssistEnabled = false
+local aimFovEnabled = false
+local aimFovRadius = 140
+local autoAttackEnabled = false
+local autoHakiEnabled = false
+local autoSkillsEnabled = false
+local autoFarmEnabled = false
+local autoChestEnabled = false
+local autoFruitEnabled = false
+local autoMissionEnabled = false
+local autoEvolutionEnabled = false
+local autoRewardsEnabled = false
+
+local selectedAimTarget = "NPCs"
+local attackDropdownOpen = false
+local targetTypeDropdownOpen = false
+
+local selectedFruitName = nil
+local pendingFruitName = nil
+local fruitDropdownOpen = false
+
+local fruitCatalog = {
+    "Rocket", "Spin", "Blade", "Spring", "Bomb", "Smoke",
+    "Spike", "Flame", "Falcon", "Ice", "Sand", "Dark",
+    "Diamond", "Light", "Rubber", "Barrier", "Ghost", "Magma",
+    "Quake", "Buddha", "Love", "Spider", "Sound", "Phoenix",
+    "Portal", "Rumble", "Pain", "Blizzard", "Gravity", "Mammoth",
+    "T-Rex", "Dough", "Shadow", "Venom", "Control", "Spirit",
+    "Dragon", "Leopard", "Kitsune", "Gas", "Yeti"
+}
+
+local combatFollowTarget = nil
+local lastFollowJump = 0
+local followJumpCooldown = 0.85
+local followFlyActive = false
+
+local Screen = Instance.new("ScreenGui")
+Screen.Name = "BloxFTales"
+Screen.ResetOnSpawn = false
+Screen.IgnoreGuiInset = true
+Screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+Screen.Parent = PlayerGui
+
+local FOVCircle = Instance.new("Frame")
+FOVCircle.Name = "AimFOVCircle"
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
+FOVCircle.Size = UDim2.fromOffset(aimFovRadius * 2, aimFovRadius * 2)
+FOVCircle.BackgroundTransparency = 1
+FOVCircle.Visible = false
+FOVCircle.ZIndex = 20
+FOVCircle.Parent = Screen
+
+local FOVCorner = Instance.new("UICorner")
+FOVCorner.CornerRadius = UDim.new(1, 0)
+FOVCorner.Parent = FOVCircle
+
+local FOVStroke = Instance.new("UIStroke")
+FOVStroke.Color = COLORS.purple
+FOVStroke.Thickness = 2
+FOVStroke.Transparency = 0.15
+FOVStroke.Parent = FOVCircle
+
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.fromOffset(760, 510)
+Main.Position = UDim2.new(0.5, -380, 0.5, -255)
+Main.BackgroundColor3 = COLORS.bg
+Main.BorderSizePixel = 0
+Main.ClipsDescendants = true
+Main.Parent = Screen
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 16)
+
+local stroke = Instance.new("UIStroke", Main)
+stroke.Color = COLORS.purple
+stroke.Thickness = 2.5
+stroke.Transparency = 0.05
+
+local mainGradient = Instance.new("UIGradient")
+mainGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(10, 26, 52)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(3, 8, 18))
+})
+mainGradient.Rotation = 90
+mainGradient.Parent = Main
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 65)
+Header.BackgroundColor3 = COLORS.header
+Header.BorderSizePixel = 0
+Header.Parent = Main
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 16)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -260, 1, 0)
+Title.Position = UDim2.fromOffset(80, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "BloxF Tales"
+Title.TextColor3 = COLORS.white
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 26
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Header
+
+local titleItalic = Instance.new("UIStroke") -- Detalhe de estilo
+titleItalic.Transparency = 1
+Title.TextXAlignment = Enum.TextXAlignment.Left
+
+local BrandMark = Instance.new("Frame")
+BrandMark.Size = UDim2.fromOffset(48, 48)
+BrandMark.Position = UDim2.fromOffset(16, 8)
+BrandMark.BackgroundColor3 = Color3.fromRGB(10, 60, 120)
+BrandMark.BorderSizePixel = 0
+BrandMark.Parent = Header
+Instance.new("UICorner", BrandMark).CornerRadius = UDim.new(0, 12)
+local brandStroke = Instance.new("UIStroke", BrandMark)
+brandStroke.Color = COLORS.purple
+brandStroke.Thickness = 2
+local BrandGlyph = Instance.new("TextLabel")
+BrandGlyph.Size = UDim2.fromScale(1, 1)
+BrandGlyph.BackgroundTransparency = 1
+BrandGlyph.Text = "🐉"
+BrandGlyph.TextSize = 24
+BrandGlyph.Parent = BrandMark
+
+local ActivePill = Instance.new("Frame")
+ActivePill.Size = UDim2.fromOffset(116, 30)
+ActivePill.Position = UDim2.new(1, -210, 0, 17)
+ActivePill.BackgroundColor3 = Color3.fromRGB(10, 48, 46)
+ActivePill.BorderSizePixel = 0
+ActivePill.Parent = Header
+Instance.new("UICorner", ActivePill).CornerRadius = UDim.new(1, 0)
+local ActiveDot = Instance.new("Frame")
+ActiveDot.Size = UDim2.fromOffset(8, 8)
+ActiveDot.Position = UDim2.fromOffset(11, 11)
+ActiveDot.BackgroundColor3 = Color3.fromRGB(42, 230, 130)
+ActiveDot.BorderSizePixel = 0
+ActiveDot.Parent = ActivePill
+Instance.new("UICorner", ActiveDot).CornerRadius = UDim.new(1, 0)
+local ActiveText = Instance.new("TextLabel")
+ActiveText.Size = UDim2.new(1, -25, 1, 0)
+ActiveText.Position = UDim2.fromOffset(24, 0)
+ActiveText.BackgroundTransparency = 1
+ActiveText.Text = "Script Ativo"
+ActiveText.TextColor3 = COLORS.white
+ActiveText.Font = Enum.Font.GothamSemibold
+ActiveText.TextSize = 11
+ActiveText.Parent = ActivePill
+
+local Min = Instance.new("TextButton")
+Min.Size = UDim2.fromOffset(32, 32)
+Min.Position = UDim2.new(1, -78, 0, 16)
+Min.BackgroundColor3 = COLORS.row
+Min.Text = "–"
+Min.TextColor3 = COLORS.white
+Min.Font = Enum.Font.GothamBold
+Min.TextSize = 18
+Min.Parent = Header
+Instance.new("UICorner", Min).CornerRadius = UDim.new(0, 8)
+local minStroke = Instance.new("UIStroke", Min)
+minStroke.Color = COLORS.line
+
+local Close = Instance.new("TextButton")
+Close.Size = UDim2.fromOffset(32, 32)
+Close.Position = UDim2.new(1, -40, 0, 16)
+Close.BackgroundColor3 = COLORS.red
+Close.Text = "✕"
+Close.TextColor3 = COLORS.white
+Close.Font = Enum.Font.GothamBold
+Close.TextSize = 13
+Close.Parent = Header
+Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 8)
+
+local Sidebar, Content
+local minimized = false
+local expandedSize = UDim2.fromOffset(760, 510)
+local expandedPosition = Main.Position
+
+local function tween(object, props, duration)
+    TweenService:Create(
+        object,
+        TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+        props
+    ):Play()
+end
+
+local StatusLabel
+
+local function setStatus(message)
+    if StatusLabel and StatusLabel.Parent then
+        StatusLabel.Text = "  ●  STATUS  •  " .. tostring(message)
     end
+end
 
-    local function getAdjustedWalkSpeed()
-        return walkSpeed * getGlobalSpeedMultiplier()
+local function MinimizePanel()
+    minimized = not minimized
+
+    if minimized then
+        expandedPosition = Main.Position
+        Sidebar.Visible = false
+        Content.Visible = false
+        Title.Visible = false
+        BrandMark.Visible = false
+        ActivePill.Visible = false
+        Close.Visible = false
+        Min.Position = UDim2.fromOffset(14, 14)
+        Min.Size = UDim2.fromOffset(36, 36)
+        Min.Text = "↗"
+        tween(Main, {Size = UDim2.fromOffset(64, 64)}, 0.22)
+        tween(Header, {Size = UDim2.fromOffset(64, 64)}, 0.22)
+    else
+        tween(Main, {Size = expandedSize}, 0.22)
+        tween(Header, {Size = UDim2.new(1, 0, 0, 65)}, 0.22)
+        Main.Position = expandedPosition
+        Min.Position = UDim2.new(1, -78, 0, 16)
+        Min.Size = UDim2.fromOffset(32, 32)
+        Min.Text = "–"
+        Sidebar.Visible = true
+        Content.Visible = true
+        Title.Visible = true
+        BrandMark.Visible = true
+        ActivePill.Visible = true
+        Close.Visible = true
     end
+end
 
-    local function getAdjustedFlySpeed()
-        return flySpeed * getGlobalSpeedMultiplier()
-    end
+Sidebar = Instance.new("ScrollingFrame")
+Sidebar.ScrollBarThickness = 2
+Sidebar.ScrollBarImageColor3 = COLORS.purple
+Sidebar.CanvasSize = UDim2.new(0, 0, 0, 0)
+Sidebar.Size = UDim2.new(0, 185, 1, -90)
+Sidebar.Position = UDim2.fromOffset(12, 75)
+Sidebar.BackgroundColor3 = COLORS.panel
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = Main
+Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 12)
+local sidebarStroke = Instance.new("UIStroke", Sidebar)
+sidebarStroke.Color = Color3.fromRGB(30, 100, 180)
+sidebarStroke.Transparency = 0.3
+sidebarStroke.Thickness = 1.5
 
-    local function getAdjustedTeleportSpeed()
-        return playerTeleportSpeed * getGlobalSpeedMultiplier()
-    end
+local tabLayout = Instance.new("UIListLayout")
+tabLayout.Padding = UDim.new(0, 5)
+tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+tabLayout.Parent = Sidebar
 
-    -- NOVO: velocidade da aproximação até o jogador.
-    local playerTeleportSpeed = 100
-    local playerTeleportSequence = 0
+tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    Sidebar.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 12)
+end)
 
-    local aimAssistEnabled = false
-    local aimFovEnabled = false
-    local aimFovRadius = 140
-    local autoAttackEnabled = false
-    local autoHakiEnabled = false
-    local autoSkillsEnabled = false
-    local autoFarmEnabled = false
-    local autoChestEnabled = false
-    local autoFruitEnabled = false
-    local autoMissionEnabled = false
-    local autoEvolutionEnabled = false
-    local autoRewardsEnabled = false
+-- Rodapé da Sidebar (Logo estilizada idêntica à foto)
+local SidebarFooter = Instance.new("Frame")
+SidebarFooter.Size = UDim2.new(1, -12, 0, 75)
+SidebarFooter.Position = UDim2.new(0, 6, 1, -80)
+SidebarFooter.BackgroundColor3 = Color3.fromRGB(7, 18, 36)
+SidebarFooter.Parent = Sidebar
+SidebarFooter.LayoutOrder = 999
+Instance.new("UICorner", SidebarFooter).CornerRadius = UDim.new(0, 10)
+local sfStroke = Instance.new("UIStroke", SidebarFooter)
+sfStroke.Color = COLORS.purple
+sfStroke.Transparency = 0.4
 
-    local selectedAimTarget = "NPCs"
-    local attackDropdownOpen = false
-    local targetTypeDropdownOpen = false
+local footerText1 = Instance.new("TextLabel")
+footerText1.Size = UDim2.new(1, 0, 0, 25)
+footerText1.Position = UDim2.fromOffset(0, 12)
+footerText1.BackgroundTransparency = 1
+footerText1.Text = "BloxF Tales"
+footerText1.TextColor3 = COLORS.purple
+footerText1.Font = Enum.Font.GothamBlack
+footerText1.TextSize = 16
+footerText1.Parent = SidebarFooter
 
-    local selectedFruitName = nil
-    local pendingFruitName = nil
-    local fruitDropdownOpen = false
-
-    local fruitCatalog = {
-        "Rocket", "Spin", "Blade", "Spring", "Bomb", "Smoke",
-        "Spike", "Flame", "Falcon", "Ice", "Sand", "Dark",
-        "Diamond", "Light", "Rubber", "Barrier", "Ghost", "Magma",
-        "Quake", "Buddha", "Love", "Spider", "Sound", "Phoenix",
-        "Portal", "Rumble", "Pain", "Blizzard", "Gravity", "Mammoth",
-        "T-Rex", "Dough", "Shadow", "Venom", "Control", "Spirit",
-        "Dragon", "Leopard", "Kitsune", "Gas", "Yeti"
-    }
-
-    local combatFollowTarget = nil
-    local lastFollowJump = 0
-    local followJumpCooldown = 0.85
-    local followFlyActive = false
-
-    local Screen = Instance.new("ScreenGui")
-    Screen.Name = "BloxFTales"
-    Screen.ResetOnSpawn = false
-    Screen.IgnoreGuiInset = true
-    Screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    Screen.Parent = PlayerGui
-
-    local FOVCircle = Instance.new("Frame")
-    FOVCircle.Name = "AimFOVCircle"
-    FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-    FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
-    FOVCircle.Size = UDim2.fromOffset(aimFovRadius * 2, aimFovRadius * 2)
-    FOVCircle.BackgroundTransparency = 1
-    FOVCircle.Visible = false
-    FOVCircle.ZIndex = 20
-    FOVCircle.Parent = Screen
-
-    local FOVCorner = Instance.new("UICorner")
-    FOVCorner.CornerRadius = UDim.new(1, 0)
-    FOVCorner.Parent = FOVCircle
-
-    local FOVStroke = Instance.new("UIStroke")
-    FOVStroke.Color = COLORS.purple
-    FOVStroke.Thickness = 2
-    FOVStroke.Transparency = 0.15
-    FOVStroke.Parent = FOVCircle
-
-    local Main = Instance.new("Frame")
-    Main.Name = "Main"
-    Main.Size = UDim2.fromOffset(1180, 650)
-    Main.Position = UDim2.new(0.5, -590, 0.5, -325)
-    Main.BackgroundColor3 = COLORS.bg
-    Main.BorderSizePixel = 0
-    Main.ClipsDescendants = true
-    Main.Parent = Screen
-    Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 28)
-
-    local stroke = Instance.new("UIStroke", Main)
-    stroke.Color = COLORS.purple
-    stroke.Thickness = 2.8
-    stroke.Transparency = 0.03
-
-    local innerStroke = Instance.new("UIStroke")
-    innerStroke.Color = Color3.fromRGB(7, 82, 170)
-    innerStroke.Thickness = 1
-    innerStroke.Transparency = 0.32
-    innerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    innerStroke.Parent = Main
-
-    local mainGradient = Instance.new("UIGradient")
-    mainGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(8, 19, 38)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 10, 23))
-    })
-    mainGradient.Rotation = 90
-    mainGradient.Parent = Main
-
-    local Header = Instance.new("Frame")
-    Header.Size = UDim2.new(1, 0, 0, 82)
-    Header.BackgroundColor3 = COLORS.header
-    Header.BorderSizePixel = 0
-    Header.Parent = Main
-    Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 26)
-
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, -390, 0, 54)
-    Title.Position = UDim2.fromOffset(108, 5)
-    Title.BackgroundTransparency = 1
-    Title.Text = "BloxF Tales"
-    Title.TextColor3 = COLORS.white
-    Title.Font = Enum.Font.GothamBlack
-    Title.TextSize = 40
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.Parent = Header
-
-    local BrandMark = Instance.new("Frame")
-    BrandMark.Size = UDim2.fromOffset(94, 82)
-    BrandMark.Position = UDim2.fromOffset(8, 0)
-    BrandMark.BackgroundColor3 = Color3.fromRGB(3, 20, 48)
-    BrandMark.BorderSizePixel = 0
-    BrandMark.Parent = Header
-    Instance.new("UICorner", BrandMark).CornerRadius = UDim.new(0, 14)
-    local brandStroke = Instance.new("UIStroke", BrandMark)
-    brandStroke.Color = COLORS.purple
-    brandStroke.Thickness = 1.5
-    -- Versao de arquivo unico: nao depende de PNG externo nem de outro arquivo.
-    -- O simbolo abaixo e o fallback visual do dragao. Uma arte 3D personalizada
-    -- so pode ser carregada por ImageLabel depois de publicada no Roblox e ter ID.
-    local DRAGON_IMAGE_ID = ""
-
-    local BrandGlyph = Instance.new("TextLabel")
-    BrandGlyph.Size = UDim2.fromScale(1, 1)
-    BrandGlyph.BackgroundTransparency = 1
-    BrandGlyph.Text = "🐉"
-    BrandGlyph.TextColor3 = Color3.fromRGB(85, 190, 255)
-    BrandGlyph.Font = Enum.Font.GothamBlack
-    BrandGlyph.TextSize = 54
-    BrandGlyph.Parent = BrandMark
-
-    local dragonDepth = Instance.new("TextLabel")
-    dragonDepth.Name = "DragonDepth"
-    dragonDepth.Size = UDim2.fromScale(1, 1)
-    dragonDepth.Position = UDim2.fromOffset(3, 4)
-    dragonDepth.BackgroundTransparency = 1
-    dragonDepth.Text = "🐉"
-    dragonDepth.TextColor3 = Color3.fromRGB(0, 68, 170)
-    dragonDepth.Font = Enum.Font.GothamBlack
-    dragonDepth.TextSize = 54
-    dragonDepth.ZIndex = BrandGlyph.ZIndex - 1
-    dragonDepth.Parent = BrandMark
-
-    local dragonShine = Instance.new("TextLabel")
-    dragonShine.Name = "DragonShine"
-    dragonShine.Size = UDim2.fromScale(1, 1)
-    dragonShine.Position = UDim2.fromOffset(-1, -2)
-    dragonShine.BackgroundTransparency = 1
-    dragonShine.Text = "🐉"
-    dragonShine.TextColor3 = Color3.fromRGB(190, 238, 255)
-    dragonShine.TextTransparency = 0.38
-    dragonShine.Font = Enum.Font.GothamBlack
-    dragonShine.TextSize = 50
-    dragonShine.ZIndex = BrandGlyph.ZIndex + 1
-    dragonShine.Parent = BrandMark
-
-    if DRAGON_IMAGE_ID ~= "" then
-        local dragonImage = Instance.new("ImageLabel")
-        dragonImage.Name = "DragonArtwork"
-        dragonImage.Size = UDim2.fromScale(1.12, 1.12)
-        dragonImage.Position = UDim2.fromScale(-0.06, -0.06)
-        dragonImage.BackgroundTransparency = 1
-        dragonImage.Image = "rbxassetid://" .. DRAGON_IMAGE_ID
-        dragonImage.ScaleType = Enum.ScaleType.Fit
-        dragonImage.Parent = BrandMark
-        BrandGlyph.Visible = false
-    end
-
-    local BrandSubtitle = Instance.new("TextLabel")
-    BrandSubtitle.Size = UDim2.new(1, -300, 0, 18)
-    BrandSubtitle.Position = UDim2.fromOffset(112, 64)
-    BrandSubtitle.BackgroundTransparency = 1
-    BrandSubtitle.Text = "NEON BLUE  •  PAINEL DE CONTROLE"
-    BrandSubtitle.TextColor3 = COLORS.muted
-    BrandSubtitle.Font = Enum.Font.GothamBold
-    BrandSubtitle.TextSize = 10
-    BrandSubtitle.TextXAlignment = Enum.TextXAlignment.Left
-    BrandSubtitle.Parent = Header
-
-    local ActivePill = Instance.new("Frame")
-    ActivePill.Size = UDim2.fromOffset(132, 36)
-    ActivePill.Position = UDim2.new(1, -248, 0, 24)
-    ActivePill.BackgroundColor3 = Color3.fromRGB(10, 48, 46)
-    ActivePill.BorderSizePixel = 0
-    ActivePill.Parent = Header
-    Instance.new("UICorner", ActivePill).CornerRadius = UDim.new(1, 0)
-    local ActiveDot = Instance.new("Frame")
-    ActiveDot.Size = UDim2.fromOffset(8, 8)
-    ActiveDot.Position = UDim2.fromOffset(10, 10)
-    ActiveDot.BackgroundColor3 = Color3.fromRGB(42, 230, 130)
-    ActiveDot.BorderSizePixel = 0
-    ActiveDot.Parent = ActivePill
-    Instance.new("UICorner", ActiveDot).CornerRadius = UDim.new(1, 0)
-    local ActiveText = Instance.new("TextLabel")
-    ActiveText.Size = UDim2.new(1, -25, 1, 0)
-    ActiveText.Position = UDim2.fromOffset(22, 0)
-    ActiveText.BackgroundTransparency = 1
-    ActiveText.Text = "Script Ativo"
-    ActiveText.TextColor3 = COLORS.white
-    ActiveText.Font = Enum.Font.GothamSemibold
-    ActiveText.TextSize = 12
-    ActiveText.Parent = ActivePill
+local footerText2 = Instance.new("TextLabel")
+footerText2.Size = UDim2.new(1, 0, 0, 18)
+footerText2.Position = UDim2.fromOffset(0, 36)
+footerText2.BackgroundTransparency = 1
+footerText2.Text = "⚡ Evolua mais!"
+footerText2.TextColor3 = COLORS.muted
+footerText2.Font = Enum.Font.GothamBold
+footerText2.TextSize = 10
+footerText2.Parent = SidebarFooter
 
 
-    local Min = Instance.new("TextButton")
-    Min.Size = UDim2.fromOffset(38, 38)
-    Min.Position = UDim2.new(1, -98, 0, 19)
-    Min.BackgroundColor3 = COLORS.purple
-    Min.Text = "–"
-    Min.TextColor3 = COLORS.white
-    Min.Font = Enum.Font.GothamBold
-    Min.TextSize = 20
-    Min.Parent = Header
-    Instance.new("UICorner", Min).CornerRadius = UDim.new(0, 8)
+Content = Instance.new("ScrollingFrame")
+Content.Size = UDim2.new(1, -212, 1, -90)
+Content.Position = UDim2.fromOffset(204, 75)
+Content.BackgroundColor3 = COLORS.panel
+Content.BorderSizePixel = 0
+Content.ScrollBarThickness = 4
+Content.ScrollBarImageColor3 = COLORS.purple
+Content.CanvasSize = UDim2.new(0, 0, 0, 0)
+Content.Parent = Main
+Instance.new("UICorner", Content).CornerRadius = UDim.new(0, 12)
+local contentStroke = Instance.new("UIStroke", Content)
+contentStroke.Color = Color3.fromRGB(30, 100, 180)
+contentStroke.Transparency = 0.3
+contentStroke.Thickness = 1.5
 
-    local Close = Instance.new("TextButton")
-    Close.Size = UDim2.fromOffset(40, 40)
-    Close.Position = UDim2.new(1, -48, 0, 18)
-    Close.BackgroundColor3 = COLORS.red
-    Close.Text = "X"
-    Close.TextColor3 = COLORS.white
-    Close.Font = Enum.Font.GothamBold
-    Close.TextSize = 14
-    Close.Parent = Header
-    Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 8)
+local contentLayout = Instance.new("UIListLayout")
+contentLayout.Padding = UDim.new(0, 8)
+contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+contentLayout.Parent = Content
 
-    local Sidebar, Content
-    local RightPanel
-    local fitToScreen
-    local panelScale = 1
-    local navButtons
-    local showCategory
-    local minimized = false
-    local expandedSize = UDim2.fromOffset(1180, 650)
-    local expandedPosition = Main.Position
+local activeContainer = Content
 
-    local function tween(object, props, duration)
-        TweenService:Create(
-            object,
-            TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-            props
-        ):Play()
-    end
+local contentPadding = Instance.new("UIPadding")
+contentPadding.PaddingTop = UDim.new(0, 10)
+contentPadding.PaddingBottom = UDim.new(0, 10)
+contentPadding.PaddingLeft = UDim.new(0, 10)
+contentPadding.PaddingRight = UDim.new(0, 10)
+contentPadding.Parent = Content
 
-    local StatusLabel
+StatusLabel = Instance.new("TextLabel")
+StatusLabel.Name = "PersistentStatus"
+StatusLabel.LayoutOrder = -100
+StatusLabel.Size = UDim2.new(1, -4, 0, 32)
+StatusLabel.BackgroundColor3 = Color3.fromRGB(10, 35, 65)
+StatusLabel.BorderSizePixel = 0
+StatusLabel.Text = "  ●  STATUS  •  pronto"
+StatusLabel.TextColor3 = COLORS.white
+StatusLabel.TextSize = 12
+StatusLabel.Font = Enum.Font.GothamSemibold
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Parent = Content
+Instance.new("UICorner", StatusLabel).CornerRadius = UDim.new(0, 8)
+local statusStroke = Instance.new("UIStroke", StatusLabel)
+statusStroke.Color = COLORS.purple
+statusStroke.Transparency = 0.3
 
-    local function setStatus(message)
-        if StatusLabel and StatusLabel.Parent then
-            StatusLabel.Text = "  ●  STATUS  •  " .. tostring(message)
+contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    Content.CanvasSize = UDim2.new(0, 0, 0, contentLayout.AbsoluteContentSize.Y + 20)
+end)
+
+local function clearContent()
+    activeContainer = Content
+    for _, child in ipairs(Content:GetChildren()) do
+        if child ~= contentLayout and child ~= contentPadding and child ~= StatusLabel then
+            child:Destroy()
         end
     end
+end
 
-    local function MinimizePanel()
-        minimized = not minimized
+local function makeLabel(text, height)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -4, 0, height or 34)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = COLORS.muted
+    label.TextSize = 13
+    label.Font = Enum.Font.Gotham
+    label.TextWrapped = true
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = activeContainer
+    return label
+end
 
-        if minimized then
-            expandedPosition = Main.Position
-            Sidebar.Visible = false
-            Content.Visible = false
-            if RightPanel then RightPanel.Visible = false end
-            Title.Visible = false
-            BrandMark.Visible = false
-            BrandSubtitle.Visible = false
-            ActivePill.Visible = false
-            Close.Visible = false
-            Min.Position = UDim2.fromOffset(13, 13)
-            Min.Size = UDim2.fromOffset(34, 34)
-            Min.Text = "↗"
-            tween(Main, {Size = UDim2.fromOffset(60, 60)}, 0.22)
-            tween(Header, {Size = UDim2.fromOffset(60, 60)}, 0.22)
-        else
-            tween(Main, {Size = expandedSize}, 0.22)
-            tween(Header, {Size = UDim2.new(1, 0, 0, 82)}, 0.22)
-            Main.Position = expandedPosition
-            Min.Position = UDim2.new(1, -98, 0, 19)
-            Min.Size = UDim2.fromOffset(38, 38)
-            Min.Text = "–"
-            Sidebar.Visible = true
-            Content.Visible = true
-            if RightPanel then RightPanel.Visible = true end
-            Title.Visible = true
-            BrandMark.Visible = true
-            BrandSubtitle.Visible = true
-            ActivePill.Visible = true
-            Close.Visible = true
-            if fitToScreen then
-                task.defer(fitToScreen)
-            end
-        end
-    end
+local function makeButton(text, callback, color)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, -4, 0, 40)
+    button.BackgroundColor3 = color or Color3.fromRGB(15, 45, 80)
+    button.Text = text
+    button.TextColor3 = COLORS.white
+    button.TextSize = 13
+    button.Font = Enum.Font.GothamSemibold
+    button.TextWrapped = true
+    button.AutoButtonColor = true
+    button.Parent = activeContainer
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 10)
+    local buttonStroke = Instance.new("UIStroke", button)
+    buttonStroke.Color = COLORS.purple
+    buttonStroke.Transparency = 0.4
+    buttonStroke.Thickness = 1.2
 
-    Sidebar = Instance.new("ScrollingFrame")
-    Sidebar.ScrollBarThickness = 3
-    Sidebar.ScrollingDirection = Enum.ScrollingDirection.Y
-    Sidebar.ScrollBarImageColor3 = COLORS.purple
-    Sidebar.CanvasSize = UDim2.new(0, 0, 0, 0)
-    Sidebar.Size = UDim2.new(0, 190, 1, -105)
-    Sidebar.Position = UDim2.fromOffset(12, 90)
-    Sidebar.BackgroundColor3 = COLORS.panel
-    Sidebar.BorderSizePixel = 0
-    Sidebar.Parent = Main
-    Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 12)
-    local sidebarStroke = Instance.new("UIStroke", Sidebar)
-    sidebarStroke.Color = Color3.fromRGB(20, 63, 107)
-    sidebarStroke.Transparency = 0.35
-    sidebarStroke.Thickness = 1
-
-    local tabLayout = Instance.new("UIListLayout")
-    tabLayout.Padding = UDim.new(0, 5)
-    tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    tabLayout.Parent = Sidebar
-
-    tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        Sidebar.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 12)
+    button.MouseButton1Click:Connect(function()
+        if callback then callback() end
     end)
 
-    Content = Instance.new("ScrollingFrame")
-    Content.Size = UDim2.new(1, -500, 1, -105)
-    Content.Position = UDim2.fromOffset(210, 90)
-    Content.BackgroundColor3 = COLORS.panel
-    Content.BorderSizePixel = 0
-    Content.ScrollBarThickness = 4
-    Content.ScrollingDirection = Enum.ScrollingDirection.Y
-    Content.ScrollBarImageColor3 = COLORS.purple
-    Content.CanvasSize = UDim2.new(0, 0, 0, 0)
-    Content.Parent = Main
-    Instance.new("UICorner", Content).CornerRadius = UDim.new(0, 12)
-    local contentStroke = Instance.new("UIStroke", Content)
-    contentStroke.Color = Color3.fromRGB(20, 63, 107)
-    contentStroke.Transparency = 0.35
-    contentStroke.Thickness = 1
+    return button
+end
 
-    local contentLayout = Instance.new("UIListLayout")
-    contentLayout.Padding = UDim.new(0, 8)
-    contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    contentLayout.Parent = Content
-
-    local activeContainer = Content
-
-    local contentPadding = Instance.new("UIPadding")
-    contentPadding.PaddingTop = UDim.new(0, 8)
-    contentPadding.PaddingBottom = UDim.new(0, 8)
-    contentPadding.PaddingLeft = UDim.new(0, 8)
-    contentPadding.PaddingRight = UDim.new(0, 8)
-    contentPadding.Parent = Content
-
-    StatusLabel = Instance.new("TextLabel")
-    StatusLabel.Name = "PersistentStatus"
-    StatusLabel.LayoutOrder = -100
-    StatusLabel.Size = UDim2.new(1, -4, 0, 30)
-    StatusLabel.BackgroundColor3 = Color3.fromRGB(7, 37, 68)
-    StatusLabel.BorderSizePixel = 0
-    StatusLabel.Text = "  ●  STATUS  •  pronto"
-    StatusLabel.TextColor3 = COLORS.white
-    StatusLabel.TextSize = 11
-    StatusLabel.Font = Enum.Font.GothamSemibold
-    StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-    StatusLabel.Text = "  ●  STATUS  •  pronto"
-    StatusLabel.Parent = Content
-    Instance.new("UICorner", StatusLabel).CornerRadius = UDim.new(0, 9)
-    local statusStroke = Instance.new("UIStroke", StatusLabel)
-    statusStroke.Color = COLORS.line
-    statusStroke.Transparency = 0.4
-
-    contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        Content.CanvasSize = UDim2.new(0, 0, 0, contentLayout.AbsoluteContentSize.Y + 18)
-    end)
-
-    local function clearContent()
-        activeContainer = Content
-        for _, child in ipairs(Content:GetChildren()) do
-            if child ~= contentLayout and child ~= contentPadding and child ~= StatusLabel then
-                child:Destroy()
-            end
-        end
+local function makeToggle(name, callback, initial)
+    if states[name] == nil then
+        states[name] = initial or false
     end
 
-    local function makeLabel(text, height)
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -4, 0, height or 34)
-        label.BackgroundTransparency = 1
-        label.Text = text
-        label.TextColor3 = COLORS.muted
-        label.TextSize = 13
-        label.Font = Enum.Font.Gotham
-        label.TextWrapped = true
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.Parent = activeContainer
-        return label
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -4, 0, 54)
+    row.BackgroundColor3 = COLORS.card
+    row.BorderSizePixel = 0
+    row.Parent = activeContainer
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 10)
+    local rowStroke = Instance.new("UIStroke", row)
+    rowStroke.Color = Color3.fromRGB(30, 90, 160)
+    rowStroke.Transparency = 0.4
+    rowStroke.Thickness = 1
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -85, 1, 0)
+    label.Position = UDim2.fromOffset(12, 0)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = COLORS.white
+    label.TextSize = 13
+    label.Font = Enum.Font.GothamSemibold
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = row
+
+    local switch = Instance.new("TextButton")
+    switch.Size = UDim2.fromOffset(50, 26)
+    switch.Position = UDim2.new(1, -62, 0.5, -13)
+    switch.Text = ""
+    switch.AutoButtonColor = false
+    switch.Parent = row
+    Instance.new("UICorner", switch).CornerRadius = UDim.new(1, 0)
+
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.fromOffset(20, 20)
+    dot.Position = UDim2.fromOffset(3, 3)
+    dot.BackgroundColor3 = COLORS.white
+    dot.Parent = switch
+    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+
+    local function update()
+        tween(switch, {
+            BackgroundColor3 = states[name] and COLORS.purple or COLORS.gray
+        }, 0.15)
+
+        tween(dot, {
+            Position = states[name] and UDim2.fromOffset(27, 3) or UDim2.fromOffset(3, 3)
+        }, 0.15)
     end
 
-    local function addGlossySurface(object, baseColor, radius)
-        object.BorderSizePixel = 0
-        Instance.new("UICorner", object).CornerRadius = UDim.new(0, radius or 10)
-        local gradient = Instance.new("UIGradient")
-        gradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, baseColor:Lerp(Color3.fromRGB(90, 190, 255), 0.30)),
-            ColorSequenceKeypoint.new(0.48, baseColor),
-            ColorSequenceKeypoint.new(1, baseColor:Lerp(Color3.fromRGB(0, 5, 18), 0.42))
-        })
-        gradient.Rotation = 90
-        gradient.Parent = object
-        local edge = Instance.new("UIStroke")
-        edge.Color = Color3.fromRGB(65, 166, 255)
-        edge.Thickness = 1
-        edge.Transparency = 0.52
-        edge.Parent = object
-        return edge
-    end
+    update()
 
-    local function makeButton(text, callback, color)
-        local button = Instance.new("TextButton")
-        button.Size = UDim2.new(1, -4, 0, 38)
-        button.BackgroundColor3 = color or Color3.fromRGB(13, 39, 69)
-        button.Text = text
-        button.TextColor3 = COLORS.white
-        button.TextSize = 13
-        button.Font = Enum.Font.GothamSemibold
-        button.TextWrapped = true
-        button.AutoButtonColor = true
-        button.Parent = activeContainer
-        Instance.new("UICorner", button).CornerRadius = UDim.new(0, 10)
-        local buttonStroke = Instance.new("UIStroke", button)
-        buttonStroke.Color = Color3.fromRGB(30, 91, 150)
-        buttonStroke.Transparency = 0.45
-        buttonStroke.Thickness = 1
-
-        button.MouseButton1Click:Connect(function()
-            if callback then callback() end
-        end)
-
-        return button
-    end
-
-    local function makeInput(labelText, placeholder, defaultValue, callback)
-        makeLabel(labelText, 25)
-
-        local box = Instance.new("TextBox")
-        box.Size = UDim2.new(1, -4, 0, 36)
-        box.BackgroundColor3 = Color3.fromRGB(7, 24, 45)
-        box.TextColor3 = COLORS.white
-        box.PlaceholderText = placeholder or "Digite um valor"
-        box.Text = tostring(defaultValue or "")
-        box.ClearTextOnFocus = false
-        box.Font = Enum.Font.Gotham
-        box.TextSize = 13
-        box.Parent = activeContainer
-        Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
-
-        box.FocusLost:Connect(function()
-            if callback then callback(box.Text) end
-        end)
-
-        return box
-    end
-
-    local function makeToggle(name, callback, initial)
-        if states[name] == nil then
-            states[name] = initial or false
-        end
-
-        local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, -4, 0, 52)
-        row.BackgroundColor3 = COLORS.card
-        row.BorderSizePixel = 0
-        row.Parent = activeContainer
-        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 11)
-        local rowStroke = Instance.new("UIStroke", row)
-        rowStroke.Color = Color3.fromRGB(29, 75, 119)
-        rowStroke.Transparency = 0.52
-        rowStroke.Thickness = 1
-
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -78, 1, 0)
-        label.Position = UDim2.fromOffset(10, 0)
-        label.BackgroundTransparency = 1
-        label.Text = name
-        label.TextColor3 = COLORS.white
-        label.TextSize = 13
-        label.Font = Enum.Font.GothamSemibold
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.Parent = row
-
-        local switch = Instance.new("TextButton")
-        switch.Size = UDim2.fromOffset(48, 25)
-        switch.Position = UDim2.new(1, -58, 0.5, -12)
-        switch.Text = ""
-        switch.AutoButtonColor = false
-        switch.Parent = row
-        Instance.new("UICorner", switch).CornerRadius = UDim.new(1, 0)
-
-        local dot = Instance.new("Frame")
-        dot.Size = UDim2.fromOffset(19, 19)
-        dot.Position = UDim2.fromOffset(3, 3)
-        dot.BackgroundColor3 = COLORS.white
-        dot.Parent = switch
-        Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-
-        local function update()
-            tween(switch, {
-                BackgroundColor3 = states[name] and COLORS.green or COLORS.gray
-            }, 0.15)
-
-            tween(dot, {
-                Position = states[name] and UDim2.fromOffset(26, 3) or UDim2.fromOffset(3, 3)
-            }, 0.15)
-        end
-
+    switch.MouseButton1Click:Connect(function()
+        states[name] = not states[name]
         update()
 
-        switch.MouseButton1Click:Connect(function()
-            states[name] = not states[name]
-            update()
-
-            if callback then
-                local ok, err = pcall(callback, states[name])
-                if not ok then
-                    setStatus("Erro em " .. name .. ": " .. tostring(err))
-                end
+        if callback then
+            local ok, err = pcall(callback, states[name])
+            if not ok then
+                setStatus("Erro em " .. name .. ": " .. tostring(err))
             end
-        end)
-
-        return row
-    end
-
-    local function beginSection(title, initiallyOpen)
-        if initiallyOpen == nil then initiallyOpen = true end
-
-        local header = Instance.new("TextButton")
-        header.Name = "SectionHeader"
-        header.Size = UDim2.new(1, -4, 0, 42)
-        header.BackgroundColor3 = Color3.fromRGB(8, 45, 82)
-        header.TextColor3 = COLORS.white
-        header.TextSize = 13
-        header.Font = Enum.Font.GothamBold
-        header.TextXAlignment = Enum.TextXAlignment.Left
-        local sectionIcons = {
-            ["Mira e seleção de alvos"] = "🎯", ["Ataque, habilidades e Haki"] = "✨",
-            ["Movimento"] = "🪽", ["Velocidade e mobilidade"] = "⚡",
-            ["Visualização"] = "👁", ["Jogadores"] = "👥",
-            ["Catálogo e localização"] = "🍇", ["Coleta automática"] = "💎",
-            ["Evolução e recompensas"] = "🏆", ["Interface"] = "⚙",
-            ["Paleta de cores"] = "🎨", ["Personagem"] = "🧍", ["Limpeza"] = "🧹"
-        }
-        local sectionIcon = sectionIcons[title] or "◆"
-        header.Text = (initiallyOpen and "⌄  " or "›  ") .. sectionIcon .. "   " .. title
-        header.AutoButtonColor = false
-        header.Parent = Content
-        local sectionStroke = addGlossySurface(header, header.BackgroundColor3, 12)
-        sectionStroke.Transparency = 0.30
-        sectionStroke.Thickness = 1.25
-
-        local body = Instance.new("Frame")
-        body.Name = "SectionBody"
-        body.Size = UDim2.new(1, -4, 0, 0)
-        body.BackgroundTransparency = 1
-        body.BorderSizePixel = 0
-        body.AutomaticSize = initiallyOpen and Enum.AutomaticSize.Y or Enum.AutomaticSize.None
-        body.Visible = initiallyOpen
-        body.Parent = Content
-
-        local layout = Instance.new("UIListLayout")
-        layout.Padding = UDim.new(0, 6)
-        layout.SortOrder = Enum.SortOrder.LayoutOrder
-        layout.Parent = body
-
-        local padding = Instance.new("UIPadding")
-        padding.PaddingLeft = UDim.new(0, 5)
-        padding.PaddingRight = UDim.new(0, 2)
-        padding.PaddingTop = UDim.new(0, 3)
-        padding.PaddingBottom = UDim.new(0, 5)
-        padding.Parent = body
-
-        header.MouseButton1Click:Connect(function()
-            local open = not body.Visible
-            body.Visible = open
-            body.AutomaticSize = open and Enum.AutomaticSize.Y or Enum.AutomaticSize.None
-            body.Size = UDim2.new(1, -4, 0, 0)
-            header.Text = (open and "⌄  " or "›  ") .. sectionIcon .. "   " .. title
-            tween(header, {BackgroundColor3 = open and Color3.fromRGB(11, 75, 132)
-                or Color3.fromRGB(8, 45, 82)}, 0.16)
-            tween(sectionStroke, {Transparency = open and 0.12 or 0.42}, 0.16)
-        end)
-
-        activeContainer = body
-        return body
-    end
-
-    local function endSection()
-        activeContainer = Content
-    end
-
-    local function makeOption(labelText, isSelected, callback)
-        local button = Instance.new("TextButton")
-        button.Name = "SelectionOption"
-        button.Size = UDim2.new(1, -4, 0, 38)
-        button.BackgroundColor3 = isSelected and Color3.fromRGB(9, 75, 125) or COLORS.row
-        button.BorderSizePixel = 0
-        button.Text = (isSelected and "✓   " or "○   ") .. labelText
-        button.TextColor3 = COLORS.white
-        button.TextSize = 12
-        button.Font = Enum.Font.Gotham
-        button.TextXAlignment = Enum.TextXAlignment.Left
-        button.TextTruncate = Enum.TextTruncate.AtEnd
-        button.Parent = activeContainer
-        Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
-
-        button.MouseButton1Click:Connect(function()
-            if callback then callback() end
-        end)
-
-        return button
-    end
-
-    local function makeSlider(labelText, minValue, maxValue, initialValue, callback)
-        local holder = Instance.new("Frame")
-        holder.Size = UDim2.new(1, -4, 0, 64)
-        holder.BackgroundColor3 = COLORS.row
-        holder.BorderSizePixel = 0
-        holder.Parent = activeContainer
-        addGlossySurface(holder, COLORS.row, 9)
-
-        local title = Instance.new("TextLabel")
-        title.Size = UDim2.new(1, -20, 0, 24)
-        title.Position = UDim2.fromOffset(10, 2)
-        title.BackgroundTransparency = 1
-        title.TextColor3 = COLORS.white
-        title.Font = Enum.Font.Gotham
-        title.TextSize = 12
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.Text = labelText .. ": " .. tostring(initialValue)
-        title.Parent = holder
-
-        local bar = Instance.new("Frame")
-        bar.Size = UDim2.new(1, -24, 0, 8)
-        bar.Position = UDim2.fromOffset(12, 39)
-        bar.BackgroundColor3 = COLORS.gray
-        bar.BorderSizePixel = 0
-        bar.Parent = holder
-        Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
-
-        local fill = Instance.new("Frame")
-        fill.Size = UDim2.new((initialValue - minValue) / (maxValue - minValue), 0, 1, 0)
-        fill.BackgroundColor3 = COLORS.purple
-        fill.BorderSizePixel = 0
-        fill.Parent = bar
-        local fillGradient = Instance.new("UIGradient")
-        fillGradient.Color = ColorSequence.new(
-            Color3.fromRGB(105, 210, 255),
-            Color3.fromRGB(0, 104, 255)
-        )
-        fillGradient.Parent = fill
-        Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-
-        local knob = Instance.new("Frame")
-        knob.Size = UDim2.fromOffset(16, 16)
-        knob.AnchorPoint = Vector2.new(0.5, 0.5)
-        knob.Position = UDim2.new(fill.Size.X.Scale, 0, 0.5, 0)
-        knob.BackgroundColor3 = COLORS.white
-        knob.Parent = bar
-        Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-
-        local draggingSlider = false
-        local value = initialValue
-
-        local function setValueFromX(x)
-            local percent = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-            value = math.floor(minValue + (maxValue - minValue) * percent + 0.5)
-            fill.Size = UDim2.new(percent, 0, 1, 0)
-            knob.Position = UDim2.new(percent, 0, 0.5, 0)
-            title.Text = labelText .. ": " .. tostring(value)
-            if callback then callback(value) end
         end
+    end)
 
-        local function beginDrag(input)
-            draggingSlider = true
+    return row
+end
+
+local function beginSection(title, initiallyOpen)
+    if initiallyOpen == nil then initiallyOpen = true end
+
+    local header = Instance.new("TextButton")
+    header.Name = "SectionHeader"
+    header.Size = UDim2.new(1, -4, 0, 42)
+    header.BackgroundColor3 = Color3.fromRGB(10, 45, 85)
+    header.TextColor3 = COLORS.white
+    header.TextSize = 13
+    header.Font = Enum.Font.GothamBold
+    header.TextXAlignment = Enum.TextXAlignment.Left
+    header.Text = (initiallyOpen and "▼  " or "▶  ") .. title
+    header.AutoButtonColor = true
+    header.Parent = Content
+    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
+    local sectionStroke = Instance.new("UIStroke", header)
+    sectionStroke.Color = COLORS.purple
+    sectionStroke.Transparency = 0.3
+
+    local body = Instance.new("Frame")
+    body.Name = "SectionBody"
+    body.Size = UDim2.new(1, -4, 0, 0)
+    body.BackgroundTransparency = 1
+    body.BorderSizePixel = 0
+    body.AutomaticSize = initiallyOpen and Enum.AutomaticSize.Y or Enum.AutomaticSize.None
+    body.Visible = initiallyOpen
+    body.Parent = Content
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 6)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = body
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingLeft = UDim.new(0, 4)
+    padding.PaddingRight = UDim.new(0, 2)
+    padding.PaddingTop = UDim.new(0, 4)
+    padding.PaddingBottom = UDim.new(0, 6)
+    padding.Parent = body
+
+    header.MouseButton1Click:Connect(function()
+        local open = not body.Visible
+        body.Visible = open
+        body.AutomaticSize = open and Enum.AutomaticSize.Y or Enum.AutomaticSize.None
+        body.Size = UDim2.new(1, -4, 0, 0)
+        header.Text = (open and "▼  " or "▶  ") .. title
+    end)
+
+    activeContainer = body
+    return body
+end
+
+local function endSection()
+    activeContainer = Content
+end
+
+local function makeOption(labelText, isSelected, callback)
+    local button = Instance.new("TextButton")
+    button.Name = "SelectionOption"
+    button.Size = UDim2.new(1, -4, 0, 38)
+    button.BackgroundColor3 = isSelected and Color3.fromRGB(12, 85, 150) or COLORS.row
+    button.BorderSizePixel = 0
+    button.Text = (isSelected and "✓   " or "○   ") .. labelText
+    button.TextColor3 = COLORS.white
+    button.TextSize = 12
+    button.Font = Enum.Font.Gotham
+    button.TextXAlignment = Enum.TextXAlignment.Left
+    button.TextTruncate = Enum.TextTruncate.AtEnd
+    button.Parent = activeContainer
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 8)
+
+    button.MouseButton1Click:Connect(function()
+        if callback then callback() end
+    end)
+
+    return button
+end
+
+local function makeSlider(labelText, minValue, maxValue, initialValue, callback)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(1, -4, 0, 66)
+    holder.BackgroundColor3 = COLORS.row
+    holder.BorderSizePixel = 0
+    holder.Parent = activeContainer
+    Instance.new("UICorner", holder).CornerRadius = UDim.new(0, 10)
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -20, 0, 24)
+    title.Position = UDim2.fromOffset(12, 4)
+    title.BackgroundTransparency = 1
+    title.TextColor3 = COLORS.white
+    title.Font = Enum.Font.GothamSemibold
+    title.TextSize = 13
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Text = labelText .. ": " .. tostring(initialValue)
+    title.Parent = holder
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, -24, 0, 8)
+    bar.Position = UDim2.fromOffset(12, 40)
+    bar.BackgroundColor3 = COLORS.gray
+    bar.BorderSizePixel = 0
+    bar.Parent = holder
+    Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((initialValue - minValue) / (maxValue - minValue), 0, 1, 0)
+    fill.BackgroundColor3 = COLORS.purple
+    fill.BorderSizePixel = 0
+    fill.Parent = bar
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(16, 16)
+    knob.AnchorPoint = Vector2.new(0.5, 0.5)
+    knob.Position = UDim2.new(fill.Size.X.Scale, 0, 0.5, 0)
+    knob.BackgroundColor3 = COLORS.white
+    knob.Parent = bar
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+    local draggingSlider = false
+    local value = initialValue
+
+    local function setValueFromX(x)
+        local percent = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+        value = math.floor(minValue + (maxValue - minValue) * percent + 0.5)
+        fill.Size = UDim2.new(percent, 0, 1, 0)
+        knob.Position = UDim2.new(percent, 0, 0.5, 0)
+        title.Text = labelText .. ": " .. tostring(value)
+        if callback then callback(value) end
+    end
+
+    local function beginDrag(input)
+        draggingSlider = true
+        setValueFromX(input.Position.X)
+    end
+
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            beginDrag(input)
+        end
+    end)
+
+    knob.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            beginDrag(input)
+        end
+    end)
+
+    local moveConnection = UIS.InputChanged:Connect(function(input)
+        if draggingSlider and (
+            input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch
+        ) then
             setValueFromX(input.Position.X)
         end
+    end)
 
-        bar.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1
-                or input.UserInputType == Enum.UserInputType.Touch then
-                beginDrag(input)
-            end
-        end)
-
-        knob.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1
-                or input.UserInputType == Enum.UserInputType.Touch then
-                beginDrag(input)
-            end
-        end)
-
-        local moveConnection = UIS.InputChanged:Connect(function(input)
-            if draggingSlider and (
-                input.UserInputType == Enum.UserInputType.MouseMovement
-                or input.UserInputType == Enum.UserInputType.Touch
-            ) then
-                setValueFromX(input.Position.X)
-            end
-        end)
-
-        local endConnection = UIS.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1
-                or input.UserInputType == Enum.UserInputType.Touch then
-                draggingSlider = false
-            end
-        end)
-
-        table.insert(connections, moveConnection)
-        table.insert(connections, endConnection)
-
-        return holder
-    end
-
-    local function getCharacter()
-        return LocalPlayer.Character
-    end
-
-    local function getRoot(character)
-        return character and character:FindFirstChild("HumanoidRootPart")
-    end
-
-    --========================================================
-    -- TELETRANSPORTE GRADUAL PARA ILHAS E COORDENADAS
-    --========================================================
-
-    local teleportSequence = 0
-
-    local function teleportLocal(destination)
-        local character = getCharacter()
-        local root = getRoot(character)
-
-        if not root then
-            setStatus("Personagem ainda não carregou.")
-            return false
+    local endConnection = UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            draggingSlider = false
         end
+    end)
 
-        local targetCFrame
+    table.insert(connections, moveConnection)
+    table.insert(connections, endConnection)
 
-        if typeof(destination) == "CFrame" then
-            targetCFrame = destination
-        elseif typeof(destination) == "Vector3" then
-            targetCFrame = CFrame.new(destination + Vector3.new(0, 4, 0))
-        else
-            return false
-        end
+    return holder
+end
 
-        teleportSequence += 1
-        local thisSequence = teleportSequence
+local function getCharacter()
+    return LocalPlayer.Character
+end
 
-        task.spawn(function()
-            local currentCharacter = getCharacter()
-            local currentRoot = getRoot(currentCharacter)
-            local currentHumanoid = currentCharacter
-                and currentCharacter:FindFirstChildOfClass("Humanoid")
+local function getRoot(character)
+    return character and character:FindFirstChild("HumanoidRootPart")
+end
 
-            if not currentRoot or not currentHumanoid then return end
+--========================================================
+-- TELETRANSPORTE GRADUAL PARA ILHAS E COORDENADAS
+--========================================================
 
-            local startPosition = currentRoot.Position
-            local destinationPosition = targetCFrame.Position
-            local distance = (destinationPosition - startPosition).Magnitude
-            local steps = math.clamp(math.ceil(distance / 35), 1, 45)
+local teleportSequence = 0
 
-            for step = 1, steps do
-                if not Screen.Parent or thisSequence ~= teleportSequence then
-                    return
-                end
+local function teleportLocal(destination)
+    local character = getCharacter()
+    local root = getRoot(character)
 
-                currentCharacter = getCharacter()
-                currentRoot = getRoot(currentCharacter)
-                currentHumanoid = currentCharacter
-                    and currentCharacter:FindFirstChildOfClass("Humanoid")
+    if not root then
+        setStatus("Personagem ainda não carregou.")
+        return false
+    end
 
-                if not currentRoot or not currentHumanoid then return end
+    local targetCFrame
 
-                local alpha = step / steps
-                local nextPosition = startPosition:Lerp(destinationPosition, alpha)
+    if typeof(destination) == "CFrame" then
+        targetCFrame = destination
+    elseif typeof(destination) == "Vector3" then
+        targetCFrame = CFrame.new(destination + Vector3.new(0, 4, 0))
+    else
+        return false
+    end
 
-                currentHumanoid:MoveTo(nextPosition)
+    teleportSequence += 1
+    local thisSequence = teleportSequence
 
-                pcall(function()
-                    currentCharacter:PivotTo(
-                        CFrame.new(nextPosition) * targetCFrame.Rotation
-                    )
-                end)
+    task.spawn(function()
+        local currentCharacter = getCharacter()
+        local currentRoot = getRoot(currentCharacter)
+        local currentHumanoid = currentCharacter
+            and currentCharacter:FindFirstChildOfClass("Humanoid")
 
-                task.wait(0.045)
-            end
+        if not currentRoot or not currentHumanoid then return end
 
+        local startPosition = currentRoot.Position
+        local destinationPosition = targetCFrame.Position
+        local distance = (destinationPosition - startPosition).Magnitude
+        local steps = math.clamp(math.ceil(distance / 35), 1, 45)
+
+        for step = 1, steps do
             if not Screen.Parent or thisSequence ~= teleportSequence then
                 return
             end
 
             currentCharacter = getCharacter()
             currentRoot = getRoot(currentCharacter)
+            currentHumanoid = currentCharacter
+                and currentCharacter:FindFirstChildOfClass("Humanoid")
 
-            if not currentCharacter or not currentRoot then return end
+            if not currentRoot or not currentHumanoid then return end
 
-            for attempt = 1, 8 do
-                if not Screen.Parent or thisSequence ~= teleportSequence then
-                    return
-                end
+            local alpha = step / steps
+            local nextPosition = startPosition:Lerp(destinationPosition, alpha)
 
-                currentRoot = getRoot(getCharacter())
-                currentCharacter = getCharacter()
+            currentHumanoid:MoveTo(nextPosition)
 
-                if not currentRoot or not currentCharacter then break end
+            pcall(function()
+                currentCharacter:PivotTo(
+                    CFrame.new(nextPosition) * targetCFrame.Rotation
+                )
+            end)
 
-                if (currentRoot.Position - targetCFrame.Position).Magnitude <= 6 then
-                    break
-                end
+            task.wait(0.045)
+        end
 
-                pcall(function()
-                    currentCharacter:PivotTo(targetCFrame)
-                end)
+        if not Screen.Parent or thisSequence ~= teleportSequence then
+            return
+        end
 
-                task.wait(0.12)
+        currentCharacter = getCharacter()
+        currentRoot = getRoot(currentCharacter)
+
+        if not currentCharacter or not currentRoot then return end
+
+        for attempt = 1, 8 do
+            if not Screen.Parent or thisSequence ~= teleportSequence then
+                return
             end
 
-            local finalRoot = getRoot(getCharacter())
+            currentRoot = getRoot(getCharacter())
+            currentCharacter = getCharacter()
 
-            if finalRoot then
-                local remaining = (finalRoot.Position - targetCFrame.Position).Magnitude
+            if not currentRoot or not currentCharacter then break end
 
-                if remaining <= 12 then
-                    setStatus("Chegou próximo ao destino.")
-                else
-                    setStatus("O servidor pode corrigir a posição.")
-                end
+            if (currentRoot.Position - targetCFrame.Position).Magnitude <= 6 then
+                break
             end
-        end)
 
-        return true
+            pcall(function()
+                currentCharacter:PivotTo(targetCFrame)
+            end)
+
+            task.wait(0.12)
+        end
+
+        local finalRoot = getRoot(getCharacter())
+
+        if finalRoot then
+            local remaining = (finalRoot.Position - targetCFrame.Position).Magnitude
+
+            if remaining <= 12 then
+                setStatus("Chegou próximo ao destino.")
+            else
+                setStatus("O servidor pode corrigir a posição.")
+            end
+        end
+    end)
+
+    return true
+end
+
+--========================================================
+-- TELETRANSPORTE PLAYER COM SPEED AJUSTÁVEL
+--========================================================
+
+local function teleportToPlayer(target)
+    if not target or not target.Parent then
+        setStatus("Jogador indisponível.")
+        return
     end
 
-    --========================================================
-    -- TELETRANSPORTE PLAYER COM SPEED AJUSTÁVEL
-    --========================================================
+    if not getRoot(target.Character) then
+        setStatus("O personagem do jogador não está disponível.")
+        return
+    end
 
-    local function teleportToPlayer(target)
+    playerTeleportSequence += 1
+    local thisSequence = playerTeleportSequence
+
+    task.spawn(function()
+        local character = getCharacter()
+        local root = getRoot(character)
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+        if not root or not humanoid then
+            setStatus("Personagem ainda não carregou.")
+            return
+        end
+
+        local originalSpeed = humanoid.WalkSpeed
+        local finished = false
+        local startTime = os.clock()
+
+        humanoid.WalkSpeed = getAdjustedTeleportSpeed()
+
+        setStatus("Correndo até " .. target.DisplayName .. "...")
+
+        while Screen.Parent
+            and thisSequence == playerTeleportSequence
+            and target.Parent
+            and os.clock() - startTime < 60 do
+
+            character = getCharacter()
+            root = getRoot(character)
+            humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+            local targetCharacter = target.Character
+            local targetRoot = getRoot(targetCharacter)
+
+            if not root or not humanoid or humanoid.Health <= 0 or not targetRoot then
+                break
+            end
+
+            humanoid.WalkSpeed = getAdjustedTeleportSpeed()
+
+            local offset = targetRoot.Position - root.Position
+            local distance = offset.Magnitude
+
+            if distance <= 6 then
+                finished = true
+                break
+            end
+
+            local approachPosition = targetRoot.Position
+                - targetRoot.CFrame.LookVector * 4
+
+            humanoid:MoveTo(approachPosition)
+
+            local verticalDifference = targetRoot.Position.Y - root.Position.Y
+            local horizontalDifference = Vector3.new(
+                offset.X,
+                0,
+                offset.Z
+            ).Magnitude
+
+            if verticalDifference > 3.2 and horizontalDifference < 45 then
+                humanoid.Jump = true
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+
+            task.wait(0.12)
+        end
+
+        character = getCharacter()
+        humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+        if humanoid then
+            humanoid.WalkSpeed = originalSpeed
+        end
+
+        if thisSequence ~= playerTeleportSequence then
+            return
+        end
+
+        if finished then
+            setStatus("Você chegou próximo de " .. target.DisplayName .. ".")
+        elseif not target.Parent then
+            setStatus("O jogador saiu do servidor.")
+        else
+            setStatus("Aproximação encerrada. O servidor pode limitar a velocidade.")
+        end
+    end)
+end
+
+local function normalizeName(value)
+    value = string.lower(tostring(value or ""))
+    value = string.gsub(value, "[%s_%-]", "")
+    return value
+end
+
+local function findNamedWorldObject(names)
+    local aliases = {}
+    for _, name in ipairs(names) do
+        aliases[normalizeName(name)] = true
+    end
+
+    local bestObject, bestScore = nil, -1
+
+    for _, item in ipairs(Workspace:GetDescendants()) do
+        if item:IsA("Model") or item:IsA("BasePart") then
+            local candidate = normalizeName(item.Name)
+
+            for alias in pairs(aliases) do
+                local score = -1
+                if candidate == alias then
+                    score = 3
+                elseif #alias >= 5 and string.find(candidate, alias, 1, true) then
+                    score = 2
+                elseif #candidate >= 5 and string.find(alias, candidate, 1, true) then
+                    score = 1
+                end
+
+                if score > bestScore then
+                    bestObject, bestScore = item, score
+                end
+            end
+        end
+    end
+
+    if not bestObject or bestScore < 1 then return nil end
+
+    if bestObject:IsA("Model") then
+        local ok, pivot = pcall(function()
+            return bestObject:GetPivot()
+        end)
+        if ok then return pivot end
+    elseif bestObject:IsA("BasePart") then
+        return bestObject.CFrame
+    end
+
+    return nil
+end
+
+local function removeHighlights(bucket)
+    for instance, adornment in pairs(bucket) do
+        if adornment and adornment.Parent then
+            adornment:Destroy()
+        end
+        bucket[instance] = nil
+    end
+end
+
+local function applyPlayerVisuals()
+    removeHighlights(playerHighlights)
+
+    for _, target in ipairs(Players:GetPlayers()) do
+        if target ~= LocalPlayer and target.Character then
+            local character = target.Character
+
+            if espPlayers then
+                local h = Instance.new("Highlight")
+                h.FillColor = COLORS.purple
+                h.OutlineColor = COLORS.white
+                h.FillTransparency = 0.72
+                h.Adornee = character
+                h.Parent = Screen
+                playerHighlights[character] = h
+            end
+
+            if showNames or showDistances then
+                local head = character:FindFirstChild("Head")
+
+                if head then
+                    local bill = Instance.new("BillboardGui")
+                    bill.Name = "BloxFTalesTag"
+                    bill.Size = UDim2.fromOffset(180, 28)
+                    bill.StudsOffset = Vector3.new(0, 2.5, 0)
+                    bill.AlwaysOnTop = true
+                    bill.Adornee = head
+                    bill.Parent = Screen
+
+                    local txt = Instance.new("TextLabel")
+                    txt.Size = UDim2.fromScale(1, 1)
+                    txt.BackgroundTransparency = 1
+                    txt.TextColor3 = COLORS.white
+                    txt.TextStrokeTransparency = 0.25
+                    txt.Font = Enum.Font.GothamBold
+                    txt.TextSize = 12
+                    txt.Parent = bill
+
+                    local myRoot = getRoot(getCharacter())
+                    local theirRoot = getRoot(character)
+                    local distance = (myRoot and theirRoot)
+                        and math.floor((myRoot.Position - theirRoot.Position).Magnitude)
+                        or 0
+
+                    txt.Text = (showNames and target.DisplayName or "")
+                        .. ((showNames and showDistances) and "  |  " or "")
+                        .. (showDistances and (tostring(distance) .. " studs") or "")
+
+                    playerHighlights[bill] = bill
+                end
+            end
+        end
+    end
+end
+
+local function refreshObjectHighlights(kind, enabled)
+    local bucket = kind == "fruit" and fruitHighlights or chestHighlights
+    removeHighlights(bucket)
+
+    if not enabled then return end
+
+    local key = string.lower(kind)
+
+    for _, item in ipairs(Workspace:GetDescendants()) do
+        local n = string.lower(item.Name)
+
+        local matches =
+            (key == "fruit" and string.find(n, "fruit", 1, true))
+            or (key == "chest" and string.find(n, "chest", 1, true))
+            or (key == "chest" and string.find(n, "baú", 1, true))
+
+        if matches and (item:IsA("BasePart") or item:IsA("Model")) then
+            local h = Instance.new("Highlight")
+            h.FillColor = key == "fruit" and COLORS.green or COLORS.purple
+            h.OutlineColor = COLORS.white
+            h.FillTransparency = 0.65
+            h.Adornee = item
+            h.Parent = Screen
+            bucket[item] = h
+        end
+    end
+end
+
+local function refreshBossESP(enabled)
+    removeHighlights(bossHighlights)
+    if not enabled then return end
+
+    for _, item in ipairs(Workspace:GetDescendants()) do
+        if item:IsA("Model") and item:FindFirstChildOfClass("Humanoid") then
+            local name = string.lower(item.Name)
+
+            if string.find(name, "boss", 1, true)
+                or string.find(name, "raid", 1, true) then
+
+                local h = Instance.new("Highlight")
+                h.FillColor = COLORS.red
+                h.OutlineColor = COLORS.white
+                h.FillTransparency = 0.55
+                h.Adornee = item
+                h.Parent = Screen
+                bossHighlights[item] = h
+            end
+        end
+    end
+end
+
+local function makePlayerSelection()
+    makeLabel("Selecione um jogador e use o botão de confirmação abaixo.", 38)
+    local selectionLabel = makeLabel("Selecionado: nenhum", 25)
+    local confirmButton
+    local optionButtons = {}
+
+    local function updateSelection()
+        selectionLabel.Text = "Selecionado: " .. (selectedPlayer and selectedPlayer.DisplayName or "nenhum")
+
+        for player, button in pairs(optionButtons) do
+            if button and button.Parent then
+                local chosen = player == selectedPlayer
+                button.BackgroundColor3 = chosen and COLORS.green or COLORS.row
+                button.Text = (chosen and "✓   " or "○   ")
+                    .. player.DisplayName .. "  (@" .. player.Name .. ")"
+            end
+        end
+
+        if confirmButton then
+            confirmButton.Visible = selectedPlayer ~= nil
+        end
+    end
+
+    local targets = Players:GetPlayers()
+    table.sort(targets, function(a, b)
+        return a.Name:lower() < b.Name:lower()
+    end)
+
+    local found = false
+
+    for _, target in ipairs(targets) do
+        if target ~= LocalPlayer then
+            found = true
+
+            local button = makeOption(
+                target.DisplayName .. "  (@" .. target.Name .. ")",
+                selectedPlayer == target,
+                function()
+                    selectedPlayer = selectedPlayer == target and nil or target
+                    updateSelection()
+                end
+            )
+
+            optionButtons[target] = button
+        end
+    end
+
+    if not found then
+        makeLabel("Nenhum outro jogador está no servidor.", 32)
+    end
+
+    confirmButton = makeButton("CONFIRMAR IDA ATÉ O JOGADOR", function()
+        local target = selectedPlayer
+
         if not target or not target.Parent then
-            setStatus("Jogador indisponível.")
+            setStatus("Selecione um jogador que ainda esteja no servidor.")
             return
         end
 
@@ -938,2272 +1157,1568 @@
             return
         end
 
-        playerTeleportSequence += 1
-        local thisSequence = playerTeleportSequence
+        local dialog = Instance.new("Frame")
+        dialog.Size = UDim2.fromOffset(280, 118)
+        dialog.AnchorPoint = Vector2.new(0.5, 0.5)
+        dialog.Position = UDim2.fromScale(0.5, 0.5)
+        dialog.BackgroundColor3 = COLORS.panel
+        dialog.ZIndex = 30
+        dialog.Parent = Screen
+        Instance.new("UICorner", dialog).CornerRadius = UDim.new(0, 10)
 
-        task.spawn(function()
-            local character = getCharacter()
-            local root = getRoot(character)
-            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        local msg = Instance.new("TextLabel")
+        msg.Size = UDim2.new(1, -16, 0, 54)
+        msg.Position = UDim2.fromOffset(8, 4)
+        msg.BackgroundTransparency = 1
+        msg.Text = "Confirmar ida até " .. target.DisplayName .. "?"
+        msg.TextColor3 = COLORS.white
+        msg.TextWrapped = true
+        msg.Font = Enum.Font.Gotham
+        msg.TextSize = 13
+        msg.ZIndex = 31
+        msg.Parent = dialog
 
-            if not root or not humanoid then
-                setStatus("Personagem ainda não carregou.")
-                return
-            end
+        local yes = Instance.new("TextButton")
+        yes.Size = UDim2.new(0.45, 0, 0, 34)
+        yes.Position = UDim2.new(0.03, 0, 1, -42)
+        yes.Text = "Confirmar"
+        yes.BackgroundColor3 = COLORS.green
+        yes.TextColor3 = COLORS.white
+        yes.ZIndex = 31
+        yes.Parent = dialog
 
-            local originalSpeed = humanoid.WalkSpeed
-            local finished = false
-            local startTime = os.clock()
+        local no = Instance.new("TextButton")
+        no.Size = UDim2.new(0.45, 0, 0, 34)
+        no.Position = UDim2.new(0.52, 0, 1, -42)
+        no.Text = "Cancelar"
+        no.BackgroundColor3 = COLORS.red
+        no.TextColor3 = COLORS.white
+        no.ZIndex = 31
+        no.Parent = dialog
 
-            humanoid.WalkSpeed = getAdjustedTeleportSpeed()
-
-            setStatus("Correndo até " .. target.DisplayName .. "...")
-
-            while Screen.Parent
-                and thisSequence == playerTeleportSequence
-                and target.Parent
-                and os.clock() - startTime < 60 do
-
-                character = getCharacter()
-                root = getRoot(character)
-                humanoid = character and character:FindFirstChildOfClass("Humanoid")
-
-                local targetCharacter = target.Character
-                local targetRoot = getRoot(targetCharacter)
-
-                if not root or not humanoid or humanoid.Health <= 0 or not targetRoot then
-                    break
-                end
-
-                humanoid.WalkSpeed = getAdjustedTeleportSpeed()
-
-                local offset = targetRoot.Position - root.Position
-                local distance = offset.Magnitude
-
-                if distance <= 6 then
-                    finished = true
-                    break
-                end
-
-                local approachPosition = targetRoot.Position
-                    - targetRoot.CFrame.LookVector * 4
-
-                humanoid:MoveTo(approachPosition)
-
-                local verticalDifference = targetRoot.Position.Y - root.Position.Y
-                local horizontalDifference = Vector3.new(
-                    offset.X,
-                    0,
-                    offset.Z
-                ).Magnitude
-
-                if verticalDifference > 3.2 and horizontalDifference < 45 then
-                    humanoid.Jump = true
-                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                end
-
-                task.wait(0.12)
-            end
-
-            character = getCharacter()
-            humanoid = character and character:FindFirstChildOfClass("Humanoid")
-
-            if humanoid then
-                humanoid.WalkSpeed = originalSpeed
-            end
-
-            if thisSequence ~= playerTeleportSequence then
-                return
-            end
-
-            if finished then
-                setStatus("Você chegou próximo de " .. target.DisplayName .. ".")
-            elseif not target.Parent then
-                setStatus("O jogador saiu do servidor.")
-            else
-                setStatus("Aproximação encerrada. O servidor pode limitar a velocidade.")
-            end
-        end)
-    end
-
-    local function normalizeName(value)
-        value = string.lower(tostring(value or ""))
-        value = string.gsub(value, "[%s_%-]", "")
-        return value
-    end
-
-    local function findNamedWorldObject(names)
-        local aliases = {}
-        for _, name in ipairs(names) do
-            aliases[normalizeName(name)] = true
-        end
-
-        local bestObject, bestScore = nil, -1
-
-        for _, item in ipairs(Workspace:GetDescendants()) do
-            if item:IsA("Model") or item:IsA("BasePart") then
-                local candidate = normalizeName(item.Name)
-
-                for alias in pairs(aliases) do
-                    local score = -1
-                    if candidate == alias then
-                        score = 3
-                    elseif #alias >= 5 and string.find(candidate, alias, 1, true) then
-                        score = 2
-                    elseif #candidate >= 5 and string.find(alias, candidate, 1, true) then
-                        score = 1
-                    end
-
-                    if score > bestScore then
-                        bestObject, bestScore = item, score
-                    end
-                end
-            end
-        end
-
-        if not bestObject or bestScore < 1 then return nil end
-
-        if bestObject:IsA("Model") then
-            local ok, pivot = pcall(function()
-                return bestObject:GetPivot()
-            end)
-            if ok then return pivot end
-        elseif bestObject:IsA("BasePart") then
-            return bestObject.CFrame
-        end
-
-        return nil
-    end
-
-    local function removeHighlights(bucket)
-        for instance, adornment in pairs(bucket) do
-            if adornment and adornment.Parent then
-                adornment:Destroy()
-            end
-            bucket[instance] = nil
-        end
-    end
-
-    local function applyPlayerVisuals()
-        removeHighlights(playerHighlights)
-
-        for _, target in ipairs(Players:GetPlayers()) do
-            if target ~= LocalPlayer and target.Character then
-                local character = target.Character
-
-                if espPlayers then
-                    local h = Instance.new("Highlight")
-                    h.FillColor = COLORS.purple
-                    h.OutlineColor = COLORS.white
-                    h.FillTransparency = 0.72
-                    h.Adornee = character
-                    h.Parent = Screen
-                    playerHighlights[character] = h
-                end
-
-                if showNames or showDistances then
-                    local head = character:FindFirstChild("Head")
-
-                    if head then
-                        local bill = Instance.new("BillboardGui")
-                        bill.Name = "BloxFTalesTag"
-                        bill.Size = UDim2.fromOffset(180, 28)
-                        bill.StudsOffset = Vector3.new(0, 2.5, 0)
-                        bill.AlwaysOnTop = true
-                        bill.Adornee = head
-                        bill.Parent = Screen
-
-                        local txt = Instance.new("TextLabel")
-                        txt.Size = UDim2.fromScale(1, 1)
-                        txt.BackgroundTransparency = 1
-                        txt.TextColor3 = COLORS.white
-                        txt.TextStrokeTransparency = 0.25
-                        txt.Font = Enum.Font.GothamBold
-                        txt.TextSize = 12
-                        txt.Parent = bill
-
-                        local myRoot = getRoot(getCharacter())
-                        local theirRoot = getRoot(character)
-                        local distance = (myRoot and theirRoot)
-                            and math.floor((myRoot.Position - theirRoot.Position).Magnitude)
-                            or 0
-
-                        txt.Text = (showNames and target.DisplayName or "")
-                            .. ((showNames and showDistances) and "  |  " or "")
-                            .. (showDistances and (tostring(distance) .. " studs") or "")
-
-                        playerHighlights[bill] = bill
-                    end
-                end
-            end
-        end
-    end
-
-    local function refreshObjectHighlights(kind, enabled)
-        local bucket = kind == "fruit" and fruitHighlights or chestHighlights
-        removeHighlights(bucket)
-
-        if not enabled then return end
-
-        local key = string.lower(kind)
-
-        for _, item in ipairs(Workspace:GetDescendants()) do
-            local n = string.lower(item.Name)
-
-            local matches =
-                (key == "fruit" and string.find(n, "fruit", 1, true))
-                or (key == "chest" and string.find(n, "chest", 1, true))
-                or (key == "chest" and string.find(n, "baú", 1, true))
-
-            if matches and (item:IsA("BasePart") or item:IsA("Model")) then
-                local h = Instance.new("Highlight")
-                h.FillColor = key == "fruit" and COLORS.green or COLORS.purple
-                h.OutlineColor = COLORS.white
-                h.FillTransparency = 0.65
-                h.Adornee = item
-                h.Parent = Screen
-                bucket[item] = h
-            end
-        end
-    end
-
-    local function refreshBossESP(enabled)
-        removeHighlights(bossHighlights)
-        if not enabled then return end
-
-        for _, item in ipairs(Workspace:GetDescendants()) do
-            if item:IsA("Model") and item:FindFirstChildOfClass("Humanoid") then
-                local name = string.lower(item.Name)
-
-                if string.find(name, "boss", 1, true)
-                    or string.find(name, "raid", 1, true) then
-
-                    local h = Instance.new("Highlight")
-                    h.FillColor = COLORS.red
-                    h.OutlineColor = COLORS.white
-                    h.FillTransparency = 0.55
-                    h.Adornee = item
-                    h.Parent = Screen
-                    bossHighlights[item] = h
-                end
-            end
-        end
-    end
-
-    local function makePlayerSelection()
-        makeLabel("Selecione um jogador e use o botão de confirmação abaixo.", 38)
-        local selectionLabel = makeLabel("Selecionado: nenhum", 25)
-        local confirmButton
-        local optionButtons = {}
-
-        local function updateSelection()
-            selectionLabel.Text = "Selecionado: " .. (selectedPlayer and selectedPlayer.DisplayName or "nenhum")
-
-            for player, button in pairs(optionButtons) do
-                if button and button.Parent then
-                    local chosen = player == selectedPlayer
-                    button.BackgroundColor3 = chosen and COLORS.green or COLORS.row
-                    button.Text = (chosen and "✓   " or "○   ")
-                        .. player.DisplayName .. "  (@" .. player.Name .. ")"
-                end
-            end
-
-            if confirmButton then
-                confirmButton.Visible = selectedPlayer ~= nil
-            end
-        end
-
-        local targets = Players:GetPlayers()
-        table.sort(targets, function(a, b)
-            return a.Name:lower() < b.Name:lower()
+        yes.MouseButton1Click:Connect(function()
+            teleportToPlayer(target)
+            dialog:Destroy()
         end)
 
-        local found = false
+        no.MouseButton1Click:Connect(function()
+            dialog:Destroy()
+        end)
+    end, COLORS.purple)
 
-        for _, target in ipairs(targets) do
-            if target ~= LocalPlayer then
-                found = true
+    confirmButton.Visible = selectedPlayer ~= nil
+    updateSelection()
+end
 
-                local button = makeOption(
-                    target.DisplayName .. "  (@" .. target.Name .. ")",
-                    selectedPlayer == target,
-                    function()
-                        selectedPlayer = selectedPlayer == target and nil or target
-                        updateSelection()
-                    end
-                )
+local function makeSpeedControl()
+    makeSlider("Velocidade de caminhada", 0, 100, walkSpeed, function(value)
+        walkSpeed = value
+        local character = getCharacter()
+        local hum = character and character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.WalkSpeed = getAdjustedWalkSpeed() end
+        setStatus("Velocidade de caminhada: " .. walkSpeed)
+    end)
 
-                optionButtons[target] = button
-            end
+    makeSlider("Força do pulo", 0, 150, jumpPower, function(value)
+        jumpPower = value
+        local character = getCharacter()
+        local hum = character and character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.UseJumpPower = true
+            hum.JumpPower = jumpPower
         end
+        setStatus("Pulo local: " .. jumpPower)
+    end)
+end
 
-        if not found then
-            makeLabel("Nenhum outro jogador está no servidor.", 32)
+local function getPlayerFromModel(model)
+    if not model then return nil end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character == model then
+            return player
         end
-
-        confirmButton = makeButton("CONFIRMAR IDA ATÉ O JOGADOR", function()
-            local target = selectedPlayer
-
-            if not target or not target.Parent then
-                setStatus("Selecione um jogador que ainda esteja no servidor.")
-                return
-            end
-
-            if not getRoot(target.Character) then
-                setStatus("O personagem do jogador não está disponível.")
-                return
-            end
-
-            local dialog = Instance.new("Frame")
-            dialog.Size = UDim2.fromOffset(280, 118)
-            dialog.AnchorPoint = Vector2.new(0.5, 0.5)
-            dialog.Position = UDim2.fromScale(0.5, 0.5)
-            dialog.BackgroundColor3 = COLORS.panel
-            dialog.ZIndex = 30
-            dialog.Parent = Screen
-            Instance.new("UICorner", dialog).CornerRadius = UDim.new(0, 10)
-
-            local msg = Instance.new("TextLabel")
-            msg.Size = UDim2.new(1, -16, 0, 54)
-            msg.Position = UDim2.fromOffset(8, 4)
-            msg.BackgroundTransparency = 1
-            msg.Text = "Confirmar ida até " .. target.DisplayName .. "?"
-            msg.TextColor3 = COLORS.white
-            msg.TextWrapped = true
-            msg.Font = Enum.Font.Gotham
-            msg.TextSize = 13
-            msg.ZIndex = 31
-            msg.Parent = dialog
-
-            local yes = Instance.new("TextButton")
-            yes.Size = UDim2.new(0.45, 0, 0, 34)
-            yes.Position = UDim2.new(0.03, 0, 1, -42)
-            yes.Text = "Confirmar"
-            yes.BackgroundColor3 = COLORS.green
-            yes.TextColor3 = COLORS.white
-            yes.ZIndex = 31
-            yes.Parent = dialog
-
-            local no = Instance.new("TextButton")
-            no.Size = UDim2.new(0.45, 0, 0, 34)
-            no.Position = UDim2.new(0.52, 0, 1, -42)
-            no.Text = "Cancelar"
-            no.BackgroundColor3 = COLORS.red
-            no.TextColor3 = COLORS.white
-            no.ZIndex = 31
-            no.Parent = dialog
-
-            yes.MouseButton1Click:Connect(function()
-                teleportToPlayer(target)
-                dialog:Destroy()
-            end)
-
-            no.MouseButton1Click:Connect(function()
-                dialog:Destroy()
-            end)
-        end, COLORS.purple)
-
-        confirmButton.Visible = selectedPlayer ~= nil
-        updateSelection()
     end
 
-    local function makeSpeedControl()
-        makeSlider("Velocidade de caminhada", 0, 100, walkSpeed, function(value)
-            walkSpeed = value
-            local character = getCharacter()
-            local hum = character and character:FindFirstChildOfClass("Humanoid")
-            if hum then hum.WalkSpeed = getAdjustedWalkSpeed() end
-            setStatus("Velocidade de caminhada: " .. walkSpeed)
-        end)
+    return nil
+end
 
-        makeSlider("Força do pulo", 0, 150, jumpPower, function(value)
-            jumpPower = value
-            local character = getCharacter()
-            local hum = character and character:FindFirstChildOfClass("Humanoid")
-            if hum then
-                hum.UseJumpPower = true
-                hum.JumpPower = jumpPower
-            end
-            setStatus("Pulo local: " .. jumpPower)
-        end)
+local function isValidAimType(model)
+    local player = getPlayerFromModel(model)
+
+    if selectedAimTarget == "NPCs" then
+        return player == nil
+    elseif selectedAimTarget == "Jogadores" then
+        return player ~= nil
+    elseif selectedAimTarget == "Todos" then
+        return true
     end
 
-    local function getPlayerFromModel(model)
-        if not model then return nil end
+    return false
+end
 
+local function getAttackableTargets()
+    local targets = {}
+
+    if selectedAimTarget == "Jogadores" or selectedAimTarget == "Todos" then
         for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character == model then
-                return player
+            if player ~= LocalPlayer and player.Character then
+                local hum = player.Character:FindFirstChildOfClass("Humanoid")
+                local root = getRoot(player.Character)
+
+                if hum and hum.Health > 0 and root then
+                    table.insert(targets, {
+                        model = player.Character,
+                        humanoid = hum,
+                        root = root,
+                        name = player.DisplayName
+                    })
+                end
             end
         end
+    end
 
+    if selectedAimTarget == "NPCs" or selectedAimTarget == "Todos" then
+        for _, item in ipairs(Workspace:GetDescendants()) do
+            if item:IsA("Model") and item ~= getCharacter()
+                and not getPlayerFromModel(item) then
+
+                local hum = item:FindFirstChildOfClass("Humanoid")
+                local root = getRoot(item)
+
+                if hum and hum.Health > 0 and root then
+                    table.insert(targets, {
+                        model = item,
+                        humanoid = hum,
+                        root = root,
+                        name = item.Name
+                    })
+                end
+            end
+        end
+    end
+
+    return targets
+end
+
+local function refreshAttackTargetList(container, statusLabel)
+    for _, child in ipairs(container:GetChildren()) do
+        if child:IsA("TextButton") and child.Name == "AttackTargetOption" then
+            child:Destroy()
+        elseif child:IsA("TextLabel") and child.Name == "AttackTargetOption" then
+            child:Destroy()
+        end
+    end
+
+    local targets = getAttackableTargets()
+
+    table.sort(targets, function(a, b)
+        return a.name:lower() < b.name:lower()
+    end)
+
+    if #targets == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Name = "AttackTargetOption"
+        empty.Size = UDim2.new(1, -4, 0, 30)
+        empty.BackgroundTransparency = 1
+        empty.Text = "Nenhum alvo encontrado."
+        empty.TextColor3 = COLORS.white
+        empty.Font = Enum.Font.Gotham
+        empty.TextSize = 12
+        empty.Parent = container
+        return
+    end
+
+    for _, target in ipairs(targets) do
+        local selected = selectedAttackTargets[target.model] == true
+
+        local option = Instance.new("TextButton")
+        option.Name = "AttackTargetOption"
+        option.Size = UDim2.new(1, -4, 0, 34)
+        option.BackgroundColor3 = selected and COLORS.green or COLORS.row
+        option.TextColor3 = COLORS.white
+        option.TextSize = 12
+        option.Font = Enum.Font.Gotham
+        option.TextXAlignment = Enum.TextXAlignment.Left
+        option.Text = (selected and "✓   " or "○   ") .. target.name
+        option.Parent = container
+        Instance.new("UICorner", option).CornerRadius = UDim.new(0, 6)
+
+        option.MouseButton1Click:Connect(function()
+            selectedAttackTargets[target.model] = not selectedAttackTargets[target.model]
+
+            option.BackgroundColor3 =
+                selectedAttackTargets[target.model] and COLORS.green or COLORS.row
+
+            option.Text = (selectedAttackTargets[target.model] and "✓   " or "○   ")
+                .. target.name
+
+            local count = 0
+            for model in pairs(selectedAttackTargets) do
+                if model and model.Parent and isValidAimType(model) then
+                    count += 1
+                end
+            end
+
+            statusLabel.Text = "Alvos selecionados: " .. count
+        end)
+    end
+end
+
+--========================================================
+-- COMBATE AUTOMÁTICO
+--========================================================
+
+local attackLoopRunning = false
+local lastToolUse = 0
+local lastDodge = 0
+local dodgeSide = 1
+
+local function getCombatTools(character)
+    local tools = {}
+    local seen = {}
+
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+
+    local function addTools(container)
+        if not container then return end
+
+        for _, item in ipairs(container:GetChildren()) do
+            if item:IsA("Tool") and not seen[item] then
+                seen[item] = true
+                table.insert(tools, item)
+            end
+        end
+    end
+
+    addTools(character)
+    addTools(backpack)
+
+    return tools
+end
+
+local function equipCombatTool(character, humanoid)
+    local tools = getCombatTools(character)
+    local equipped = nil
+
+    for _, tool in ipairs(tools) do
+        if tool.Parent == character then
+            equipped = tool
+            break
+        end
+    end
+
+    if not equipped then
+        local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+
+        if backpack then
+            for _, tool in ipairs(backpack:GetChildren()) do
+                if tool:IsA("Tool") then
+                    pcall(function()
+                        humanoid:EquipTool(tool)
+                    end)
+
+                    equipped = tool
+                    break
+                end
+            end
+        end
+    end
+
+    return equipped
+end
+
+local function getEquippedFruitTool(character)
+    if not selectedFruitName then
         return nil
     end
 
-    local function isValidAimType(model)
-        local player = getPlayerFromModel(model)
+    local selectedKey = normalizeName(selectedFruitName)
+    local tools = getCombatTools(character)
 
-        if selectedAimTarget == "NPCs" then
-            return player == nil
-        elseif selectedAimTarget == "Jogadores" then
-            return player ~= nil
-        elseif selectedAimTarget == "Todos" then
-            return true
+    for _, tool in ipairs(tools) do
+        local toolName = normalizeName(tool.Name)
+
+        if toolName == selectedKey
+            or string.find(toolName, selectedKey, 1, true)
+            or string.find(selectedKey, toolName, 1, true) then
+            return tool
         end
+    end
 
+    return nil
+end
+
+local skillKeys = {
+    Enum.KeyCode.Z,
+    Enum.KeyCode.X,
+    Enum.KeyCode.C,
+    Enum.KeyCode.V,
+    Enum.KeyCode.F
+}
+
+local skillKeyIndex = 0
+local lastSkillUse = 0
+local skillCooldown = 1.35
+local virtualInputManager
+
+pcall(function()
+    virtualInputManager = game:GetService("VirtualInputManager")
+end)
+
+local function sendSkillKey(keyCode)
+    if not virtualInputManager then
         return false
     end
 
-    local function getAttackableTargets()
-        local targets = {}
+    local sent = false
 
-        if selectedAimTarget == "Jogadores" or selectedAimTarget == "Todos" then
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer and player.Character then
-                    local hum = player.Character:FindFirstChildOfClass("Humanoid")
-                    local root = getRoot(player.Character)
+    local ok = pcall(function()
+        virtualInputManager:SendKeyEvent(true, keyCode, false, game)
+        task.wait(0.08)
+        virtualInputManager:SendKeyEvent(false, keyCode, false, game)
+        sent = true
+    end)
 
-                    if hum and hum.Health > 0 and root then
-                        table.insert(targets, {
-                            model = player.Character,
-                            humanoid = hum,
-                            root = root,
-                            name = player.DisplayName
-                        })
-                    end
-                end
-            end
-        end
+    return ok and sent
+end
 
-        if selectedAimTarget == "NPCs" or selectedAimTarget == "Todos" then
-            for _, item in ipairs(Workspace:GetDescendants()) do
-                if item:IsA("Model") and item ~= getCharacter()
-                    and not getPlayerFromModel(item) then
+local function activateFruitSkills(character)
+    if not autoSkillsEnabled then return end
 
-                    local hum = item:FindFirstChildOfClass("Humanoid")
-                    local root = getRoot(item)
-
-                    if hum and hum.Health > 0 and root then
-                        table.insert(targets, {
-                            model = item,
-                            humanoid = hum,
-                            root = root,
-                            name = item.Name
-                        })
-                    end
-                end
-            end
-        end
-
-        return targets
+    if not selectedFruitName then
+        setStatus("Selecione e confirme sua fruta na aba Combate.")
+        return
     end
 
-    local function refreshAttackTargetList(container, statusLabel)
-        for _, child in ipairs(container:GetChildren()) do
-            if child:IsA("TextButton") and child.Name == "AttackTargetOption" then
-                child:Destroy()
-            elseif child:IsA("TextLabel") and child.Name == "AttackTargetOption" then
-                child:Destroy()
+    local now = os.clock()
+    if now - lastSkillUse < skillCooldown then return end
+
+    local fruitTool = getEquippedFruitTool(character)
+
+    if not fruitTool then
+        return
+    end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+    if humanoid and fruitTool.Parent ~= character then
+        pcall(function()
+            humanoid:EquipTool(fruitTool)
+        end)
+        return
+    end
+
+    if fruitTool.Parent ~= character then
+        return
+    end
+
+    skillKeyIndex += 1
+
+    if skillKeyIndex > #skillKeys then
+        skillKeyIndex = 1
+    end
+
+    local keyCode = skillKeys[skillKeyIndex]
+    lastSkillUse = now
+
+    if sendSkillKey(keyCode) then
+        setStatus("Tentando habilidade de " .. selectedFruitName .. ": " .. keyCode.Name)
+    else
+        pcall(function()
+            fruitTool:Activate()
+        end)
+        setStatus("Ativação direta da fruta tentada.")
+    end
+end
+
+local function activateCombatTools(character, humanoid)
+    local now = os.clock()
+
+    if autoSkillsEnabled then
+        activateFruitSkills(character)
+    end
+
+    if now - lastToolUse < 0.45 then return end
+    lastToolUse = now
+
+    local tool = equipCombatTool(character, humanoid)
+
+    if tool and tool.Parent == character then
+        pcall(function()
+            tool:Activate()
+        end)
+    end
+end
+
+local function getCurrentSelectedTarget()
+    local validTargets = {}
+
+    for model in pairs(selectedAttackTargets) do
+        if model and model.Parent then
+            local targetHum = model:FindFirstChildOfClass("Humanoid")
+            local targetRoot = getRoot(model)
+
+            if targetHum and targetHum.Health > 0 and targetRoot
+                and isValidAimType(model) then
+
+                table.insert(validTargets, {
+                    model = model,
+                    humanoid = targetHum,
+                    root = targetRoot
+                })
+            else
+                selectedAttackTargets[model] = nil
+            end
+        else
+            selectedAttackTargets[model] = nil
+        end
+    end
+
+    if #validTargets == 0 then
+        return nil
+    end
+
+    local myRoot = getRoot(getCharacter())
+    if not myRoot then return validTargets[1] end
+
+    local nearest, nearestDistance = nil, math.huge
+
+    for _, target in ipairs(validTargets) do
+        local distance = (myRoot.Position - target.root.Position).Magnitude
+
+        if distance < nearestDistance then
+            nearest = target
+            nearestDistance = distance
+        end
+    end
+
+    return nearest
+end
+
+local function performCombatDodge(humanoid, root, targetRoot)
+    local now = os.clock()
+    if now - lastDodge < 1.1 then return end
+    lastDodge = now
+
+    dodgeSide = -dodgeSide
+
+    local right = targetRoot.CFrame.RightVector
+    local forward = targetRoot.CFrame.LookVector
+
+    local sidePosition = targetRoot.Position
+        + right * (dodgeSide * 7)
+        - forward * 3
+
+    humanoid:MoveTo(sidePosition)
+end
+
+local function handleFollowJump(humanoid, root, targetRoot)
+    if not humanoid or not root or not targetRoot then return end
+
+    local now = os.clock()
+    if now - lastFollowJump < followJumpCooldown then return end
+
+    local verticalDifference = targetRoot.Position.Y - root.Position.Y
+    local horizontalDistance = Vector3.new(
+        targetRoot.Position.X - root.Position.X,
+        0,
+        targetRoot.Position.Z - root.Position.Z
+    ).Magnitude
+
+    local state = humanoid:GetState()
+    local grounded =
+        state == Enum.HumanoidStateType.Running
+        or state == Enum.HumanoidStateType.RunningNoPhysics
+        or state == Enum.HumanoidStateType.Landed
+
+    if verticalDifference > 3.2 and horizontalDistance < 45 then
+        lastFollowJump = now
+        humanoid.Jump = true
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    elseif grounded and verticalDifference > 1.8 and horizontalDistance < 16 then
+        lastFollowJump = now
+        humanoid.Jump = true
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end
+
+local function startAttackLoop()
+    if attackLoopRunning then return end
+    attackLoopRunning = true
+
+    task.spawn(function()
+        while (autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled)
+            and Screen.Parent do
+
+            local character = getCharacter()
+            local root = getRoot(character)
+            local hum = character and character:FindFirstChildOfClass("Humanoid")
+
+            if not root or not hum or hum.Health <= 0 then
+                combatFollowTarget = nil
+                task.wait(0.5)
+                continue
+            end
+
+            hum.WalkSpeed = getAdjustedWalkSpeed()
+
+            local selectedTarget = getCurrentSelectedTarget()
+
+            if selectedTarget then
+                local targetRoot = selectedTarget.root
+                combatFollowTarget = selectedTarget
+                local distance = (root.Position - targetRoot.Position).Magnitude
+
+                handleFollowJump(hum, root, targetRoot)
+
+                if distance > 8 then
+                    local approachPosition = targetRoot.Position
+                        - targetRoot.CFrame.LookVector * 4
+
+                    if not flyEnabled then
+                        hum:MoveTo(approachPosition)
+                    end
+                else
+                    if autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled then
+                        activateCombatTools(character, hum)
+                    end
+
+                    if distance < 6 then
+                        performCombatDodge(hum, root, targetRoot)
+                    elseif not flyEnabled then
+                        hum:MoveTo(targetRoot.Position - targetRoot.CFrame.LookVector * 4)
+                    end
+                end
+            else
+                combatFollowTarget = nil
+
+                if not flyEnabled then
+                    hum:MoveTo(root.Position)
+                end
+            end
+
+            task.wait(0.12)
+        end
+
+        combatFollowTarget = nil
+        attackLoopRunning = false
+    end)
+end
+
+local paletteOptions = {
+    Azul = Color3.fromRGB(20, 137, 255),
+    Violeta = Color3.fromRGB(157, 92, 255),
+    Vermelha = Color3.fromRGB(239, 75, 91),
+    Ciano = Color3.fromRGB(0, 205, 220),
+    Verde = Color3.fromRGB(35, 205, 130)
+}
+
+local function applyPalette(name)
+    local chosen = paletteOptions[name]
+    if not chosen then return end
+    COLORS.purple = chosen
+    stroke.Color = chosen
+    FOVStroke.Color = chosen
+    sidebarStroke.Color = chosen
+    contentStroke.Color = chosen
+    statusStroke.Color = chosen
+    setStatus("Paleta " .. name .. " aplicada.")
+end
+
+local function showCategory(category)
+    activeContainer = Content
+    clearContent()
+    Content.CanvasPosition = Vector2.new(0, 0)
+
+    if category == "Combate" then
+        beginSection("Mira e seleção de alvos", false)
+
+        makeToggle("Aim Assist", function(on)
+            aimAssistEnabled = on
+            setStatus(on and "Aim Assist ativado" or "Aim Assist desativado")
+        end)
+
+        makeToggle("Mostrar FOV", function(on)
+            aimFovEnabled = on
+            FOVCircle.Visible = on
+            setStatus(on and "FOV ativado" or "FOV desativado")
+        end)
+
+        makeSlider("Raio do FOV", 30, 500, aimFovRadius, function(value)
+            aimFovRadius = value
+            FOVCircle.Size = UDim2.fromOffset(value * 2, value * 2)
+            setStatus("Raio do FOV: " .. aimFovRadius)
+        end)
+
+        local attackButton, attackList, attackStatus
+
+        local typeButton, targetTypeDropdown
+
+        typeButton = makeButton("▼  Tipo de alvo: " .. selectedAimTarget, function()
+            targetTypeDropdownOpen = not targetTypeDropdownOpen
+            targetTypeDropdown.Visible = targetTypeDropdownOpen
+            typeButton.Text = (targetTypeDropdownOpen and "▼  " or "▶  ")
+                .. "Tipo de alvo: " .. selectedAimTarget
+        end)
+
+        targetTypeDropdown = Instance.new("Frame")
+        targetTypeDropdown.Size = UDim2.new(1, -4, 0, 114)
+        targetTypeDropdown.BackgroundColor3 = COLORS.panel
+        targetTypeDropdown.Visible = false
+        targetTypeDropdown.Parent = activeContainer
+
+        local typeLayout = Instance.new("UIListLayout")
+        typeLayout.Padding = UDim.new(0, 4)
+        typeLayout.Parent = targetTypeDropdown
+
+        for _, targetType in ipairs({"NPCs", "Jogadores", "Todos"}) do
+            local option = Instance.new("TextButton")
+            option.Size = UDim2.new(1, 0, 0, 34)
+            option.BackgroundColor3 = selectedAimTarget == targetType and COLORS.green or COLORS.row
+            option.Text = targetType
+            option.TextColor3 = COLORS.white
+            option.Font = Enum.Font.Gotham
+            option.TextSize = 12
+            option.Parent = targetTypeDropdown
+            Instance.new("UICorner", option).CornerRadius = UDim.new(0, 6)
+
+            option.MouseButton1Click:Connect(function()
+                selectedAimTarget = targetType
+                typeButton.Text = "▶  Tipo de alvo: " .. targetType
+                targetTypeDropdownOpen = false
+                targetTypeDropdown.Visible = false
+
+                for _, sibling in ipairs(targetTypeDropdown:GetChildren()) do
+                    if sibling:IsA("TextButton") then
+                        sibling.BackgroundColor3 =
+                            sibling.Text == targetType and COLORS.green or COLORS.row
+                    end
+                end
+
+                if attackList and attackList.Parent then
+                    refreshAttackTargetList(attackList, attackStatus)
+                end
+
+                setStatus("Mira configurada para: " .. targetType)
+            end)
+        end
+
+        endSection()
+
+        beginSection("Ataque, habilidades e Haki", false)
+
+        attackButton = makeButton("▼  Selecionar alvos para ataque", function()
+            attackDropdownOpen = not attackDropdownOpen
+            attackList.Visible = attackDropdownOpen
+            attackButton.Text = (attackDropdownOpen and "▼  " or "▶  ")
+                .. "Selecionar alvos para ataque"
+        end)
+
+        attackStatus = makeLabel("Alvos selecionados: 0", 25)
+
+        attackList = Instance.new("ScrollingFrame")
+        attackList.Name = "AttackTargetList"
+        attackList.Size = UDim2.new(1, -4, 0, 170)
+        attackList.BackgroundColor3 = COLORS.panel
+        attackList.BorderSizePixel = 0
+        attackList.ScrollBarThickness = 4
+        attackList.ScrollBarImageColor3 = COLORS.purple
+        attackList.CanvasSize = UDim2.new(0, 0, 0, 0)
+        attackList.Visible = false
+        attackList.Parent = activeContainer
+        Instance.new("UICorner", attackList).CornerRadius = UDim.new(0, 7)
+
+        local attackListLayout = Instance.new("UIListLayout")
+        attackListLayout.Padding = UDim.new(0, 4)
+        attackListLayout.Parent = attackList
+
+        attackListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            attackList.CanvasSize = UDim2.new(0, 0, 0, attackListLayout.AbsoluteContentSize.Y + 8)
+        end)
+
+        makeButton("ATUALIZAR LISTA DE ALVOS", function()
+            refreshAttackTargetList(attackList, attackStatus)
+
+            local count = 0
+            for model in pairs(selectedAttackTargets) do
+                if model and model.Parent and isValidAimType(model) then
+                    count += 1
+                end
+            end
+
+            attackStatus.Text = "Alvos selecionados: " .. count
+        end, COLORS.purple)
+
+        refreshAttackTargetList(attackList, attackStatus)
+
+        makeLabel("Selecione a fruta que você está equipado.", 30)
+
+        local fruitSelectionLabel = makeLabel(
+            "Fruta confirmada: " .. (selectedFruitName or "nenhuma"),
+            28
+        )
+
+        local fruitDropdownButton
+        local fruitList
+
+        fruitDropdownButton = makeButton("▼  Selecione a fruta que você está equipado", function()
+            fruitDropdownOpen = not fruitDropdownOpen
+            fruitList.Visible = fruitDropdownOpen
+            fruitDropdownButton.Text = (fruitDropdownOpen and "▼  " or "▶  ")
+                .. "Selecione a fruta que você está equipado"
+        end)
+
+        fruitList = Instance.new("ScrollingFrame")
+        fruitList.Name = "FruitSelectionList"
+        fruitList.Size = UDim2.new(1, -4, 0, 150)
+        fruitList.BackgroundColor3 = COLORS.panel
+        fruitList.BorderSizePixel = 0
+        fruitList.ScrollBarThickness = 4
+        fruitList.ScrollBarImageColor3 = COLORS.purple
+        fruitList.CanvasSize = UDim2.new(0, 0, 0, 0)
+        fruitList.Visible = false
+        fruitList.Parent = activeContainer
+        Instance.new("UICorner", fruitList).CornerRadius = UDim.new(0, 7)
+
+        local fruitListLayout = Instance.new("UIListLayout")
+        fruitListLayout.Padding = UDim.new(0, 4)
+        fruitListLayout.Parent = fruitList
+
+        fruitListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            fruitList.CanvasSize = UDim2.new(
+                0,
+                0,
+                0,
+                fruitListLayout.AbsoluteContentSize.Y + 8
+            )
+        end)
+
+        local fruitOptionButtons = {}
+
+        local function updateFruitOptions()
+            for fruitName, option in pairs(fruitOptionButtons) do
+                if option and option.Parent then
+                    local chosen = pendingFruitName == fruitName
+                    option.BackgroundColor3 = chosen and COLORS.green or COLORS.row
+                    option.Text = (chosen and "✓   " or "○   ") .. fruitName
+                end
             end
         end
 
-        local targets = getAttackableTargets()
-
-        table.sort(targets, function(a, b)
-            return a.name:lower() < b.name:lower()
-        end)
-
-        if #targets == 0 then
-            local empty = Instance.new("TextLabel")
-            empty.Name = "AttackTargetOption"
-            empty.Size = UDim2.new(1, -4, 0, 30)
-            empty.BackgroundTransparency = 1
-            empty.Text = "Nenhum alvo encontrado."
-            empty.TextColor3 = COLORS.white
-            empty.Font = Enum.Font.Gotham
-            empty.TextSize = 12
-            empty.Parent = container
-            return
-        end
-
-        for _, target in ipairs(targets) do
-            local selected = selectedAttackTargets[target.model] == true
-
+        for _, fruitName in ipairs(fruitCatalog) do
             local option = Instance.new("TextButton")
-            option.Name = "AttackTargetOption"
-            option.Size = UDim2.new(1, -4, 0, 34)
-            option.BackgroundColor3 = selected and COLORS.green or COLORS.row
+            option.Name = "FruitOption"
+            option.Size = UDim2.new(1, -4, 0, 32)
+            option.BackgroundColor3 = pendingFruitName == fruitName and COLORS.green or COLORS.row
+            option.Text = (pendingFruitName == fruitName and "✓   " or "○   ") .. fruitName
             option.TextColor3 = COLORS.white
             option.TextSize = 12
             option.Font = Enum.Font.Gotham
             option.TextXAlignment = Enum.TextXAlignment.Left
-            option.Text = (selected and "✓   " or "○   ") .. target.name
-            option.Parent = container
+            option.Parent = fruitList
             Instance.new("UICorner", option).CornerRadius = UDim.new(0, 6)
 
+            fruitOptionButtons[fruitName] = option
+
             option.MouseButton1Click:Connect(function()
-                selectedAttackTargets[target.model] = not selectedAttackTargets[target.model]
-
-                option.BackgroundColor3 =
-                    selectedAttackTargets[target.model] and COLORS.green or COLORS.row
-
-                option.Text = (selectedAttackTargets[target.model] and "✓   " or "○   ")
-                    .. target.name
-
-                local count = 0
-                for model in pairs(selectedAttackTargets) do
-                    if model and model.Parent and isValidAimType(model) then
-                        count += 1
-                    end
-                end
-
-                statusLabel.Text = "Alvos selecionados: " .. count
+                pendingFruitName = fruitName
+                updateFruitOptions()
+                setStatus("Fruta selecionada: " .. fruitName .. ". Confirme para salvar.")
             end)
         end
-    end
 
-    --========================================================
-    -- COMBATE AUTOMÁTICO
-    --========================================================
-
-    local attackLoopRunning = false
-    local lastToolUse = 0
-    local lastDodge = 0
-    local dodgeSide = 1
-
-    local function getCombatTools(character)
-        local tools = {}
-        local seen = {}
-
-        local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-
-        local function addTools(container)
-            if not container then return end
-
-            for _, item in ipairs(container:GetChildren()) do
-                if item:IsA("Tool") and not seen[item] then
-                    seen[item] = true
-                    table.insert(tools, item)
-                end
+        makeButton("CONFIRMAR FRUTA", function()
+            if not pendingFruitName then
+                setStatus("Escolha uma fruta antes de confirmar.")
+                return
             end
-        end
 
-        addTools(character)
-        addTools(backpack)
+            selectedFruitName = pendingFruitName
+            fruitSelectionLabel.Text = "Fruta confirmada: " .. selectedFruitName
+            setStatus("Fruta configurada: " .. selectedFruitName)
+        end, COLORS.green)
 
-        return tools
-    end
-
-    local function equipCombatTool(character, humanoid)
-        local tools = getCombatTools(character)
-        local equipped = nil
-
-        for _, tool in ipairs(tools) do
-            if tool.Parent == character then
-                equipped = tool
-                break
+        makeToggle("Ataque automático", function(on)
+            autoAttackEnabled = on
+            if on then
+                startAttackLoop()
             end
-        end
-
-        if not equipped then
-            local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-
-            if backpack then
-                for _, tool in ipairs(backpack:GetChildren()) do
-                    if tool:IsA("Tool") then
-                        pcall(function()
-                            humanoid:EquipTool(tool)
-                        end)
-
-                        equipped = tool
-                        break
-                    end
-                end
-            end
-        end
-
-        return equipped
-    end
-
-    local function getEquippedFruitTool(character)
-        if not selectedFruitName then
-            return nil
-        end
-
-        local selectedKey = normalizeName(selectedFruitName)
-        local tools = getCombatTools(character)
-
-        for _, tool in ipairs(tools) do
-            local toolName = normalizeName(tool.Name)
-
-            if toolName == selectedKey
-                or string.find(toolName, selectedKey, 1, true)
-                or string.find(selectedKey, toolName, 1, true) then
-                return tool
-            end
-        end
-
-        return nil
-    end
-
-    local skillKeys = {
-        Enum.KeyCode.Z,
-        Enum.KeyCode.X,
-        Enum.KeyCode.C,
-        Enum.KeyCode.V,
-        Enum.KeyCode.F
-    }
-
-    local skillKeyIndex = 0
-    local lastSkillUse = 0
-    local skillCooldown = 1.35
-    local virtualInputManager
-
-    pcall(function()
-        virtualInputManager = game:GetService("VirtualInputManager")
-    end)
-
-    local function sendSkillKey(keyCode)
-        if not virtualInputManager then
-            return false
-        end
-
-        local sent = false
-
-        local ok = pcall(function()
-            virtualInputManager:SendKeyEvent(true, keyCode, false, game)
-            task.wait(0.08)
-            virtualInputManager:SendKeyEvent(false, keyCode, false, game)
-            sent = true
+            setStatus(on and "Ataque automático ligado" or "Ataque automático desligado")
         end)
 
-        return ok and sent
-    end
-
-    local function activateFruitSkills(character)
-        if not autoSkillsEnabled then return end
-
-        if not selectedFruitName then
-            setStatus("Selecione e confirme sua fruta na aba Combate.")
-            return
-        end
-
-        local now = os.clock()
-        if now - lastSkillUse < skillCooldown then return end
-
-        local fruitTool = getEquippedFruitTool(character)
-
-        if not fruitTool then
-            return
-        end
-
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-
-        if humanoid and fruitTool.Parent ~= character then
-            pcall(function()
-                humanoid:EquipTool(fruitTool)
-            end)
-            return
-        end
-
-        if fruitTool.Parent ~= character then
-            return
-        end
-
-        skillKeyIndex += 1
-
-        if skillKeyIndex > #skillKeys then
-            skillKeyIndex = 1
-        end
-
-        local keyCode = skillKeys[skillKeyIndex]
-        lastSkillUse = now
-
-        if sendSkillKey(keyCode) then
-            setStatus("Tentando habilidade de " .. selectedFruitName .. ": " .. keyCode.Name)
-        else
-            pcall(function()
-                fruitTool:Activate()
-            end)
-            setStatus("Ativação direta da fruta tentada.")
-        end
-    end
-
-    local function activateCombatTools(character, humanoid)
-        local now = os.clock()
-
-        if autoSkillsEnabled then
-            activateFruitSkills(character)
-        end
-
-        if now - lastToolUse < 0.45 then return end
-        lastToolUse = now
-
-        local tool = equipCombatTool(character, humanoid)
-
-        if tool and tool.Parent == character then
-            pcall(function()
-                tool:Activate()
-            end)
-        end
-    end
-
-    local function getCurrentSelectedTarget()
-        local validTargets = {}
-
-        for model in pairs(selectedAttackTargets) do
-            if model and model.Parent then
-                local targetHum = model:FindFirstChildOfClass("Humanoid")
-                local targetRoot = getRoot(model)
-
-                if targetHum and targetHum.Health > 0 and targetRoot
-                    and isValidAimType(model) then
-
-                    table.insert(validTargets, {
-                        model = model,
-                        humanoid = targetHum,
-                        root = targetRoot
-                    })
-                else
-                    selectedAttackTargets[model] = nil
-                end
-            else
-                selectedAttackTargets[model] = nil
+        makeToggle("Haki automático", function(on)
+            autoHakiEnabled = on
+            if on and not attackLoopRunning then
+                startAttackLoop()
             end
-        end
-
-        if #validTargets == 0 then
-            return nil
-        end
-
-        local myRoot = getRoot(getCharacter())
-        if not myRoot then return validTargets[1] end
-
-        local nearest, nearestDistance = nil, math.huge
-
-        for _, target in ipairs(validTargets) do
-            local distance = (myRoot.Position - target.root.Position).Magnitude
-
-            if distance < nearestDistance then
-                nearest = target
-                nearestDistance = distance
-            end
-        end
-
-        return nearest
-    end
-
-    local function performCombatDodge(humanoid, root, targetRoot)
-        local now = os.clock()
-        if now - lastDodge < 1.1 then return end
-        lastDodge = now
-
-        dodgeSide = -dodgeSide
-
-        local right = targetRoot.CFrame.RightVector
-        local forward = targetRoot.CFrame.LookVector
-
-        local sidePosition = targetRoot.Position
-            + right * (dodgeSide * 7)
-            - forward * 3
-
-        humanoid:MoveTo(sidePosition)
-    end
-
-    local function handleFollowJump(humanoid, root, targetRoot)
-        if not humanoid or not root or not targetRoot then return end
-
-        local now = os.clock()
-        if now - lastFollowJump < followJumpCooldown then return end
-
-        local verticalDifference = targetRoot.Position.Y - root.Position.Y
-        local horizontalDistance = Vector3.new(
-            targetRoot.Position.X - root.Position.X,
-            0,
-            targetRoot.Position.Z - root.Position.Z
-        ).Magnitude
-
-        local state = humanoid:GetState()
-        local grounded =
-            state == Enum.HumanoidStateType.Running
-            or state == Enum.HumanoidStateType.RunningNoPhysics
-            or state == Enum.HumanoidStateType.Landed
-
-        if verticalDifference > 3.2 and horizontalDistance < 45 then
-            lastFollowJump = now
-            humanoid.Jump = true
-            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        elseif grounded and verticalDifference > 1.8 and horizontalDistance < 16 then
-            lastFollowJump = now
-            humanoid.Jump = true
-            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-    end
-
-    local function startAttackLoop()
-        if attackLoopRunning then return end
-        attackLoopRunning = true
-
-        task.spawn(function()
-            while (autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled)
-                and Screen.Parent do
-
-                local character = getCharacter()
-                local root = getRoot(character)
-                local hum = character and character:FindFirstChildOfClass("Humanoid")
-
-                if not root or not hum or hum.Health <= 0 then
-                    combatFollowTarget = nil
-                    task.wait(0.5)
-                    continue
-                end
-
-                -- Mantém a velocidade geral aplicada durante a perseguição.
-                hum.WalkSpeed = getAdjustedWalkSpeed()
-
-                local selectedTarget = getCurrentSelectedTarget()
-
-                if selectedTarget then
-                    local targetRoot = selectedTarget.root
-                    combatFollowTarget = selectedTarget
-                    local distance = (root.Position - targetRoot.Position).Magnitude
-
-                    handleFollowJump(hum, root, targetRoot)
-
-                    if distance > 8 then
-                        local approachPosition = targetRoot.Position
-                            - targetRoot.CFrame.LookVector * 4
-
-                        if not flyEnabled then
-                            hum:MoveTo(approachPosition)
-                        end
-                    else
-                        if autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled then
-                            activateCombatTools(character, hum)
-                        end
-
-                        if distance < 6 then
-                            performCombatDodge(hum, root, targetRoot)
-                        elseif not flyEnabled then
-                            hum:MoveTo(targetRoot.Position - targetRoot.CFrame.LookVector * 4)
-                        end
-                    end
-                else
-                    combatFollowTarget = nil
-
-                    if not flyEnabled then
-                        hum:MoveTo(root.Position)
-                    end
-                end
-
-                task.wait(0.12)
-            end
-
-            combatFollowTarget = nil
-            attackLoopRunning = false
+            setStatus(on and "Haki automático ligado" or "Haki automático desligado")
         end)
-    end
 
-    local paletteOptions = {
-        Azul = Color3.fromRGB(20, 137, 255),
-        Violeta = Color3.fromRGB(157, 92, 255),
-        Vermelha = Color3.fromRGB(239, 75, 91),
-        Ciano = Color3.fromRGB(0, 205, 220),
-        Verde = Color3.fromRGB(35, 205, 130)
-    }
-
-    local function applyPalette(name)
-        local chosen = paletteOptions[name]
-        if not chosen then return end
-        COLORS.purple = chosen
-        stroke.Color = chosen
-        FOVStroke.Color = chosen
-        sidebarStroke.Color = chosen
-        contentStroke.Color = chosen
-        statusStroke.Color = chosen
-        setStatus("Paleta " .. name .. " aplicada.")
-    end
-
-    -- COLUNA FIXA DE CONFIGURACOES: reproduz a composicao da referencia.
-    RightPanel = Instance.new("Frame")
-    RightPanel.Name = "RightSettings"
-    RightPanel.ClipsDescendants = true
-    RightPanel.BackgroundColor3 = Color3.fromRGB(5, 16, 37)
-    RightPanel.BorderSizePixel = 0
-    RightPanel.Parent = Main
-    Instance.new("UICorner", RightPanel).CornerRadius = UDim.new(0, 16)
-    local rightStroke = Instance.new("UIStroke", RightPanel)
-    rightStroke.Color = COLORS.line
-    rightStroke.Transparency = 0.12
-    rightStroke.Thickness = 1.4
-    local rightPadding = Instance.new("UIPadding", RightPanel)
-    rightPadding.PaddingTop = UDim.new(0, 8)
-    rightPadding.PaddingBottom = UDim.new(0, 8)
-    rightPadding.PaddingLeft = UDim.new(0, 8)
-    rightPadding.PaddingRight = UDim.new(0, 8)
-    local rightLayout = Instance.new("UIListLayout", RightPanel)
-    rightLayout.Padding = UDim.new(0, 8)
-    rightLayout.SortOrder = Enum.SortOrder.LayoutOrder
-
-    local function railCard(titleText, subtitleText, height)
-        local card = Instance.new("Frame")
-        card.Size = UDim2.new(1, 0, 0, height)
-        card.BackgroundColor3 = Color3.fromRGB(9, 27, 57)
-        card.BorderSizePixel = 0
-        card.Parent = RightPanel
-        Instance.new("UICorner", card).CornerRadius = UDim.new(0, 12)
-        local outline = Instance.new("UIStroke", card)
-        outline.Color = COLORS.line
-        outline.Transparency = 0.38
-        local title = Instance.new("TextLabel")
-        title.Size = UDim2.new(1, -18, 0, 24)
-        title.Position = UDim2.fromOffset(10, 6)
-        title.BackgroundTransparency = 1
-        title.Text = titleText
-        title.TextColor3 = COLORS.white
-        title.Font = Enum.Font.GothamBold
-        title.TextSize = 14
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.Parent = card
-        local sub = Instance.new("TextLabel")
-        sub.Size = UDim2.new(1, -18, 0, 20)
-        sub.Position = UDim2.fromOffset(10, 29)
-        sub.BackgroundTransparency = 1
-        sub.Text = subtitleText
-        sub.TextColor3 = COLORS.muted
-        sub.Font = Enum.Font.Gotham
-        sub.TextSize = 10
-        sub.TextXAlignment = Enum.TextXAlignment.Left
-        sub.Parent = card
-        return card
-    end
-
-    local sizeCard = railCard("Tamanho do Painel", "Ajuste o tamanho da janela.", 76)
-    local sizeValue = Instance.new("TextLabel", sizeCard)
-    sizeValue.Size = UDim2.fromOffset(54, 30)
-    sizeValue.Position = UDim2.new(1, -116, 0, 32)
-    sizeValue.BackgroundTransparency = 1
-    sizeValue.Text = "100%"
-    sizeValue.TextColor3 = COLORS.white
-    sizeValue.Font = Enum.Font.GothamBold
-    sizeValue.TextSize = 14
-    local function sizeButton(label, x, delta)
-        local b = Instance.new("TextButton", sizeCard)
-        b.Size = UDim2.fromOffset(30, 30)
-        b.Position = UDim2.new(1, x, 0, 32)
-        b.BackgroundColor3 = Color3.fromRGB(0, 105, 230)
-        b.Text = label
-        b.TextColor3 = COLORS.white
-        b.Font = Enum.Font.GothamBold
-        b.TextSize = 20
-        b.AutoButtonColor = true
-        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
-        b.MouseButton1Click:Connect(function()
-            panelScale = math.clamp(panelScale + delta, 0.55, 1)
-            sizeValue.Text = tostring(math.floor(panelScale * 100 + 0.5)) .. "%"
-            fitToScreen()
+        makeToggle("Uso automático de habilidades", function(on)
+            autoSkillsEnabled = on
+            if on and not attackLoopRunning then
+                startAttackLoop()
+            end
+            setStatus(on and "Habilidades automáticas ligadas" or "Habilidades automáticas desligadas")
         end)
-    end
-    sizeButton("−", -194, -0.1)
-    sizeButton("+", -34, 0.1)
 
-    local themeCard = railCard("Tema de Cor", "Escolha uma paleta.", 122)
-    local themeNames = {"Azul", "Violeta", "Vermelha", "Ciano", "Verde"}
-    local themeColors = {Color3.fromRGB(20,137,255), Color3.fromRGB(157,92,255), Color3.fromRGB(239,75,91), Color3.fromRGB(0,205,220), Color3.fromRGB(35,205,130)}
-    for i, themeName in ipairs(themeNames) do
-        local swatch = Instance.new("TextButton", themeCard)
-        swatch.Size = UDim2.fromOffset(34, 34)
-        swatch.Position = UDim2.fromOffset(10 + (i-1)*46, 68)
-        swatch.BackgroundColor3 = themeColors[i]
-        swatch.Text = ""
-        swatch.AutoButtonColor = true
-        Instance.new("UICorner", swatch).CornerRadius = UDim.new(0, 9)
-        local edge = Instance.new("UIStroke", swatch)
-        edge.Color = Color3.fromRGB(225,245,255)
-        edge.Transparency = 0.55
-        swatch.MouseButton1Click:Connect(function() applyPalette(themeName) end)
-    end
-
-    local listsCard = railCard("Listas Avançadas", "Controle a exibição das listas.", 176)
-    local function railAction(textValue, y, page)
-        local b = Instance.new("TextButton", listsCard)
-        b.Size = UDim2.new(1, -18, 0, 42)
-        b.Position = UDim2.fromOffset(9, y)
-        b.BackgroundColor3 = Color3.fromRGB(8, 35, 73)
-        b.Text = "  " .. textValue .. "     ›"
-        b.TextColor3 = COLORS.white
-        b.Font = Enum.Font.GothamSemibold
-        b.TextSize = 12
-        b.TextXAlignment = Enum.TextXAlignment.Left
-        b.AutoButtonColor = true
-        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 9)
-        local st = Instance.new("UIStroke", b)
-        st.Color = COLORS.line
-        st.Transparency = 0.5
-        b.MouseButton1Click:Connect(function()
-            for name, entry in pairs(navButtons) do
-                local selected = name == page
-                entry.button.BackgroundColor3 = selected and Color3.fromRGB(10,94,171) or COLORS.row
-                entry.stroke.Transparency = selected and 0.1 or 0.8
-                entry.icon.TextColor3 = selected and Color3.fromRGB(130,214,255) or COLORS.muted
-            end
-            local route = ({Render="Visualização", Combate="Combate"})[page] or page
-            showCategory(route)
-        end)
-    end
-    railAction("Mostrar NPCs", 58, "Render")
-    railAction("Mostrar Jogadores", 108, "Render")
-
-    showCategory = function(category)
-        activeContainer = Content
-        clearContent()
-        Content.CanvasPosition = Vector2.new(0, 0)
-
-        if category == "Premium" then
-            beginSection("Área Premium", false)
-            makeLabel("Área reservada para recursos Premium já disponibilizados pelo projeto.", 52)
-            makeLabel("Nenhuma função Premium adicional foi inventada nesta atualização.", 42)
-            endSection()
-
-        elseif category == "Início" then
-            beginSection("Painel e status")
-            makeLabel("BLOX F' - TALES 4.2", 36)
-            makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
-            setStatus("Pronto.")
-
-            local coords = makeLabel("Coordenadas: aguardando personagem...", 28)
-
-            task.spawn(function()
-                while Screen.Parent and coords.Parent do
-                    local root = getRoot(getCharacter())
-                    coords.Text = root
-                        and ("Coordenadas: " .. math.floor(root.Position.X) .. ", " .. math.floor(root.Position.Y) .. ", " .. math.floor(root.Position.Z))
-                        or "Coordenadas: personagem indisponível"
-                    task.wait(0.25)
-                end
-            end)
-
-            endSection()
-
-            beginSection("Informações")
-            makeLabel("Os recursos locais atuam no cliente. Ações internas do jogo dependem dos sistemas oficiais da experiência.", 58)
-            endSection()
-
-        elseif category == "Jogador" then
-            beginSection("Movimentação")
-
-            makeSpeedControl()
-
-            -- NOVO SLIDER SPEED GERAL
-            -- Zero = velocidade original; 500 = até 6 vezes a velocidade base.
-            makeSlider("Speed geral", 0, 500, globalSpeed, function(value)
-                globalSpeed = value
-
-                local character = getCharacter()
-                local hum = character and character:FindFirstChildOfClass("Humanoid")
-
-                if hum then
-                    hum.WalkSpeed = getAdjustedWalkSpeed()
-                end
-
-                setStatus("Speed geral: " .. value .. "%")
-            end)
-
-            makeToggle("Pulo infinito", function(on)
-                infiniteJump = on
-                setStatus(on and "Pulo infinito ligado" or "Pulo infinito desligado")
-            end)
-
-            makeToggle("Fly / Voar", function(on)
-                flyEnabled = on
-                if not on then
-                    followFlyActive = false
-                end
-                setStatus(on and "Fly ligado" or "Fly desligado")
-            end)
-
-            makeSlider("Velocidade do Fly", 10, 200, flySpeed, function(value)
-                flySpeed = value
-                setStatus("Velocidade do Fly: " .. flySpeed)
-            end)
-
-            makeLabel("O Speed geral também multiplica a velocidade do Fly. Quando estiver em zero, o Fly usa somente a velocidade configurada acima.", 54)
-            makeLabel("O Fly acompanha a direção da câmera. Quando o ataque automático está perseguindo um alvo selecionado, o Fly também acompanha esse alvo.", 62)
-            endSection()
-
-            beginSection("Colisão")
-            makeToggle("Atravessar paredes (local)", function(on)
-                noclip = on
-                setStatus(on and "Noclip local ligado" or "Noclip local desligado")
-            end)
-
-            makeLabel("O noclip altera colisões no cliente; o servidor pode corrigir sua posição.", 48)
-            endSection()
-
-        elseif category == "Teletransporte" then
-            local islandWorlds = {
-                {world="Mundo 1", islands={
-                    {"Ilha Inicial dos Piratas (Pirate Starter Island)", {"PirateStarter", "Pirate Starter Island", "StarterIsland", "Starter Island"}},
-                    {"Ilha Inicial da Marinha (Marine Starter Island)", {"MarineStarter", "Marine Starter Island"}},
-                    {"Selva (Jungle)", {"Jungle", "Jungle Island"}},
-                    {"Vila dos Piratas (Pirate Village)", {"PirateVillage", "Pirate Village"}},
-                    {"Deserto (Desert)", {"Desert", "Desert Island"}},
-                    {"Vila Congelada (Frozen Village)", {"FrozenVillage", "Frozen Village"}},
-                    {"Fortaleza da Marinha (Marine Fortress)", {"MarineFortress", "Marine Fortress"}},
-                    {"Ilhas do Céu (Skylands)", {"Skylands", "Sky Island"}},
-                    {"Céu Superior (Upper Skylands)", {"UpperSkylands", "Upper Skylands"}},
-                    {"Céu Inferior (Lower Skylands)", {"LowerSkylands", "Lower Skylands"}},
-                    {"Cidade Central (Middle Town)", {"MiddleTown", "Middle Town"}},
-                    {"Prisão (Prison)", {"Prison"}},
-                    {"Coliseu (Colosseum)", {"Colosseum", "Colosseum Island"}},
-                    {"Vila Magma (Magma Village)", {"MagmaVillage", "Magma Village"}},
-                    {"Cidade Subaquática (Underwater City)", {"UnderwaterCity", "Underwater City"}},
-                    {"Cidade da Fonte (Fountain City)", {"FountainCity", "Fountain City"}}
-                }},
-                {world="Mundo 2", islands={
-                    {"Reino das Rosas (Kingdom of Rose)", {"KingdomofRose", "Kingdom of Rose"}},
-                    {"Café (Cafe)", {"Cafe"}},
-                    {"Zona Verde (Green Zone)", {"GreenZone", "Green Zone"}},
-                    {"Cemitério (Graveyard)", {"Graveyard"}},
-                    {"Montanha Nevada (Snow Mountain)", {"SnowMountain", "Snow Mountain"}},
-                    {"Quente e Frio (Hot and Cold)", {"HotandCold", "Hot and Cold"}},
-                    {"Navio Amaldiçoado (Cursed Ship)", {"CursedShip", "Cursed Ship"}},
-                    {"Castelo de Gelo (Ice Castle)", {"IceCastle", "Ice Castle"}},
-                    {"Ilha Esquecida (Forgotten Island)", {"ForgottenIsland", "Forgotten Island"}},
-                    {"Arena Sombria (Dark Arena)", {"DarkArena", "Dark Arena"}}
-                }},
-                {world="Mundo 3", islands={
-                    {"Cidade Portuária (Port Town)", {"PortTown", "Port Town"}},
-                    {"Ilha da Hidra (Hydra Island)", {"HydraIsland", "Hydra Island"}},
-                    {"Grande Árvore (Great Tree)", {"GreatTree", "Great Tree"}},
-                    {"Tartaruga Flutuante (Floating Turtle)", {"FloatingTurtle", "Floating Turtle"}},
-                    {"Castelo no Mar (Castle on the Sea)", {"CastleontheSea", "Castle on the Sea"}},
-                    {"Castelo Assombrado (Haunted Castle)", {"HauntedCastle", "Haunted Castle"}},
-                    {"Mar de Doces (Sea of Treats)", {"SeaofTreats", "Sea of Treats"}},
-                    {"Terra do Chocolate (Chocolate Land)", {"ChocolateLand", "Chocolate Land"}},
-                    {"Terra do Biscoito (Candy Cane Land)", {"CandyCaneLand", "Candy Cane Land"}},
-                    {"Terra do Sorvete (Ice Cream Land)", {"IceCreamLand", "Ice Cream Land"}},
-                    {"Terra do Amendoim (Peanut Land)", {"PeanutLand", "Peanut Land"}},
-                    {"Terra do Bolo (Cake Land)", {"CakeLand", "Cake Land"}},
-                    {"Posto Tiki (Tiki Outpost)", {"TikiOutpost", "Tiki Outpost"}}
-                }}
-            }
-
-            makeLabel("Escolha o mundo, marque uma ilha e depois confirme no botão separado.", 42)
-            local selectedLabel = makeLabel("Destino selecionado: nenhum", 28)
-            local optionButtons = {}
-
-            for _, worldData in ipairs(islandWorlds) do
-                beginSection(worldData.world, false)
-
-                for _, islandData in ipairs(worldData.islands) do
-                    local islandName, aliases = islandData[1], islandData[2]
-
-                    local button = makeOption(islandName, selectedIsland == islandName, function()
-                        selectedIsland = selectedIsland == islandName and nil or islandName
-                        selectedLabel.Text = "Destino selecionado: " .. (selectedIsland or "nenhum")
-
-                        for name, option in pairs(optionButtons) do
-                            if option and option.Parent then
-                                local chosen = name == selectedIsland
-                                option.BackgroundColor3 = chosen and COLORS.green or COLORS.row
-                                option.Text = (chosen and "✓   " or "○   ") .. name
-                            end
-                        end
-                    end)
-
-                    optionButtons[islandName] = button
-                end
-
-                endSection()
-            end
-
-            beginSection("Confirmar destino", false)
-
-            makeButton("CONFIRMAR TELETRANSPORTE PARA A ILHA", function()
-                if not selectedIsland then
-                    setStatus("Selecione uma ilha antes de confirmar.")
-                    return
-                end
-
-                local aliases
-
-                for _, worldData in ipairs(islandWorlds) do
-                    for _, islandData in ipairs(worldData.islands) do
-                        if islandData[1] == selectedIsland then
-                            aliases = islandData[2]
-                            break
-                        end
-                    end
-                    if aliases then break end
-                end
-
-                local destination = aliases and findNamedWorldObject(aliases)
-
-                if destination then
-                    local ok = teleportLocal(destination * CFrame.new(0, 5, 0))
-                    setStatus(ok and ("Tentando ir para " .. selectedIsland) or "Não foi possível mover o personagem.")
-                else
-                    setStatus("Não encontrei " .. selectedIsland .. " no mapa carregado. O nome interno pode ser diferente.")
-                end
-            end, COLORS.green)
-
-            endSection()
-
-            beginSection("Teletransporte por coordenadas", false)
-
-            local coordinateBoxes = {}
-
-            for _, axis in ipairs({"X", "Y", "Z"}) do
-                local box = Instance.new("TextBox")
-                box.Size = UDim2.new(1, -4, 0, 36)
-                box.BackgroundColor3 = COLORS.row
-                box.TextColor3 = COLORS.white
-                box.PlaceholderText = "Coordenada " .. axis
-                box.Text = ""
-                box.ClearTextOnFocus = false
-                box.Font = Enum.Font.Gotham
-                box.TextSize = 13
-                box.Parent = activeContainer
-                Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
-                coordinateBoxes[axis] = box
-            end
-
-            makeButton("CONFIRMAR COORDENADAS", function()
-                local x = tonumber(coordinateBoxes.X.Text)
-                local y = tonumber(coordinateBoxes.Y.Text)
-                local z = tonumber(coordinateBoxes.Z.Text)
-
-                if not x or not y or not z then
-                    setStatus("Informe valores numéricos para X, Y e Z.")
-                    return
-                end
-
-                local ok = teleportLocal(Vector3.new(
-                    math.clamp(x, -100000, 100000),
-                    math.clamp(y, -100000, 100000),
-                    math.clamp(z, -100000, 100000)
-                ))
-
-                setStatus(ok and "Movimento para as coordenadas solicitado." or "Não foi possível teletransportar.")
-            end, COLORS.purple)
-
-            endSection()
-
-            beginSection("Teletransporte para jogador", false)
-
-            makeLabel("Ajuste a velocidade com que seu personagem vai correr até o jogador. O Speed geral também multiplica esse valor.", 48)
-
-            makeSlider("Speed", 16, 500, playerTeleportSpeed, function(value)
-                playerTeleportSpeed = value
-                setStatus("Speed do teletransporte player: " .. value)
-            end)
-
-            makePlayerSelection()
-            endSection()
-
-        elseif category == "Visualização" then
-            beginSection("Jogadores", false)
-
-            makeToggle("Destacar jogadores", function(on)
-                espPlayers = on
-                applyPlayerVisuals()
-            end)
-
-            makeToggle("Mostrar nomes", function(on)
-                showNames = on
-                applyPlayerVisuals()
-            end)
-
-            makeToggle("Mostrar distâncias", function(on)
-                showDistances = on
-                applyPlayerVisuals()
-            end)
-
-            endSection()
-
-            beginSection("Chefes / Boss ESP", false)
-
-            makeToggle("Destacar bosses", function(on)
-                bossESP = on
-                refreshBossESP(on)
-                setStatus(on and "Boss ESP ligado" or "Boss ESP desligado")
-            end)
-
-            endSection()
-
-            beginSection("Localizadores", false)
-
-            makeToggle("Localizador de frutas", function(on)
-                fruitFinder = on
-                refreshObjectHighlights("fruit", on)
-            end)
-
-            makeToggle("Localizador de baús", function(on)
-                chestFinder = on
-                refreshObjectHighlights("chest", on)
-            end)
-
-            makeLabel("Os localizadores procuram objetos replicados no Workspace com nomes relacionados a frutas e baús.", 48)
-            endSection()
-
-        elseif category == "Combate" then
-            beginSection("Mira e seleção de alvos", true)
-
-            makeToggle("Aim Assist", function(on)
-                aimAssistEnabled = on
-                setStatus(on and "Aim Assist ativado" or "Aim Assist desativado")
-            end)
-
-            makeToggle("Mostrar FOV", function(on)
-                aimFovEnabled = on
-                FOVCircle.Visible = on
-                setStatus(on and "FOV ativado" or "FOV desativado")
-            end)
-
-            makeSlider("Raio do FOV", 30, 500, aimFovRadius, function(value)
-                aimFovRadius = value
-                FOVCircle.Size = UDim2.fromOffset(value * 2, value * 2)
-                setStatus("Raio do FOV: " .. aimFovRadius)
-            end)
-
-            local attackButton, attackList, attackStatus
-
-            local typeButton, targetTypeDropdown
-
-            typeButton = makeButton("▼  Tipo de alvo: " .. selectedAimTarget, function()
-                targetTypeDropdownOpen = not targetTypeDropdownOpen
-                targetTypeDropdown.Visible = targetTypeDropdownOpen
-                typeButton.Text = (targetTypeDropdownOpen and "▼  " or "▶  ")
-                    .. "Tipo de alvo: " .. selectedAimTarget
-            end)
-
-            targetTypeDropdown = Instance.new("Frame")
-            targetTypeDropdown.Size = UDim2.new(1, -4, 0, 114)
-            targetTypeDropdown.BackgroundColor3 = COLORS.panel
-            targetTypeDropdown.Visible = false
-            targetTypeDropdown.Parent = activeContainer
-
-            local typeLayout = Instance.new("UIListLayout")
-            typeLayout.Padding = UDim.new(0, 4)
-            typeLayout.Parent = targetTypeDropdown
-
-            for _, targetType in ipairs({"NPCs", "Jogadores", "Todos"}) do
-                local option = Instance.new("TextButton")
-                option.Size = UDim2.new(1, 0, 0, 34)
-                option.BackgroundColor3 = selectedAimTarget == targetType and COLORS.green or COLORS.row
-                option.Text = targetType
-                option.TextColor3 = COLORS.white
-                option.Font = Enum.Font.Gotham
-                option.TextSize = 12
-                option.Parent = targetTypeDropdown
-                Instance.new("UICorner", option).CornerRadius = UDim.new(0, 6)
-
-                option.MouseButton1Click:Connect(function()
-                    selectedAimTarget = targetType
-                    typeButton.Text = "▶  Tipo de alvo: " .. targetType
-                    targetTypeDropdownOpen = false
-                    targetTypeDropdown.Visible = false
-
-                    for _, sibling in ipairs(targetTypeDropdown:GetChildren()) do
-                        if sibling:IsA("TextButton") then
-                            sibling.BackgroundColor3 =
-                                sibling.Text == targetType and COLORS.green or COLORS.row
-                        end
-                    end
-
-                    if attackList and attackList.Parent then
-                        refreshAttackTargetList(attackList, attackStatus)
-                    end
-
-                    setStatus("Mira configurada para: " .. targetType)
-                end)
-            end
-
-            endSection()
-
-            beginSection("Ataque, habilidades e Haki", true)
-
-            attackButton = makeButton("▼  Selecionar alvos para ataque", function()
-                attackDropdownOpen = not attackDropdownOpen
-                attackList.Visible = attackDropdownOpen
-                attackButton.Text = (attackDropdownOpen and "▼  " or "▶  ")
-                    .. "Selecionar alvos para ataque"
-            end)
-
-            attackStatus = makeLabel("Alvos selecionados: 0", 25)
-
-            attackList = Instance.new("ScrollingFrame")
-            attackList.Name = "AttackTargetList"
-            attackList.Size = UDim2.new(1, -4, 0, 170)
-            attackList.BackgroundColor3 = COLORS.panel
-            attackList.BorderSizePixel = 0
-            attackList.ScrollBarThickness = 4
-            attackList.ScrollBarImageColor3 = COLORS.purple
-            attackList.CanvasSize = UDim2.new(0, 0, 0, 0)
-            attackList.Visible = false
-            attackList.Parent = activeContainer
-            Instance.new("UICorner", attackList).CornerRadius = UDim.new(0, 7)
-
-            local attackListLayout = Instance.new("UIListLayout")
-            attackListLayout.Padding = UDim.new(0, 4)
-            attackListLayout.Parent = attackList
-
-            attackListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                attackList.CanvasSize = UDim2.new(0, 0, 0, attackListLayout.AbsoluteContentSize.Y + 8)
-            end)
-
-            makeButton("ATUALIZAR LISTA DE ALVOS", function()
-                refreshAttackTargetList(attackList, attackStatus)
-
-                local count = 0
-                for model in pairs(selectedAttackTargets) do
-                    if model and model.Parent and isValidAimType(model) then
-                        count += 1
-                    end
-                end
-
-                attackStatus.Text = "Alvos selecionados: " .. count
-            end, COLORS.purple)
-
+        makeButton("LIMPAR ALVOS SELECIONADOS", function()
+            table.clear(selectedAttackTargets)
             refreshAttackTargetList(attackList, attackStatus)
+            attackStatus.Text = "Alvos selecionados: 0"
+            setStatus("Seleção de alvos limpa.")
+        end, COLORS.red)
 
-            makeLabel("Selecione a fruta que você está equipado.", 30)
+        endSection()
 
-            local fruitSelectionLabel = makeLabel(
-                "Fruta confirmada: " .. (selectedFruitName or "nenhuma"),
-                28
-            )
+    elseif category == "Movimento" then
+        beginSection("Movimentação do Personagem")
 
-            local fruitDropdownButton
-            local fruitList
+        makeSpeedControl()
 
-            fruitDropdownButton = makeButton("▼  Selecione a fruta que você está equipado", function()
-                fruitDropdownOpen = not fruitDropdownOpen
-                fruitList.Visible = fruitDropdownOpen
-                fruitDropdownButton.Text = (fruitDropdownOpen and "▼  " or "▶  ")
-                    .. "Selecione a fruta que você está equipado"
-            end)
+        makeSlider("Speed geral", 0, 500, globalSpeed, function(value)
+            globalSpeed = value
 
-            fruitList = Instance.new("ScrollingFrame")
-            fruitList.Name = "FruitSelectionList"
-            fruitList.Size = UDim2.new(1, -4, 0, 150)
-            fruitList.BackgroundColor3 = COLORS.panel
-            fruitList.BorderSizePixel = 0
-            fruitList.ScrollBarThickness = 4
-            fruitList.ScrollBarImageColor3 = COLORS.purple
-            fruitList.CanvasSize = UDim2.new(0, 0, 0, 0)
-            fruitList.Visible = false
-            fruitList.Parent = activeContainer
-            Instance.new("UICorner", fruitList).CornerRadius = UDim.new(0, 7)
-
-            local fruitListLayout = Instance.new("UIListLayout")
-            fruitListLayout.Padding = UDim.new(0, 4)
-            fruitListLayout.Parent = fruitList
-
-            fruitListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                fruitList.CanvasSize = UDim2.new(
-                    0,
-                    0,
-                    0,
-                    fruitListLayout.AbsoluteContentSize.Y + 8
-                )
-            end)
-
-            local fruitOptionButtons = {}
-
-            local function updateFruitOptions()
-                for fruitName, option in pairs(fruitOptionButtons) do
-                    if option and option.Parent then
-                        local chosen = pendingFruitName == fruitName
-                        option.BackgroundColor3 = chosen and COLORS.green or COLORS.row
-                        option.Text = (chosen and "✓   " or "○   ") .. fruitName
-                    end
-                end
-            end
-
-            for _, fruitName in ipairs(fruitCatalog) do
-                local option = Instance.new("TextButton")
-                option.Name = "FruitOption"
-                option.Size = UDim2.new(1, -4, 0, 32)
-                option.BackgroundColor3 = pendingFruitName == fruitName and COLORS.green or COLORS.row
-                option.Text = (pendingFruitName == fruitName and "✓   " or "○   ") .. fruitName
-                option.TextColor3 = COLORS.white
-                option.TextSize = 12
-                option.Font = Enum.Font.Gotham
-                option.TextXAlignment = Enum.TextXAlignment.Left
-                option.Parent = fruitList
-                Instance.new("UICorner", option).CornerRadius = UDim.new(0, 6)
-
-                fruitOptionButtons[fruitName] = option
-
-                option.MouseButton1Click:Connect(function()
-                    pendingFruitName = fruitName
-                    updateFruitOptions()
-                    setStatus("Fruta selecionada: " .. fruitName .. ". Confirme para salvar.")
-                end)
-            end
-
-            makeButton("CONFIRMAR FRUTA", function()
-                if not pendingFruitName then
-                    setStatus("Escolha uma fruta antes de confirmar.")
-                    return
-                end
-
-                selectedFruitName = pendingFruitName
-                fruitSelectionLabel.Text = "Fruta confirmada: " .. selectedFruitName
-                setStatus("Fruta configurada: " .. selectedFruitName)
-            end, COLORS.green)
-
-            makeToggle("Ataque automático", function(on)
-                autoAttackEnabled = on
-                if on then
-                    startAttackLoop()
-                end
-                setStatus(on and "Ataque automático ligado" or "Ataque automático desligado")
-            end)
-
-            makeToggle("Haki automático", function(on)
-                autoHakiEnabled = on
-                if on and not attackLoopRunning then
-                    startAttackLoop()
-                end
-                setStatus(on and "Haki automático ligado" or "Haki automático desligado")
-            end)
-
-            makeToggle("Uso automático de habilidades", function(on)
-                autoSkillsEnabled = on
-                if on and not attackLoopRunning then
-                    startAttackLoop()
-                end
-                setStatus(on and "Habilidades automáticas ligadas" or "Habilidades automáticas desligadas")
-            end)
-
-            makeButton("LIMPAR ALVOS SELECIONADOS", function()
-                table.clear(selectedAttackTargets)
-                refreshAttackTargetList(attackList, attackStatus)
-                attackStatus.Text = "Alvos selecionados: 0"
-                setStatus("Seleção de alvos limpa.")
-            end, COLORS.red)
-
-            endSection()
-
-        elseif category == "Frutas" then
-            beginSection("Catálogo e localização", false)
-
-            makeToggle("Detector de frutas", function(on)
-                fruitFinder = on
-                refreshObjectHighlights("fruit", on)
-                setStatus(on and "Detector de frutas ligado" or "Detector de frutas desligado")
-            end)
-
-            makeToggle("Coletar frutas automaticamente", function(on)
-                autoFruitEnabled = on
-                setStatus(on and "Coleta automática de frutas ligada" or "Coleta automática de frutas desligada")
-            end)
-
-            makeLabel("Catálogo de frutas: Rocket, Spin, Blade, Spring, Bomb, Smoke, Spike, Flame, Falcon, Ice, Sand, Dark, Diamond, Light, Rubber, Barrier, Ghost, Magma, Quake, Buddha, Love, Spider, Sound, Phoenix, Portal, Rumble, Pain, Blizzard, Gravity, Mammoth, T-Rex, Dough, Shadow, Venom, Control, Spirit, Dragon, Leopard, Kitsune, Gas e Yeti.", 110)
-
-            endSection()
-
-        elseif category == "Coleta e evolução" then
-            beginSection("Coleta automática", false)
-
-            makeToggle("Auto Farm", function(on)
-                autoFarmEnabled = on
-                setStatus(on and "Auto Farm ativado" or "Auto Farm desativado")
-            end)
-
-            makeToggle("Auto Chest", function(on)
-                autoChestEnabled = on
-                setStatus(on and "Auto Chest ativado" or "Auto Chest desativado")
-            end)
-
-            makeToggle("Auto Fruit", function(on)
-                autoFruitEnabled = on
-                setStatus(on and "Auto Fruit ativado" or "Auto Fruit desativado")
-            end)
-
-            makeToggle("Auto Mission", function(on)
-                autoMissionEnabled = on
-                setStatus(on and "Auto Mission ativado" or "Auto Mission desativado")
-            end)
-
-            endSection()
-
-            beginSection("Evolução e recompensas", false)
-
-            makeToggle("Auto Evolution", function(on)
-                autoEvolutionEnabled = on
-                setStatus(on and "Auto Evolution ativado" or "Auto Evolution desativado")
-            end)
-
-            makeToggle("Auto Rewards", function(on)
-                autoRewardsEnabled = on
-                setStatus(on and "Auto Rewards ativado" or "Auto Rewards desativado")
-            end)
-
-            endSection()
-
-        elseif category == "Configurações" then
-            beginSection("Interface", false)
-
-            makeButton("Recentralizar painel", function()
-                Main.Position = UDim2.new(
-                    0.5,
-                    -Main.AbsoluteSize.X / 2,
-                    0.5,
-                    -Main.AbsoluteSize.Y / 2
-                )
-                setStatus("Painel recentralizado.")
-            end)
-
-            makeLabel("Ajuste o tamanho e a cor do painel.", 28)
-            makeSlider("Tamanho do painel (%)", 80, 115, 100, function(value)
-                local cameraNow = Workspace.CurrentCamera
-                local viewportNow = cameraNow and cameraNow.ViewportSize
-                if not viewportNow then return end
-                panelScale = math.clamp(value / 100, 0.55, 1.15)
-                if not minimized then
-                    fitToScreen()
-                end
-            end)
-
-            beginSection("Paleta de cores", true)
-            for paletteName, paletteColor in pairs(paletteOptions) do
-                makeButton("Aplicar tema " .. paletteName, function()
-                    applyPalette(paletteName)
-                end, paletteColor)
-            end
-            endSection()
-
-            endSection()
-
-            beginSection("Personagem", false)
-
-            makeButton("Reaplicar velocidade e pulo", function()
-                local character = getCharacter()
-                local hum = character and character:FindFirstChildOfClass("Humanoid")
-
-                if hum then
-                    hum.WalkSpeed = getAdjustedWalkSpeed()
-                    hum.UseJumpPower = true
-                    hum.JumpPower = jumpPower
-                    setStatus("Configurações locais reaplicadas.")
-                else
-                    setStatus("Personagem ainda não carregou.")
-                end
-            end)
-
-            endSection()
-
-            beginSection("Limpeza", false)
-
-            makeButton("Limpar destaques visuais", function()
-                espPlayers, showNames, showDistances, fruitFinder, chestFinder, bossESP =
-                    false, false, false, false, false, false
-
-                removeHighlights(playerHighlights)
-                removeHighlights(fruitHighlights)
-                removeHighlights(chestHighlights)
-                removeHighlights(bossHighlights)
-                setStatus("Destaques removidos.")
-            end)
-
-            endSection()
-        end
-
-        -- Entrada suave dos cartões ao trocar de categoria.
-        for _, child in ipairs(Content:GetChildren()) do
-            if child:IsA("GuiObject") and child ~= StatusLabel then
-                local finalPosition = child.Position
-                child.Position = finalPosition + UDim2.fromOffset(0, 7)
-                tween(child, {Position = finalPosition}, 0.22)
-            end
-        end
-    end
-
-    local categories = {
-        {name = "Combate", icon = "⚔", page = "Combate"},
-        {name = "Movimento", icon = "🪽", page = "Jogador"},
-        {name = "Render", icon = "▣", page = "Visualização"},
-        {name = "Teleporte", icon = "⌖", page = "Teletransporte"},
-        {name = "Outros", icon = "✿", page = "Frutas"},
-        {name = "Configurações", icon = "⚙", page = "Configurações"},
-        {name = "Auto Farm", icon = "♜", page = "Coleta e evolução"},
-        {name = "Premium", icon = "♛", page = "Premium"}
-    }
-
-    navButtons = {}
-    for index, item in ipairs(categories) do
-        local category = item.name
-        local targetPage = item.page
-        local tab = Instance.new("TextButton")
-        tab.Name = "Nav_" .. tostring(index)
-        tab.Size = UDim2.new(1, -14, 0, 45)
-        tab.LayoutOrder = index
-        tab.BackgroundColor3 = category == "Combate" and Color3.fromRGB(10, 94, 171) or COLORS.row
-        tab.Text = ""
-        tab.AutoButtonColor = false
-        tab.Parent = Sidebar
-        Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 12)
-        local tabGradient = Instance.new("UIGradient")
-        tabGradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(15, 55, 105)),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 18, 42))
-        })
-        tabGradient.Rotation = 90
-        tabGradient.Parent = tab
-
-        local tabStroke = Instance.new("UIStroke", tab)
-        tabStroke.Color = COLORS.line
-        tabStroke.Transparency = category == "Combate" and 0.1 or 0.8
-        tabStroke.Thickness = 1.35
-
-        local icon = Instance.new("TextLabel")
-        icon.Size = UDim2.fromOffset(30, 43)
-        icon.Position = UDim2.fromOffset(8, 0)
-        icon.BackgroundTransparency = 1
-        icon.Text = item.icon
-        icon.TextColor3 = category == "Combate" and Color3.fromRGB(130, 214, 255) or COLORS.muted
-        icon.Font = Enum.Font.GothamBold
-        icon.TextSize = 22
-        icon.Parent = tab
-
-        local caption = Instance.new("TextLabel")
-        caption.Size = UDim2.new(1, -45, 1, 0)
-        caption.Position = UDim2.fromOffset(40, 0)
-        caption.BackgroundTransparency = 1
-        caption.Text = category
-        caption.TextColor3 = COLORS.white
-        caption.Font = Enum.Font.GothamBold
-        caption.TextSize = 12
-        caption.TextXAlignment = Enum.TextXAlignment.Left
-        caption.TextTruncate = Enum.TextTruncate.AtEnd
-        caption.Parent = tab
-
-        navButtons[category] = {button = tab, stroke = tabStroke, icon = icon}
-        tab.MouseEnter:Connect(function()
-            if tab.BackgroundColor3 ~= Color3.fromRGB(10, 94, 171) then
-                tween(tab, {BackgroundColor3 = Color3.fromRGB(17, 48, 79)}, 0.12)
-            end
-        end)
-        tab.MouseLeave:Connect(function()
-            if tab.BackgroundColor3 ~= Color3.fromRGB(10, 94, 171) then
-                tween(tab, {BackgroundColor3 = COLORS.row}, 0.12)
-            end
-        end)
-        tab.MouseButton1Click:Connect(function()
-            for name, entry in pairs(navButtons) do
-                local selected = name == category
-                tween(entry.button, {
-                    BackgroundColor3 = selected and Color3.fromRGB(10, 94, 171) or COLORS.row
-                }, 0.16)
-                entry.stroke.Transparency = selected and 0.1 or 0.8
-                entry.icon.TextColor3 = selected and Color3.fromRGB(130, 214, 255) or COLORS.muted
-            end
-            showCategory(targetPage)
-        end)
-    end
-
-    -- Pulso sutil no contorno: reforça o acabamento neon sem sobrecarregar o celular.
-    task.spawn(function()
-        while Screen.Parent and not destroyed do
-            tween(stroke, {Transparency = 0.12}, 0.9)
-            task.wait(0.9)
-            if not Screen.Parent or destroyed then break end
-            tween(stroke, {Transparency = 0.025}, 0.9)
-            task.wait(0.9)
-        end
-    end)
-
-    local sidebarBrand = Instance.new("TextLabel")
-    sidebarBrand.Name = "SidebarBrand"
-    sidebarBrand.Size = UDim2.new(1, -16, 0, 62)
-    sidebarBrand.LayoutOrder = 20
-    sidebarBrand.BackgroundTransparency = 1
-    sidebarBrand.Text = "BloxF Tales\n- Evolua mais!"
-    sidebarBrand.TextColor3 = Color3.fromRGB(65, 190, 255)
-    sidebarBrand.Font = Enum.Font.GothamBlack
-    sidebarBrand.TextSize = 17
-    sidebarBrand.Parent = Sidebar
-
-    Min.MouseButton1Click:Connect(MinimizePanel)
-
-    Close.MouseButton1Click:Connect(function()
-        destroyed = true
-        autoAttackEnabled = false
-        autoHakiEnabled = false
-        autoSkillsEnabled = false
-        flyEnabled = false
-        combatFollowTarget = nil
-        teleportSequence += 1
-        playerTeleportSequence += 1
-
-        for _, connection in ipairs(connections) do
-            pcall(function()
-                connection:Disconnect()
-            end)
-        end
-
-        removeHighlights(playerHighlights)
-        removeHighlights(fruitHighlights)
-        removeHighlights(chestHighlights)
-        removeHighlights(bossHighlights)
-        Screen:Destroy()
-    end)
-
-    local dragging = false
-    local dragInput, dragStart, startPosition
-
-    Header.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch then
-
-            dragging = true
-            dragStart = input.Position
-            startPosition = Main.Position
-            dragInput = input
-        end
-    end)
-
-    Header.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
-    table.insert(connections, UIS.InputChanged:Connect(function(input)
-        if dragging and (
-            input == dragInput
-            or input.UserInputType == Enum.UserInputType.Touch
-        ) then
-
-            local delta = input.Position - dragStart
-
-            Main.Position = UDim2.new(
-                startPosition.X.Scale,
-                startPosition.X.Offset + delta.X,
-                startPosition.Y.Scale,
-                startPosition.Y.Offset + delta.Y
-            )
-        end
-    end))
-
-    table.insert(connections, UIS.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end))
-
-    local camera = Workspace.CurrentCamera
-
-    local compactLayout = false
-    fitToScreen = function()
-        camera = Workspace.CurrentCamera
-        if not camera or minimized then return end
-
-        local viewport = camera.ViewportSize
-        local isSmall = viewport.X < 980 or viewport.Y < 560
-        compactLayout = isSmall
-
-        local margin = 8
-        local width = math.max(300, math.min(1180 * panelScale, viewport.X - margin * 2))
-        local height = math.max(250, math.min(650 * panelScale, viewport.Y - margin * 2))
-
-        -- Em celulares deitados, o painel usa toda a altura disponível,
-        -- esconde a coluna fixa e mantém Configurações acessível pelo menu.
-        local headerHeight = isSmall and 58 or 82
-        local top = headerHeight + 10
-        local bottom = 10
-        local sideWidth = isSmall and math.clamp(math.floor(width * 0.145), 92, 126)
-            or math.min(190, math.max(150, width * 0.17))
-        local rightWidth = isSmall and 0 or math.clamp(math.floor(width * 0.28), 285, 340)
-        -- Em telas amplas, reserva uma coluna real para Configurações/Listas,
-        -- como na referência. Em telas compactas, ela volta para a categoria.
-        local gap = 12
-        local contentLeft = sideWidth + gap * 2
-        local contentRightGap = rightWidth > 0 and (rightWidth + gap * 2) or gap
-
-        expandedSize = UDim2.fromOffset(width, height)
-        Main.Size = expandedSize
-        Main.Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2)
-        expandedPosition = Main.Position
-
-        Header.Size = UDim2.new(1, 0, 0, headerHeight)
-        BrandMark.Size = UDim2.fromOffset(isSmall and 58 or 94, headerHeight)
-        BrandMark.Position = UDim2.fromOffset(6, 0)
-        BrandGlyph.TextSize = isSmall and 36 or 54
-        dragonDepth.TextSize = BrandGlyph.TextSize
-        dragonShine.TextSize = math.max(30, BrandGlyph.TextSize - 4)
-        Title.Position = UDim2.fromOffset(isSmall and 68 or 108, isSmall and 2 or 5)
-        Title.Size = UDim2.new(1, - (isSmall and 270 or 390), 0, isSmall and 42 or 54)
-        Title.TextSize = isSmall and 25 or 40
-        BrandSubtitle.Visible = not isSmall
-        ActivePill.Visible = not isSmall
-        Min.Position = UDim2.new(1, -98, 0, isSmall and 10 or 24)
-        Close.Position = UDim2.new(1, -48, 0, isSmall and 9 or 23)
-
-        Sidebar.Size = UDim2.new(0, sideWidth, 1, -(top + bottom))
-        Sidebar.Position = UDim2.fromOffset(10, top)
-        Content.Position = UDim2.fromOffset(contentLeft, top)
-        Content.Size = UDim2.new(1, -(contentLeft + contentRightGap), 1, -(top + bottom))
-
-        if RightPanel then
-            RightPanel.Visible = rightWidth > 0
-            RightPanel.Position = UDim2.new(1, -(rightWidth + 10), 0, top)
-            RightPanel.Size = UDim2.new(0, rightWidth, 1, -(top + bottom))
-        end
-
-        -- Compactar a navegação sem diminuir excessivamente a área de toque.
-        for _, child in ipairs(Sidebar:GetChildren()) do
-            if child:IsA("TextButton") then
-                child.Size = UDim2.new(1, -10, 0, isSmall and 37 or 45)
-            end
-        end
-    end
-    fitToScreen()
-
-    if camera then
-        table.insert(
-            connections,
-            camera:GetPropertyChangedSignal("ViewportSize"):Connect(fitToScreen)
-        )
-    end
-
-    table.insert(connections, UIS.JumpRequest:Connect(function()
-        if infiniteJump then
             local character = getCharacter()
             local hum = character and character:FindFirstChildOfClass("Humanoid")
 
             if hum then
-                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                hum.WalkSpeed = getAdjustedWalkSpeed()
             end
-        end
-    end))
 
-    table.insert(connections, RunService.Stepped:Connect(function()
-        local character = getCharacter()
+            setStatus("Speed geral: " .. value .. "%")
+        end)
 
-        if noclip and character then
-            for _, part in ipairs(character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    if collisionCache[part] == nil then
-                        collisionCache[part] = part.CanCollide
+        makeToggle("Pulo infinito", function(on)
+            infiniteJump = on
+            setStatus(on and "Pulo infinito ligado" or "Pulo infinito desligado")
+        end)
+
+        makeToggle("Fly / Voar", function(on)
+            flyEnabled = on
+            if not on then
+                followFlyActive = false
+            end
+            setStatus(on and "Fly ligado" or "Fly desligado")
+        end)
+
+        makeSlider("Velocidade do Fly", 10, 200, flySpeed, function(value)
+            flySpeed = value
+            setStatus("Velocidade do Fly: " .. flySpeed)
+        end)
+
+        endSection()
+
+        beginSection("Colisão")
+        makeToggle("Atravessar paredes (local)", function(on)
+            noclip = on
+            setStatus(on and "Noclip local ligado" or "Noclip local desligado")
+        end)
+        endSection()
+
+    elseif category == "Render" then
+        beginSection("Visualização e ESP", false)
+
+        makeToggle("Destacar jogadores", function(on)
+            espPlayers = on
+            applyPlayerVisuals()
+        end)
+
+        makeToggle("Mostrar nomes", function(on)
+            showNames = on
+            applyPlayerVisuals()
+        end)
+
+        makeToggle("Mostrar distâncias", function(on)
+            showDistances = on
+            applyPlayerVisuals()
+        end)
+
+        makeToggle("Destacar bosses", function(on)
+            bossESP = on
+            refreshBossESP(on)
+            setStatus(on and "Boss ESP ligado" or "Boss ESP desligado")
+        end)
+
+        endSection()
+
+    elseif category == "Teleporte" then
+        local islandWorlds = {
+            {world="Mundo 1", islands={
+                {"Ilha Inicial dos Piratas", {"PirateStarter", "Pirate Starter Island"}},
+                {"Selva", {"Jungle"}},
+                {"Vila dos Piratas", {"PirateVillage"}},
+                {"Deserto", {"Desert"}},
+                {"Vila Congelada", {"FrozenVillage"}},
+                {"Cidade Central", {"MiddleTown"}}
+            }},
+            {world="Mundo 2", islands={
+                {"Reino das Rosas", {"KingdomofRose"}},
+                {"Café", {"Cafe"}},
+                {"Zona Verde", {"GreenZone"}}
+            }},
+            {world="Mundo 3", islands={
+                {"Cidade Portuária", {"PortTown"}},
+                {"Castelo no Mar", {"CastleontheSea"}},
+                {"Posto Tiki", {"TikiOutpost"}}
+            }}
+        }
+
+        makeLabel("Escolha o mundo, marque uma ilha e confirme.", 35)
+        local selectedLabel = makeLabel("Destino selecionado: nenhum", 28)
+        local optionButtons = {}
+
+        for _, worldData in ipairs(islandWorlds) do
+            beginSection(worldData.world, false)
+            for _, islandData in ipairs(worldData.islands) do
+                local islandName, aliases = islandData[1], islandData[2]
+                local button = makeOption(islandName, selectedIsland == islandName, function()
+                    selectedIsland = selectedIsland == islandName and nil or islandName
+                    selectedLabel.Text = "Destino selecionado: " .. (selectedIsland or "nenhum")
+                    for name, option in pairs(optionButtons) do
+                        if option and option.Parent then
+                            local chosen = name == selectedIsland
+                            option.BackgroundColor3 = chosen and COLORS.green or COLORS.row
+                            option.Text = (chosen and "✓   " or "○   ") .. name
+                        end
                     end
+                end)
+                optionButtons[islandName] = button
+            end
+            endSection()
+        end
 
-                    part.CanCollide = false
+        beginSection("Confirmar destino", false)
+        makeButton("CONFIRMAR TELETRANSPORTE PARA A ILHA", function()
+            if not selectedIsland then
+                setStatus("Selecione uma ilha.")
+                return
+            end
+            local aliases
+            for _, worldData in ipairs(islandWorlds) do
+                for _, islandData in ipairs(worldData.islands) do
+                    if islandData[1] == selectedIsland then
+                        aliases = islandData[2]
+                        break
+                    end
                 end
+                if aliases then break end
             end
-
-        elseif not noclip and next(collisionCache) then
-            for part, originalValue in pairs(collisionCache) do
-                if part and part.Parent then
-                    part.CanCollide = originalValue
-                end
-
-                collisionCache[part] = nil
+            local destination = aliases and findNamedWorldObject(aliases)
+            if destination then
+                teleportLocal(destination * CFrame.new(0, 5, 0))
+                setStatus("Indo para " .. selectedIsland)
+            else
+                setStatus("Destino não encontrado no mapa atual.")
             end
+        end, COLORS.green)
+        endSection()
+
+        beginSection("Teletransporte para jogador", false)
+        makePlayerSelection()
+        endSection()
+
+    elseif category == "Outros" then
+        beginSection("Ferramentas e utilitários", false)
+
+        makeToggle("Detector de frutas", function(on)
+            fruitFinder = on
+            refreshObjectHighlights("fruit", on)
+        end)
+
+        makeToggle("Detector de baús", function(on)
+            chestFinder = on
+            refreshObjectHighlights("chest", on)
+        end)
+
+        endSection()
+
+    elseif category == "Configurações" then
+        beginSection("Interface e Tamanho", false)
+
+        makeButton("Recentralizar painel", function()
+            Main.Position = UDim2.new(
+                0.5,
+                -Main.AbsoluteSize.X / 2,
+                0.5,
+                -Main.AbsoluteSize.Y / 2
+            )
+            setStatus("Painel recentralizado.")
+        end)
+
+        makeSlider("Tamanho do painel (%)", 80, 115, 100, function(value)
+            local width = math.floor(760 * value / 100)
+            local height = math.floor(510 * value / 100)
+            expandedSize = UDim2.fromOffset(width, height)
+            if not minimized then
+                Main.Size = expandedSize
+                Main.Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2)
+                expandedPosition = Main.Position
+            end
+        end)
+
+        beginSection("Tema de Cor", true)
+        for paletteName, paletteColor in pairs(paletteOptions) do
+            makeButton("Tema " .. paletteName, function()
+                applyPalette(paletteName)
+            end, paletteColor)
         end
-    end))
+        endSection()
 
-    table.insert(connections, LocalPlayer.CharacterAdded:Connect(function(character)
-        task.wait(0.5)
+        endSection()
 
-        local hum = character:FindFirstChildOfClass("Humanoid")
+    elseif category == "Auto Farm" then
+        beginSection("Automações de Farm", false)
 
-        if hum then
-            hum.WalkSpeed = getAdjustedWalkSpeed()
-            hum.UseJumpPower = true
-            hum.JumpPower = jumpPower
-        end
+        makeToggle("Auto Farm", function(on)
+            autoFarmEnabled = on
+            setStatus(on and "Auto Farm ativado" or "Auto Farm desativado")
+        end)
 
-        combatFollowTarget = nil
+        makeToggle("Auto Chest", function(on)
+            autoChestEnabled = on
+            setStatus(on and "Auto Chest ativado" or "Auto Chest desativado")
+        end)
 
-        for part in pairs(collisionCache) do
-            collisionCache[part] = nil
-        end
-    end))
+        makeToggle("Auto Fruit", function(on)
+            autoFruitEnabled = on
+            setStatus(on and "Auto Fruit ativado" or "Auto Fruit desativado")
+        end)
 
-    task.spawn(function()
-        while Screen.Parent do
-            task.wait(1.25)
-            if not Screen.Parent then break end
+        makeToggle("Auto Mission", function(on)
+            autoMissionEnabled = on
+            setStatus(on and "Auto Mission ativado" or "Auto Mission desativado")
+        end)
 
-            if espPlayers or showNames or showDistances then
-                applyPlayerVisuals()
-            end
+        endSection()
 
-            if bossESP then
-                refreshBossESP(true)
-            end
+    elseif category == "Premium" then
+        beginSection("Recursos Premium / Extras", false)
+
+        makeToggle("Auto Evolution", function(on)
+            autoEvolutionEnabled = on
+            setStatus(on and "Auto Evolution ativado" or "Auto Evolution desativado")
+        end)
+
+        makeToggle("Auto Rewards", function(on)
+            autoRewardsEnabled = on
+            setStatus(on and "Auto Rewards ativado" or "Auto Rewards desativado")
+        end)
+
+        endSection()
+    end
+end
+
+local categories = {
+    {name = "Combate", icon = "⚔"},
+    {name = "Movimento", icon = "✈"},
+    {name = "Render", icon = "🖥"},
+    {name = "Teleporte", icon = "📍"},
+    {name = "Outros", icon = "⚙"},
+    {name = "Configurações", icon = "★"},
+    {name = "Auto Farm", icon = "🎁"},
+    {name = "Premium", icon = "👑"}
+}
+
+local navButtons = {}
+for index, item in ipairs(categories) do
+    local category = item.name
+    local tab = Instance.new("TextButton")
+    tab.Name = "Nav_" .. tostring(index)
+    tab.Size = UDim2.new(1, -12, 0, 44)
+    tab.LayoutOrder = index
+    tab.BackgroundColor3 = category == "Combate" and Color3.fromRGB(15, 65, 120) or COLORS.row
+    tab.Text = ""
+    tab.AutoButtonColor = false
+    tab.Parent = Sidebar
+    Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 10)
+
+    local tabStroke = Instance.new("UIStroke", tab)
+    tabStroke.Color = COLORS.purple
+    tabStroke.Transparency = category == "Combate" and 0.2 or 0.8
+    tabStroke.Thickness = 1
+
+    local icon = Instance.new("TextLabel")
+    icon.Size = UDim2.fromOffset(30, 44)
+    icon.Position = UDim2.fromOffset(10, 0)
+    icon.BackgroundTransparency = 1
+    icon.Text = item.icon
+    icon.TextColor3 = category == "Combate" and Color3.fromRGB(130, 214, 255) or COLORS.muted
+    icon.Font = Enum.Font.GothamBold
+    icon.TextSize = 18
+    icon.Parent = tab
+
+    local caption = Instance.new("TextLabel")
+    caption.Size = UDim2.new(1, -45, 1, 0)
+    caption.Position = UDim2.fromOffset(40, 0)
+    caption.BackgroundTransparency = 1
+    caption.Text = category
+    caption.TextColor3 = COLORS.white
+    caption.Font = Enum.Font.GothamSemibold
+    caption.TextSize = 12
+    caption.TextXAlignment = Enum.TextXAlignment.Left
+    caption.TextTruncate = Enum.TextTruncate.AtEnd
+    caption.Parent = tab
+
+    navButtons[category] = {button = tab, stroke = tabStroke, icon = icon}
+    
+    tab.MouseEnter:Connect(function()
+        if tab.BackgroundColor3 ~= Color3.fromRGB(15, 65, 120) then
+            tween(tab, {BackgroundColor3 = Color3.fromRGB(18, 52, 95)}, 0.12)
         end
     end)
-
-    table.insert(connections, Players.PlayerAdded:Connect(function()
-        if espPlayers or showNames or showDistances then
-            task.delay(0.5, applyPlayerVisuals)
+    tab.MouseLeave:Connect(function()
+        if tab.BackgroundColor3 ~= Color3.fromRGB(15, 65, 120) then
+            tween(tab, {BackgroundColor3 = COLORS.row}, 0.12)
         end
-    end))
-
-    table.insert(connections, Players.PlayerRemoving:Connect(function(player)
-        if player.Character then
-            selectedAttackTargets[player.Character] = nil
+    end)
+    tab.MouseButton1Click:Connect(function()
+        for name, entry in pairs(navButtons) do
+            local selected = name == category
+            tween(entry.button, {
+                BackgroundColor3 = selected and Color3.fromRGB(15, 65, 120) or COLORS.row
+            }, 0.16)
+            entry.stroke.Transparency = selected and 0.2 or 0.8
+            entry.icon.TextColor3 = selected and Color3.fromRGB(130, 214, 255) or COLORS.muted
         end
+        showCategory(category)
+    end)
+end
 
-        if selectedPlayer == player then
-            selectedPlayer = nil
-        end
+Min.MouseButton1Click:Connect(MinimizePanel)
 
-        if espPlayers or showNames or showDistances then
-            task.delay(0.2, applyPlayerVisuals)
-        end
-    end))
+Close.MouseButton1Click:Connect(function()
+    destroyed = true
+    autoAttackEnabled = false
+    autoHakiEnabled = false
+    autoSkillsEnabled = false
+    flyEnabled = false
+    combatFollowTarget = nil
+    teleportSequence += 1
+    playerTeleportSequence += 1
 
-    --========================================================
-    -- FLY
-    --========================================================
+    for _, connection in ipairs(connections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
 
-    table.insert(connections, RunService.Heartbeat:Connect(function()
-        if not flyEnabled then
-            followFlyActive = false
-            return
-        end
+    removeHighlights(playerHighlights)
+    removeHighlights(fruitHighlights)
+    removeHighlights(chestHighlights)
+    removeHighlights(bossHighlights)
+    Screen:Destroy()
+end)
 
+local dragging = false
+local dragInput, dragStart, startPosition
+
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+
+        dragging = true
+        dragStart = input.Position
+        startPosition = Main.Position
+        dragInput = input
+    end
+end)
+
+Header.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+table.insert(connections, UIS.InputChanged:Connect(function(input)
+    if dragging and (
+        input == dragInput
+        or input.UserInputType == Enum.UserInputType.Touch
+    ) then
+
+        local delta = input.Position - dragStart
+
+        Main.Position = UDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
+    end
+end))
+
+table.insert(connections, UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end))
+
+local camera = Workspace.CurrentCamera
+
+local function fitToScreen()
+    camera = Workspace.CurrentCamera
+    if not camera or minimized then return end
+
+    local viewport = camera.ViewportSize
+    local width = math.max(520, math.min(760, viewport.X - 24))
+    local height = math.max(390, math.min(510, viewport.Y - 40))
+    local sideWidth = math.min(185, math.max(150, width * 0.24))
+    local contentLeft = sideWidth + 18
+
+    expandedSize = UDim2.fromOffset(width, height)
+    Main.Size = expandedSize
+    Main.Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2)
+    expandedPosition = Main.Position
+
+    Sidebar.Size = UDim2.new(0, sideWidth, 1, -90)
+    Sidebar.Position = UDim2.fromOffset(12, 75)
+    Content.Position = UDim2.fromOffset(contentLeft, 75)
+    Content.Size = UDim2.new(1, -(contentLeft + 12), 1, -90)
+end
+
+fitToScreen()
+
+if camera then
+    table.insert(
+        connections,
+        camera:GetPropertyChangedSignal("ViewportSize"):Connect(fitToScreen)
+    )
+end
+
+table.insert(connections, UIS.JumpRequest:Connect(function()
+    if infiniteJump then
         local character = getCharacter()
-        local root = getRoot(character)
         local hum = character and character:FindFirstChildOfClass("Humanoid")
-        local currentCamera = Workspace.CurrentCamera
 
-        if not root or not hum or not currentCamera then return end
-
-        local adjustedFlySpeed = getAdjustedFlySpeed()
-        local target = nil
-
-        if autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled then
-            target = combatFollowTarget
+        if hum then
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
         end
+    end
+end))
 
-        if target and target.root and target.root.Parent
-            and target.humanoid and target.humanoid.Health > 0 then
+table.insert(connections, RunService.Stepped:Connect(function()
+    local character = getCharacter()
 
-            followFlyActive = true
-
-            local targetRoot = target.root
-            local followPosition = targetRoot.Position
-                - targetRoot.CFrame.LookVector * 4
-                + Vector3.new(0, 2.5, 0)
-
-            local offset = followPosition - root.Position
-            local distance = offset.Magnitude
-
-            if distance > 2 then
-                local direction = offset.Unit
-                local speed = math.clamp(
-                    distance * 2.2,
-                    adjustedFlySpeed * 0.65,
-                    adjustedFlySpeed * 1.8
-                )
-
-                if distance < 7 then
-                    speed = math.min(speed, adjustedFlySpeed * 0.55)
+    if noclip and character then
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                if collisionCache[part] == nil then
+                    collisionCache[part] = part.CanCollide
                 end
 
-                root.AssemblyLinearVelocity = direction * speed
-            else
-                root.AssemblyLinearVelocity = Vector3.zero
+                part.CanCollide = false
             end
-
-            root.AssemblyAngularVelocity = Vector3.zero
-            hum:ChangeState(Enum.HumanoidStateType.Physics)
-
-            handleFollowJump(hum, root, targetRoot)
-            return
         end
 
+    elseif not noclip and next(collisionCache) then
+        for part, originalValue in pairs(collisionCache) do
+            if part and part.Parent then
+                part.CanCollide = originalValue
+            end
+
+            collisionCache[part] = nil
+        end
+    end
+end))
+
+table.insert(connections, LocalPlayer.CharacterAdded:Connect(function(character)
+    task.wait(0.5)
+
+    local hum = character:FindFirstChildOfClass("Humanoid")
+
+    if hum then
+        hum.WalkSpeed = getAdjustedWalkSpeed()
+        hum.UseJumpPower = true
+        hum.JumpPower = jumpPower
+    end
+
+    combatFollowTarget = nil
+
+    for part in pairs(collisionCache) do
+        collisionCache[part] = nil
+    end
+end))
+
+task.spawn(function()
+    while Screen.Parent do
+        task.wait(1.25)
+        if not Screen.Parent then break end
+
+        if espPlayers or showNames or showDistances then
+            applyPlayerVisuals()
+        end
+
+        if bossESP then
+            refreshBossESP(true)
+        end
+    end
+end)
+
+table.insert(connections, Players.PlayerAdded:Connect(function()
+    if espPlayers or showNames or showDistances then
+        task.delay(0.5, applyPlayerVisuals)
+    end
+end))
+
+table.insert(connections, Players.PlayerRemoving:Connect(function(player)
+    if player.Character then
+        selectedAttackTargets[player.Character] = nil
+    end
+
+    if selectedPlayer == player then
+        selectedPlayer = nil
+    end
+
+    if espPlayers or showNames or showDistances then
+        task.delay(0.2, applyPlayerVisuals)
+    end
+end))
+
+--========================================================
+-- FLY
+--========================================================
+
+table.insert(connections, RunService.Heartbeat:Connect(function()
+    if not flyEnabled then
         followFlyActive = false
+        return
+    end
 
-        local cameraCFrame = currentCamera.CFrame
-        local look = cameraCFrame.LookVector
-        local right = cameraCFrame.RightVector
+    local character = getCharacter()
+    local root = getRoot(character)
+    local hum = character and character:FindFirstChildOfClass("Humanoid")
+    local currentCamera = Workspace.CurrentCamera
 
-        local forwardInput = 0
-        local sideInput = 0
+    if not root or not hum or not currentCamera then return end
 
-        if UIS.TouchEnabled then
-            local moveDirection = hum.MoveDirection
-            local flatLook = Vector3.new(look.X, 0, look.Z)
-            local flatRight = Vector3.new(right.X, 0, right.Z)
+    local adjustedFlySpeed = getAdjustedFlySpeed()
+    local target = nil
 
-            if flatLook.Magnitude > 0.001 then
-                flatLook = flatLook.Unit
-                forwardInput = moveDirection:Dot(flatLook)
+    if autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled then
+        target = combatFollowTarget
+    end
+
+    if target and target.root and target.root.Parent
+        and target.humanoid and target.humanoid.Health > 0 then
+
+        followFlyActive = true
+
+        local targetRoot = target.root
+        local followPosition = targetRoot.Position
+            - targetRoot.CFrame.LookVector * 4
+            + Vector3.new(0, 2.5, 0)
+
+        local offset = followPosition - root.Position
+        local distance = offset.Magnitude
+
+        if distance > 2 then
+            local direction = offset.Unit
+            local speed = math.clamp(
+                distance * 2.2,
+                adjustedFlySpeed * 0.65,
+                adjustedFlySpeed * 1.8
+            )
+
+            if distance < 7 then
+                speed = math.min(speed, adjustedFlySpeed * 0.55)
             end
 
-            if flatRight.Magnitude > 0.001 then
-                flatRight = flatRight.Unit
-                sideInput = moveDirection:Dot(flatRight)
-            end
+            root.AssemblyLinearVelocity = direction * speed
         else
-            if UIS:IsKeyDown(Enum.KeyCode.W) then forwardInput += 1 end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then forwardInput -= 1 end
-            if UIS:IsKeyDown(Enum.KeyCode.D) then sideInput += 1 end
-            if UIS:IsKeyDown(Enum.KeyCode.A) then sideInput -= 1 end
-        end
-
-        local direction = look * forwardInput + right * sideInput
-
-        if direction.Magnitude > 1 then
-            direction = direction.Unit
+            root.AssemblyLinearVelocity = Vector3.zero
         end
 
         root.AssemblyAngularVelocity = Vector3.zero
-        root.AssemblyLinearVelocity = direction * adjustedFlySpeed
         hum:ChangeState(Enum.HumanoidStateType.Physics)
-    end))
 
-    --========================================================
-    -- AIM ASSIST
-    --========================================================
-
-    local function getAimCandidates()
-        local candidates = {}
-        local selectedCount = 0
-
-        for model in pairs(selectedAttackTargets) do
-            if model and model.Parent and isValidAimType(model) then
-                local hum = model:FindFirstChildOfClass("Humanoid")
-                local root = getRoot(model)
-
-                if hum and hum.Health > 0 and root then
-                    selectedCount += 1
-                end
-            end
-        end
-
-        local function addCandidate(model)
-            if not model or model == getCharacter() then return end
-            if not isValidAimType(model) then return end
-
-            if selectedCount > 0 and selectedAttackTargets[model] ~= true then
-                return
-            end
-
-            local hum = model:FindFirstChildOfClass("Humanoid")
-            local head = model:FindFirstChild("Head")
-            local root = getRoot(model)
-            local part = head or root
-
-            if not hum or hum.Health <= 0 or not part or not root then
-                return
-            end
-
-            table.insert(candidates, {
-                model = model,
-                humanoid = hum,
-                root = root,
-                part = part
-            })
-        end
-
-        if selectedAimTarget == "NPCs" or selectedAimTarget == "Todos" then
-            for _, item in ipairs(Workspace:GetDescendants()) do
-                if item:IsA("Model")
-                    and item ~= getCharacter()
-                    and not getPlayerFromModel(item)
-                    and item:FindFirstChildOfClass("Humanoid") then
-
-                    addCandidate(item)
-                end
-            end
-        end
-
-        if selectedAimTarget == "Jogadores" or selectedAimTarget == "Todos" then
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer and player.Character then
-                    addCandidate(player.Character)
-                end
-            end
-        end
-
-        return candidates, selectedCount
+        handleFollowJump(hum, root, targetRoot)
+        return
     end
 
-    table.insert(connections, RunService.RenderStepped:Connect(function()
-        local currentCamera = Workspace.CurrentCamera
+    followFlyActive = false
 
-        if currentCamera then
-            local viewport = currentCamera.ViewportSize
-            FOVCircle.Position = UDim2.fromOffset(viewport.X / 2, viewport.Y / 2)
-            FOVCircle.Size = UDim2.fromOffset(aimFovRadius * 2, aimFovRadius * 2)
-            FOVCircle.Visible = aimFovEnabled
+    local cameraCFrame = currentCamera.CFrame
+    local look = cameraCFrame.LookVector
+    local right = cameraCFrame.RightVector
+
+    local forwardInput = 0
+    local sideInput = 0
+
+    if UIS.TouchEnabled then
+        local moveDirection = hum.MoveDirection
+        local flatLook = Vector3.new(look.X, 0, look.Z)
+        local flatRight = Vector3.new(right.X, 0, right.Z)
+
+        if flatLook.Magnitude > 0.001 then
+            flatLook = flatLook.Unit
+            forwardInput = moveDirection:Dot(flatLook)
         end
 
-        if not aimAssistEnabled then return end
+        if flatRight.Magnitude > 0.001 then
+            flatRight = flatRight.Unit
+            sideInput = moveDirection:Dot(flatRight)
+        end
+    else
+        if UIS:IsKeyDown(Enum.KeyCode.W) then forwardInput += 1 end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then forwardInput -= 1 end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then sideInput += 1 end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then sideInput -= 1 end
+    end
 
-        local myRoot = getRoot(getCharacter())
-        if not currentCamera or not myRoot then return end
+    local direction = look * forwardInput + right * sideInput
 
-        local candidates = getAimCandidates()
-        local bestPart = nil
-        local bestScreenDistance = math.huge
+    if direction.Magnitude > 1 then
+        direction = direction.Unit
+    end
 
-        local center = Vector2.new(
-            currentCamera.ViewportSize.X / 2,
-            currentCamera.ViewportSize.Y / 2
-        )
+    root.AssemblyAngularVelocity = Vector3.zero
+    root.AssemblyLinearVelocity = direction * adjustedFlySpeed
+    hum:ChangeState(Enum.HumanoidStateType.Physics)
+end))
 
-        local maxRadius = aimFovEnabled and aimFovRadius or 500
+--========================================================
+-- AIM ASSIST
+--========================================================
 
-        for _, candidate in ipairs(candidates) do
-            local part = candidate.part
+local function getAimCandidates()
+    local candidates = {}
+    local selectedCount = 0
 
-            if part and part.Parent then
-                local worldDistance = (part.Position - myRoot.Position).Magnitude
+    for model in pairs(selectedAttackTargets) do
+        if model and model.Parent and isValidAimType(model) then
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            local root = getRoot(model)
 
-                if worldDistance <= 600 then
-                    local point, visible = currentCamera:WorldToViewportPoint(part.Position)
+            if hum and hum.Health > 0 and root then
+                selectedCount += 1
+            end
+        end
+    end
 
-                    if visible and point.Z > 0 then
-                        local screenDistance = (
-                            Vector2.new(point.X, point.Y) - center
-                        ).Magnitude
+    local function addCandidate(model)
+        if not model or model == getCharacter() then return end
+        if not isValidAimType(model) then return end
 
-                        if screenDistance <= maxRadius
-                            and screenDistance < bestScreenDistance then
+        if selectedCount > 0 and selectedAttackTargets[model] ~= true then
+            return
+        end
 
-                            bestPart = part
-                            bestScreenDistance = screenDistance
-                        end
+        local hum = model:FindFirstChildOfClass("Humanoid")
+        local head = model:FindFirstChild("Head")
+        local root = getRoot(model)
+        local part = head or root
+
+        if not hum or hum.Health <= 0 or not part or not root then
+            return
+        end
+
+        table.insert(candidates, {
+            model = model,
+            humanoid = hum,
+            root = root,
+            part = part
+        })
+    end
+
+    if selectedAimTarget == "NPCs" or selectedAimTarget == "Todos" then
+        for _, item in ipairs(Workspace:GetDescendants()) do
+            if item:IsA("Model")
+                and item ~= getCharacter()
+                and not getPlayerFromModel(item)
+                and item:FindFirstChildOfClass("Humanoid") then
+
+                addCandidate(item)
+            end
+        end
+    end
+
+    if selectedAimTarget == "Jogadores" or selectedAimTarget == "Todos" then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                addCandidate(player.Character)
+            end
+        end
+    end
+
+    return candidates, selectedCount
+end
+
+table.insert(connections, RunService.RenderStepped:Connect(function()
+    local currentCamera = Workspace.CurrentCamera
+
+    if currentCamera then
+        local viewport = currentCamera.ViewportSize
+        FOVCircle.Position = UDim2.fromOffset(viewport.X / 2, viewport.Y / 2)
+        FOVCircle.Size = UDim2.fromOffset(aimFovRadius * 2, aimFovRadius * 2)
+        FOVCircle.Visible = aimFovEnabled
+    end
+
+    if not aimAssistEnabled then return end
+
+    local myRoot = getRoot(getCharacter())
+    if not currentCamera or not myRoot then return end
+
+    local candidates = getAimCandidates()
+    local bestPart = nil
+    local bestScreenDistance = math.huge
+
+    local center = Vector2.new(
+        currentCamera.ViewportSize.X / 2,
+        currentCamera.ViewportSize.Y / 2
+    )
+
+    local maxRadius = aimFovEnabled and aimFovRadius or 500
+
+    for _, candidate in ipairs(candidates) do
+        local part = candidate.part
+
+        if part and part.Parent then
+            local worldDistance = (part.Position - myRoot.Position).Magnitude
+
+            if worldDistance <= 600 then
+                local point, visible = currentCamera:WorldToViewportPoint(part.Position)
+
+                if visible and point.Z > 0 then
+                    local screenDistance = (
+                        Vector2.new(point.X, point.Y) - center
+                    ).Magnitude
+
+                    if screenDistance <= maxRadius
+                        and screenDistance < bestScreenDistance then
+
+                        bestPart = part
+                        bestScreenDistance = screenDistance
                     end
                 end
             end
         end
+    end
 
-        if bestPart then
-            currentCamera.CFrame = CFrame.new(
-                currentCamera.CFrame.Position,
-                bestPart.Position
-            )
-        end
-    end))
+    if bestPart then
+        currentCamera.CFrame = CFrame.new(
+            currentCamera.CFrame.Position,
+            bestPart.Position
+        )
+    end
+end))
 
-    task.spawn(function()
-        while Screen.Parent do
-            task.wait(2)
+task.spawn(function()
+    while Screen.Parent do
+        task.wait(2)
 
-            if not Screen.Parent then break end
+        if not Screen.Parent then break end
 
-            for model in pairs(selectedAttackTargets) do
-                if not model or not model.Parent then
-                    selectedAttackTargets[model] = nil
-                end
+        for model in pairs(selectedAttackTargets) do
+            if not model or not model.Parent then
+                selectedAttackTargets[model] = nil
             end
         end
-    end)
+    end
+end)
 
-    showCategory("Combate")
+showCategory("Combate")
 
-    print("Blox F' - Tales 4.5 carregado.")
+print("Blox F' - Tales 4.2 carregado com visual personalizado.")
