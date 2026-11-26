@@ -1,6 +1,7 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 4.1
--- Speed geral ajustável para caminhada, perseguição, Fly e Dash.
+-- BLOX F' - TALES | VERSAO 4.2
+-- Interface reorganizada em estilo azul neon.
+-- Recursos e callbacks existentes preservados; ajustes focados no painel.
 --========================================================
 
 local Players = game:GetService("Players")
@@ -16,14 +17,18 @@ local old = PlayerGui:FindFirstChild("BloxFTales")
 if old then old:Destroy() end
 
 local COLORS = {
-    bg = Color3.fromRGB(15, 15, 23),
-    panel = Color3.fromRGB(25, 25, 37),
-    row = Color3.fromRGB(34, 34, 48),
-    purple = Color3.fromRGB(135, 65, 220),
-    green = Color3.fromRGB(40, 190, 105),
-    gray = Color3.fromRGB(75, 75, 85),
-    white = Color3.fromRGB(255, 255, 255),
-    red = Color3.fromRGB(190, 55, 65)
+    bg = Color3.fromRGB(5, 11, 24),
+    panel = Color3.fromRGB(9, 20, 39),
+    row = Color3.fromRGB(13, 29, 53),
+    purple = Color3.fromRGB(20, 137, 255), -- azul neon principal
+    green = Color3.fromRGB(32, 190, 112),
+    gray = Color3.fromRGB(55, 75, 101),
+    white = Color3.fromRGB(239, 247, 255),
+    red = Color3.fromRGB(225, 66, 82),
+    muted = Color3.fromRGB(145, 169, 198),
+    line = Color3.fromRGB(29, 91, 155),
+    header = Color3.fromRGB(7, 24, 49),
+    card = Color3.fromRGB(10, 25, 47)
 }
 
 local states = {}
@@ -56,11 +61,9 @@ local flySpeed = 65
 -- 0 mantém a velocidade normal configurada.
 -- Valores maiores aumentam caminhada, perseguição, Fly e Dash.
 local globalSpeed = 0
-local playerTeleportSpeed = 100
-local playerTeleportSequence = 0
 
 local function getGlobalSpeedMultiplier()
-    return 1 + (math.clamp(globalSpeed, 0, 500) / 100)
+    return 1 + (globalSpeed / 100)
 end
 
 local function getAdjustedWalkSpeed()
@@ -76,6 +79,8 @@ local function getAdjustedTeleportSpeed()
 end
 
 -- NOVO: velocidade da aproximação até o jogador.
+local playerTeleportSpeed = 100
+local playerTeleportSequence = 0
 
 local aimAssistEnabled = false
 local aimFovEnabled = false
@@ -142,8 +147,8 @@ FOVStroke.Parent = FOVCircle
 
 local Main = Instance.new("Frame")
 Main.Name = "Main"
-Main.Size = UDim2.fromOffset(620, 430)
-Main.Position = UDim2.new(0.5, -310, 0.5, -215)
+Main.Size = UDim2.fromOffset(760, 510)
+Main.Position = UDim2.new(0.5, -380, 0.5, -255)
 Main.BackgroundColor3 = COLORS.bg
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
@@ -153,28 +158,92 @@ Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 local stroke = Instance.new("UIStroke", Main)
 stroke.Color = COLORS.purple
 stroke.Thickness = 2
+stroke.Transparency = 0.08
+
+local mainGradient = Instance.new("UIGradient")
+mainGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(8, 19, 38)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 10, 23))
+})
+mainGradient.Rotation = 90
+mainGradient.Parent = Main
 
 local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, 48)
-Header.BackgroundColor3 = Color3.fromRGB(38, 25, 58)
+Header.Size = UDim2.new(1, 0, 0, 62)
+Header.BackgroundColor3 = COLORS.header
 Header.BorderSizePixel = 0
 Header.Parent = Main
 Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 12)
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -105, 1, 0)
-Title.Position = UDim2.fromOffset(14, 0)
+Title.Size = UDim2.new(1, -260, 1, 0)
+Title.Position = UDim2.fromOffset(76, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  4.1"
+Title.Text = "BloxF Tales  |  4.2"
 Title.TextColor3 = COLORS.white
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 18
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 23
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = Header
 
+local BrandMark = Instance.new("Frame")
+BrandMark.Size = UDim2.fromOffset(48, 48)
+BrandMark.Position = UDim2.fromOffset(14, 7)
+BrandMark.BackgroundColor3 = Color3.fromRGB(8, 49, 91)
+BrandMark.BorderSizePixel = 0
+BrandMark.Parent = Header
+Instance.new("UICorner", BrandMark).CornerRadius = UDim.new(0, 14)
+local brandStroke = Instance.new("UIStroke", BrandMark)
+brandStroke.Color = COLORS.purple
+brandStroke.Thickness = 1.5
+local BrandGlyph = Instance.new("TextLabel")
+BrandGlyph.Size = UDim2.fromScale(1, 1)
+BrandGlyph.BackgroundTransparency = 1
+BrandGlyph.Text = "B"
+BrandGlyph.TextColor3 = Color3.fromRGB(85, 190, 255)
+BrandGlyph.Font = Enum.Font.GothamBlack
+BrandGlyph.TextSize = 30
+BrandGlyph.Parent = BrandMark
+
+local BrandSubtitle = Instance.new("TextLabel")
+BrandSubtitle.Size = UDim2.new(1, -270, 0, 18)
+BrandSubtitle.Position = UDim2.fromOffset(78, 38)
+BrandSubtitle.BackgroundTransparency = 1
+BrandSubtitle.Text = "NEON BLUE  •  PAINEL DE CONTROLE"
+BrandSubtitle.TextColor3 = COLORS.muted
+BrandSubtitle.Font = Enum.Font.GothamBold
+BrandSubtitle.TextSize = 9
+BrandSubtitle.TextXAlignment = Enum.TextXAlignment.Left
+BrandSubtitle.Parent = Header
+
+local ActivePill = Instance.new("Frame")
+ActivePill.Size = UDim2.fromOffset(104, 28)
+ActivePill.Position = UDim2.new(1, -190, 0, 17)
+ActivePill.BackgroundColor3 = Color3.fromRGB(10, 48, 46)
+ActivePill.BorderSizePixel = 0
+ActivePill.Parent = Header
+Instance.new("UICorner", ActivePill).CornerRadius = UDim.new(1, 0)
+local ActiveDot = Instance.new("Frame")
+ActiveDot.Size = UDim2.fromOffset(8, 8)
+ActiveDot.Position = UDim2.fromOffset(10, 10)
+ActiveDot.BackgroundColor3 = Color3.fromRGB(42, 230, 130)
+ActiveDot.BorderSizePixel = 0
+ActiveDot.Parent = ActivePill
+Instance.new("UICorner", ActiveDot).CornerRadius = UDim.new(1, 0)
+local ActiveText = Instance.new("TextLabel")
+ActiveText.Size = UDim2.new(1, -25, 1, 0)
+ActiveText.Position = UDim2.fromOffset(22, 0)
+ActiveText.BackgroundTransparency = 1
+ActiveText.Text = "Script Ativo"
+ActiveText.TextColor3 = COLORS.white
+ActiveText.Font = Enum.Font.GothamSemibold
+ActiveText.TextSize = 10
+ActiveText.Parent = ActivePill
+
+
 local Min = Instance.new("TextButton")
-Min.Size = UDim2.fromOffset(32, 32)
-Min.Position = UDim2.new(1, -78, 0, 8)
+Min.Size = UDim2.fromOffset(30, 30)
+Min.Position = UDim2.new(1, -76, 0, 15)
 Min.BackgroundColor3 = COLORS.purple
 Min.Text = "–"
 Min.TextColor3 = COLORS.white
@@ -185,7 +254,7 @@ Instance.new("UICorner", Min).CornerRadius = UDim.new(0, 8)
 
 local Close = Instance.new("TextButton")
 Close.Size = UDim2.fromOffset(32, 32)
-Close.Position = UDim2.new(1, -40, 0, 8)
+Close.Position = UDim2.new(1, -42, 0, 15)
 Close.BackgroundColor3 = COLORS.red
 Close.Text = "X"
 Close.TextColor3 = COLORS.white
@@ -196,7 +265,7 @@ Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 8)
 
 local Sidebar, Content
 local minimized = false
-local expandedSize = UDim2.fromOffset(620, 430)
+local expandedSize = UDim2.fromOffset(760, 510)
 local expandedPosition = Main.Position
 
 local function tween(object, props, duration)
@@ -211,7 +280,7 @@ local StatusLabel
 
 local function setStatus(message)
     if StatusLabel and StatusLabel.Parent then
-        StatusLabel.Text = "Status: " .. tostring(message)
+        StatusLabel.Text = "  ●  STATUS  •  " .. tostring(message)
     end
 end
 
@@ -223,6 +292,9 @@ local function MinimizePanel()
         Sidebar.Visible = false
         Content.Visible = false
         Title.Visible = false
+        BrandMark.Visible = false
+        BrandSubtitle.Visible = false
+        ActivePill.Visible = false
         Close.Visible = false
         Min.Position = UDim2.fromOffset(13, 13)
         Min.Size = UDim2.fromOffset(34, 34)
@@ -231,14 +303,17 @@ local function MinimizePanel()
         tween(Header, {Size = UDim2.fromOffset(60, 60)}, 0.22)
     else
         tween(Main, {Size = expandedSize}, 0.22)
-        tween(Header, {Size = UDim2.new(1, 0, 0, 48)}, 0.22)
+        tween(Header, {Size = UDim2.new(1, 0, 0, 62)}, 0.22)
         Main.Position = expandedPosition
-        Min.Position = UDim2.new(1, -78, 0, 8)
-        Min.Size = UDim2.fromOffset(32, 32)
+        Min.Position = UDim2.new(1, -76, 0, 15)
+        Min.Size = UDim2.fromOffset(30, 30)
         Min.Text = "–"
         Sidebar.Visible = true
         Content.Visible = true
         Title.Visible = true
+        BrandMark.Visible = true
+        BrandSubtitle.Visible = true
+        ActivePill.Visible = true
         Close.Visible = true
     end
 end
@@ -247,12 +322,16 @@ Sidebar = Instance.new("ScrollingFrame")
 Sidebar.ScrollBarThickness = 3
 Sidebar.ScrollBarImageColor3 = COLORS.purple
 Sidebar.CanvasSize = UDim2.new(0, 0, 0, 0)
-Sidebar.Size = UDim2.new(0, 145, 1, -60)
-Sidebar.Position = UDim2.fromOffset(8, 54)
+Sidebar.Size = UDim2.new(0, 174, 1, -86)
+Sidebar.Position = UDim2.fromOffset(10, 72)
 Sidebar.BackgroundColor3 = COLORS.panel
 Sidebar.BorderSizePixel = 0
 Sidebar.Parent = Main
-Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 9)
+Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 12)
+local sidebarStroke = Instance.new("UIStroke", Sidebar)
+sidebarStroke.Color = Color3.fromRGB(20, 63, 107)
+sidebarStroke.Transparency = 0.35
+sidebarStroke.Thickness = 1
 
 local tabLayout = Instance.new("UIListLayout")
 tabLayout.Padding = UDim.new(0, 6)
@@ -265,15 +344,19 @@ tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 end)
 
 Content = Instance.new("ScrollingFrame")
-Content.Size = UDim2.new(1, -166, 1, -60)
-Content.Position = UDim2.fromOffset(158, 54)
+Content.Size = UDim2.new(1, -198, 1, -86)
+Content.Position = UDim2.fromOffset(190, 72)
 Content.BackgroundColor3 = COLORS.panel
 Content.BorderSizePixel = 0
 Content.ScrollBarThickness = 4
 Content.ScrollBarImageColor3 = COLORS.purple
 Content.CanvasSize = UDim2.new(0, 0, 0, 0)
 Content.Parent = Main
-Instance.new("UICorner", Content).CornerRadius = UDim.new(0, 9)
+Instance.new("UICorner", Content).CornerRadius = UDim.new(0, 12)
+local contentStroke = Instance.new("UIStroke", Content)
+contentStroke.Color = Color3.fromRGB(20, 63, 107)
+contentStroke.Transparency = 0.35
+contentStroke.Thickness = 1
 
 local contentLayout = Instance.new("UIListLayout")
 contentLayout.Padding = UDim.new(0, 7)
@@ -292,16 +375,20 @@ contentPadding.Parent = Content
 StatusLabel = Instance.new("TextLabel")
 StatusLabel.Name = "PersistentStatus"
 StatusLabel.LayoutOrder = -100
-StatusLabel.Size = UDim2.new(1, -4, 0, 26)
-StatusLabel.BackgroundColor3 = COLORS.row
+StatusLabel.Size = UDim2.new(1, -4, 0, 30)
+StatusLabel.BackgroundColor3 = Color3.fromRGB(7, 37, 68)
 StatusLabel.BorderSizePixel = 0
-StatusLabel.Text = "Status: pronto"
+StatusLabel.Text = "  ●  STATUS  •  pronto"
 StatusLabel.TextColor3 = COLORS.white
 StatusLabel.TextSize = 11
 StatusLabel.Font = Enum.Font.GothamSemibold
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Text = "  ●  STATUS  •  pronto"
 StatusLabel.Parent = Content
-Instance.new("UICorner", StatusLabel).CornerRadius = UDim.new(0, 6)
+Instance.new("UICorner", StatusLabel).CornerRadius = UDim.new(0, 9)
+local statusStroke = Instance.new("UIStroke", StatusLabel)
+statusStroke.Color = COLORS.line
+statusStroke.Transparency = 0.4
 
 contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     Content.CanvasSize = UDim2.new(0, 0, 0, contentLayout.AbsoluteContentSize.Y + 18)
@@ -321,7 +408,7 @@ local function makeLabel(text, height)
     label.Size = UDim2.new(1, -4, 0, height or 34)
     label.BackgroundTransparency = 1
     label.Text = text
-    label.TextColor3 = COLORS.white
+    label.TextColor3 = COLORS.muted
     label.TextSize = 13
     label.Font = Enum.Font.Gotham
     label.TextWrapped = true
@@ -333,7 +420,7 @@ end
 local function makeButton(text, callback, color)
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(1, -4, 0, 38)
-    button.BackgroundColor3 = color or COLORS.row
+    button.BackgroundColor3 = color or Color3.fromRGB(13, 39, 69)
     button.Text = text
     button.TextColor3 = COLORS.white
     button.TextSize = 13
@@ -341,7 +428,11 @@ local function makeButton(text, callback, color)
     button.TextWrapped = true
     button.AutoButtonColor = true
     button.Parent = activeContainer
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 10)
+    local buttonStroke = Instance.new("UIStroke", button)
+    buttonStroke.Color = Color3.fromRGB(30, 91, 150)
+    buttonStroke.Transparency = 0.45
+    buttonStroke.Thickness = 1
 
     button.MouseButton1Click:Connect(function()
         if callback then callback() end
@@ -355,7 +446,7 @@ local function makeInput(labelText, placeholder, defaultValue, callback)
 
     local box = Instance.new("TextBox")
     box.Size = UDim2.new(1, -4, 0, 36)
-    box.BackgroundColor3 = COLORS.row
+    box.BackgroundColor3 = Color3.fromRGB(7, 24, 45)
     box.TextColor3 = COLORS.white
     box.PlaceholderText = placeholder or "Digite um valor"
     box.Text = tostring(defaultValue or "")
@@ -378,11 +469,15 @@ local function makeToggle(name, callback, initial)
     end
 
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -4, 0, 40)
-    row.BackgroundColor3 = COLORS.row
+    row.Size = UDim2.new(1, -4, 0, 52)
+    row.BackgroundColor3 = COLORS.card
     row.BorderSizePixel = 0
     row.Parent = activeContainer
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 11)
+    local rowStroke = Instance.new("UIStroke", row)
+    rowStroke.Color = Color3.fromRGB(29, 75, 119)
+    rowStroke.Transparency = 0.52
+    rowStroke.Thickness = 1
 
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, -78, 1, 0)
@@ -390,21 +485,21 @@ local function makeToggle(name, callback, initial)
     label.BackgroundTransparency = 1
     label.Text = name
     label.TextColor3 = COLORS.white
-    label.TextSize = 12
-    label.Font = Enum.Font.Gotham
+    label.TextSize = 13
+    label.Font = Enum.Font.GothamSemibold
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = row
 
     local switch = Instance.new("TextButton")
-    switch.Size = UDim2.fromOffset(46, 23)
-    switch.Position = UDim2.new(1, -56, 0.5, -11)
+    switch.Size = UDim2.fromOffset(48, 25)
+    switch.Position = UDim2.new(1, -58, 0.5, -12)
     switch.Text = ""
     switch.AutoButtonColor = false
     switch.Parent = row
     Instance.new("UICorner", switch).CornerRadius = UDim.new(1, 0)
 
     local dot = Instance.new("Frame")
-    dot.Size = UDim2.fromOffset(17, 17)
+    dot.Size = UDim2.fromOffset(19, 19)
     dot.Position = UDim2.fromOffset(3, 3)
     dot.BackgroundColor3 = COLORS.white
     dot.Parent = switch
@@ -442,8 +537,8 @@ local function beginSection(title, initiallyOpen)
 
     local header = Instance.new("TextButton")
     header.Name = "SectionHeader"
-    header.Size = UDim2.new(1, -4, 0, 36)
-    header.BackgroundColor3 = Color3.fromRGB(48, 35, 68)
+    header.Size = UDim2.new(1, -4, 0, 42)
+    header.BackgroundColor3 = Color3.fromRGB(8, 45, 82)
     header.TextColor3 = COLORS.white
     header.TextSize = 13
     header.Font = Enum.Font.GothamBold
@@ -451,7 +546,10 @@ local function beginSection(title, initiallyOpen)
     header.Text = (initiallyOpen and "▼  " or "▶  ") .. title
     header.AutoButtonColor = true
     header.Parent = Content
-    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 7)
+    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
+    local sectionStroke = Instance.new("UIStroke", header)
+    sectionStroke.Color = COLORS.line
+    sectionStroke.Transparency = 0.35
 
     local body = Instance.new("Frame")
     body.Name = "SectionBody"
@@ -494,7 +592,7 @@ local function makeOption(labelText, isSelected, callback)
     local button = Instance.new("TextButton")
     button.Name = "SelectionOption"
     button.Size = UDim2.new(1, -4, 0, 38)
-    button.BackgroundColor3 = isSelected and COLORS.green or COLORS.row
+    button.BackgroundColor3 = isSelected and Color3.fromRGB(9, 75, 125) or COLORS.row
     button.BorderSizePixel = 0
     button.Text = (isSelected and "✓   " or "○   ") .. labelText
     button.TextColor3 = COLORS.white
@@ -624,14 +722,14 @@ local teleportSequence = 0
 local function teleportLocal(destination)
     local character = getCharacter()
     local root = getRoot(character)
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
-    if not root or not humanoid then
+    if not root then
         setStatus("Personagem ainda não carregou.")
         return false
     end
 
     local targetCFrame
+
     if typeof(destination) == "CFrame" then
         targetCFrame = destination
     elseif typeof(destination) == "Vector3" then
@@ -644,39 +742,84 @@ local function teleportLocal(destination)
     local thisSequence = teleportSequence
 
     task.spawn(function()
-        local startPosition = root.Position
+        local currentCharacter = getCharacter()
+        local currentRoot = getRoot(currentCharacter)
+        local currentHumanoid = currentCharacter
+            and currentCharacter:FindFirstChildOfClass("Humanoid")
+
+        if not currentRoot or not currentHumanoid then return end
+
+        local startPosition = currentRoot.Position
         local destinationPosition = targetCFrame.Position
         local distance = (destinationPosition - startPosition).Magnitude
-        local steps = math.clamp(math.ceil(distance / 24), 1, 60)
-
-        setStatus("Movendo gradualmente até o destino...")
+        local steps = math.clamp(math.ceil(distance / 35), 1, 45)
 
         for step = 1, steps do
             if not Screen.Parent or thisSequence ~= teleportSequence then
                 return
             end
 
-            character = getCharacter()
-            root = getRoot(character)
-            humanoid = character and character:FindFirstChildOfClass("Humanoid")
-            if not root or not humanoid or humanoid.Health <= 0 then
-                setStatus("Movimento interrompido: personagem indisponível.")
-                return
-            end
+            currentCharacter = getCharacter()
+            currentRoot = getRoot(currentCharacter)
+            currentHumanoid = currentCharacter
+                and currentCharacter:FindFirstChildOfClass("Humanoid")
+
+            if not currentRoot or not currentHumanoid then return end
 
             local alpha = step / steps
             local nextPosition = startPosition:Lerp(destinationPosition, alpha)
-            humanoid:MoveTo(nextPosition)
-            task.wait(0.08)
+
+            currentHumanoid:MoveTo(nextPosition)
+
+            pcall(function()
+                currentCharacter:PivotTo(
+                    CFrame.new(nextPosition) * targetCFrame.Rotation
+                )
+            end)
+
+            task.wait(0.045)
         end
 
-        if thisSequence ~= teleportSequence then return end
+        if not Screen.Parent or thisSequence ~= teleportSequence then
+            return
+        end
+
+        currentCharacter = getCharacter()
+        currentRoot = getRoot(currentCharacter)
+
+        if not currentCharacter or not currentRoot then return end
+
+        for attempt = 1, 8 do
+            if not Screen.Parent or thisSequence ~= teleportSequence then
+                return
+            end
+
+            currentRoot = getRoot(getCharacter())
+            currentCharacter = getCharacter()
+
+            if not currentRoot or not currentCharacter then break end
+
+            if (currentRoot.Position - targetCFrame.Position).Magnitude <= 6 then
+                break
+            end
+
+            pcall(function()
+                currentCharacter:PivotTo(targetCFrame)
+            end)
+
+            task.wait(0.12)
+        end
 
         local finalRoot = getRoot(getCharacter())
-        if finalRoot and (finalRoot.Position - destinationPosition).Magnitude <= 12 then
-            setStatus("Chegou próximo ao destino.")
-        else
-            setStatus("Movimento solicitado; o servidor pode limitar ou corrigir a posição.")
+
+        if finalRoot then
+            local remaining = (finalRoot.Position - targetCFrame.Position).Magnitude
+
+            if remaining <= 12 then
+                setStatus("Chegou próximo ao destino.")
+            else
+                setStatus("O servidor pode corrigir a posição.")
+            end
         end
     end)
 
@@ -711,7 +854,7 @@ local function teleportToPlayer(target)
             return
         end
 
-        local originalSpeed = getAdjustedWalkSpeed()
+        local originalSpeed = humanoid.WalkSpeed
         local finished = false
         local startTime = os.clock()
 
@@ -769,7 +912,7 @@ local function teleportToPlayer(target)
         humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
         if humanoid then
-            humanoid.WalkSpeed = getAdjustedWalkSpeed()
+            humanoid.WalkSpeed = originalSpeed
         end
 
         if thisSequence ~= playerTeleportSequence then
@@ -1230,8 +1373,6 @@ local attackLoopRunning = false
 local lastToolUse = 0
 local lastDodge = 0
 local dodgeSide = 1
-local lastTargetCycle = 0
-local currentTargetModel = nil
 
 local function getCombatTools(character)
     local tools = {}
@@ -1420,6 +1561,7 @@ local function getCurrentSelectedTarget()
 
             if targetHum and targetHum.Health > 0 and targetRoot
                 and isValidAimType(model) then
+
                 table.insert(validTargets, {
                     model = model,
                     humanoid = targetHum,
@@ -1434,38 +1576,24 @@ local function getCurrentSelectedTarget()
     end
 
     if #validTargets == 0 then
-        currentTargetModel = nil
         return nil
     end
 
-    table.sort(validTargets, function(a, b)
-        return a.model:GetFullName() < b.model:GetFullName()
-    end)
+    local myRoot = getRoot(getCharacter())
+    if not myRoot then return validTargets[1] end
 
-    local now = os.clock()
-    local currentIndex = nil
-    for index, target in ipairs(validTargets) do
-        if target.model == currentTargetModel then
-            currentIndex = index
-            break
-        end
-    end
-
-    if not currentIndex or now - lastTargetCycle >= 2.5 then
-        local nextIndex = currentIndex and (currentIndex % #validTargets + 1) or 1
-        currentTargetModel = validTargets[nextIndex].model
-        lastTargetCycle = now
-    end
+    local nearest, nearestDistance = nil, math.huge
 
     for _, target in ipairs(validTargets) do
-        if target.model == currentTargetModel then
-            return target
+        local distance = (myRoot.Position - target.root.Position).Magnitude
+
+        if distance < nearestDistance then
+            nearest = target
+            nearestDistance = distance
         end
     end
 
-    currentTargetModel = validTargets[1].model
-    lastTargetCycle = now
-    return validTargets[1]
+    return nearest
 end
 
 local function performCombatDodge(humanoid, root, targetRoot)
@@ -1579,6 +1707,26 @@ local function startAttackLoop()
     end)
 end
 
+local paletteOptions = {
+    Azul = Color3.fromRGB(20, 137, 255),
+    Violeta = Color3.fromRGB(157, 92, 255),
+    Vermelha = Color3.fromRGB(239, 75, 91),
+    Ciano = Color3.fromRGB(0, 205, 220),
+    Verde = Color3.fromRGB(35, 205, 130)
+}
+
+local function applyPalette(name)
+    local chosen = paletteOptions[name]
+    if not chosen then return end
+    COLORS.purple = chosen
+    stroke.Color = chosen
+    FOVStroke.Color = chosen
+    sidebarStroke.Color = chosen
+    contentStroke.Color = chosen
+    statusStroke.Color = chosen
+    setStatus("Paleta " .. name .. " aplicada.")
+end
+
 local function showCategory(category)
     activeContainer = Content
     clearContent()
@@ -1586,7 +1734,7 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 4.1", 36)
+        makeLabel("BLOX F' - TALES 4.2", 36)
         makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
@@ -2177,6 +2325,26 @@ local function showCategory(category)
             setStatus("Painel recentralizado.")
         end)
 
+        makeLabel("Ajuste o tamanho e a cor do painel.", 28)
+        makeSlider("Tamanho do painel (%)", 80, 115, 100, function(value)
+            local width = math.floor(760 * value / 100)
+            local height = math.floor(510 * value / 100)
+            expandedSize = UDim2.fromOffset(width, height)
+            if not minimized then
+                Main.Size = expandedSize
+                Main.Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2)
+                expandedPosition = Main.Position
+            end
+        end)
+
+        beginSection("Paleta de cores", true)
+        for paletteName, paletteColor in pairs(paletteOptions) do
+            makeButton("Aplicar tema " .. paletteName, function()
+                applyPalette(paletteName)
+            end, paletteColor)
+        end
+        endSection()
+
         endSection()
 
         beginSection("Personagem", false)
@@ -2215,38 +2383,76 @@ local function showCategory(category)
 end
 
 local categories = {
-    "Início",
-    "Combate",
-    "Frutas",
-    "Jogador",
-    "Teletransporte",
-    "Coleta e evolução",
-    "Visualização",
-    "Configurações"
+    {name = "Início", icon = "⌂"},
+    {name = "Combate", icon = "⚔"},
+    {name = "Frutas", icon = "✿"},
+    {name = "Jogador", icon = "◉"},
+    {name = "Teletransporte", icon = "⌖"},
+    {name = "Coleta e evolução", icon = "✧"},
+    {name = "Visualização", icon = "▣"},
+    {name = "Configurações", icon = "⚙"}
 }
 
-for index, category in ipairs(categories) do
+local navButtons = {}
+for index, item in ipairs(categories) do
+    local category = item.name
     local tab = Instance.new("TextButton")
-    tab.Size = UDim2.new(1, -10, 0, 37)
+    tab.Name = "Nav_" .. tostring(index)
+    tab.Size = UDim2.new(1, -14, 0, 43)
     tab.LayoutOrder = index
-    tab.BackgroundColor3 = category == "Início" and COLORS.purple or COLORS.row
-    tab.Text = category
-    tab.TextColor3 = COLORS.white
-    tab.TextSize = 11
-    tab.Font = Enum.Font.GothamBold
-    tab.TextWrapped = true
+    tab.BackgroundColor3 = category == "Início" and Color3.fromRGB(10, 94, 171) or COLORS.row
+    tab.Text = ""
+    tab.AutoButtonColor = false
     tab.Parent = Sidebar
+    Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 10)
 
-    Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 7)
+    local tabStroke = Instance.new("UIStroke", tab)
+    tabStroke.Color = COLORS.line
+    tabStroke.Transparency = category == "Início" and 0.1 or 0.8
+    tabStroke.Thickness = 1
 
-    tab.MouseButton1Click:Connect(function()
-        for _, sibling in ipairs(Sidebar:GetChildren()) do
-            if sibling:IsA("TextButton") then
-                sibling.BackgroundColor3 = COLORS.row
-            end
+    local icon = Instance.new("TextLabel")
+    icon.Size = UDim2.fromOffset(30, 43)
+    icon.Position = UDim2.fromOffset(8, 0)
+    icon.BackgroundTransparency = 1
+    icon.Text = item.icon
+    icon.TextColor3 = category == "Início" and Color3.fromRGB(130, 214, 255) or COLORS.muted
+    icon.Font = Enum.Font.GothamBold
+    icon.TextSize = 19
+    icon.Parent = tab
+
+    local caption = Instance.new("TextLabel")
+    caption.Size = UDim2.new(1, -45, 1, 0)
+    caption.Position = UDim2.fromOffset(40, 0)
+    caption.BackgroundTransparency = 1
+    caption.Text = category
+    caption.TextColor3 = COLORS.white
+    caption.Font = Enum.Font.GothamSemibold
+    caption.TextSize = 11
+    caption.TextXAlignment = Enum.TextXAlignment.Left
+    caption.TextTruncate = Enum.TextTruncate.AtEnd
+    caption.Parent = tab
+
+    navButtons[category] = {button = tab, stroke = tabStroke, icon = icon}
+    tab.MouseEnter:Connect(function()
+        if tab.BackgroundColor3 ~= Color3.fromRGB(10, 94, 171) then
+            tween(tab, {BackgroundColor3 = Color3.fromRGB(17, 48, 79)}, 0.12)
         end
-
-        tab.BackgroundColor3 = COLORS.purple
+    end)
+    tab.MouseLeave:Connect(function()
+        if tab.BackgroundColor3 ~= Color3.fromRGB(10, 94, 171) then
+            tween(tab, {BackgroundColor3 = COLORS.row}, 0.12)
+        end
+    end)
+    tab.MouseButton1Click:Connect(function()
+        for name, entry in pairs(navButtons) do
+            local selected = name == category
+            tween(entry.button, {
+                BackgroundColor3 = selected and Color3.fromRGB(10, 94, 171) or COLORS.row
+            }, 0.16)
+            entry.stroke.Transparency = selected and 0.1 or 0.8
+            entry.icon.TextColor3 = selected and Color3.fromRGB(130, 214, 255) or COLORS.muted
+        end
         showCategory(category)
     end)
 end
@@ -2328,17 +2534,20 @@ local function fitToScreen()
     if not camera or minimized then return end
 
     local viewport = camera.ViewportSize
-    local width = math.max(300, math.min(620, viewport.X - 24))
-    local height = math.max(280, math.min(430, viewport.Y - 40))
+    local width = math.max(520, math.min(760, viewport.X - 24))
+    local height = math.max(390, math.min(510, viewport.Y - 40))
+    local sideWidth = math.min(174, math.max(145, width * 0.235))
+    local contentLeft = sideWidth + 16
 
     expandedSize = UDim2.fromOffset(width, height)
     Main.Size = expandedSize
     Main.Position = UDim2.new(0.5, -width / 2, 0.5, -height / 2)
     expandedPosition = Main.Position
 
-    Sidebar.Size = UDim2.new(0, math.min(145, width * 0.27), 1, -60)
-    Content.Position = UDim2.fromOffset(math.min(153, width * 0.29), 54)
-    Content.Size = UDim2.new(1, -math.min(166, width * 0.31), 1, -60)
+    Sidebar.Size = UDim2.new(0, sideWidth, 1, -86)
+    Sidebar.Position = UDim2.fromOffset(10, 72)
+    Content.Position = UDim2.fromOffset(contentLeft, 72)
+    Content.Size = UDim2.new(1, -(contentLeft + 12), 1, -86)
 end
 
 fitToScreen()
@@ -2479,13 +2688,13 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
         if distance > 2 then
             local direction = offset.Unit
             local speed = math.clamp(
-                distance * 1.6,
-                adjustedFlySpeed * 0.25,
-                adjustedFlySpeed
+                distance * 2.2,
+                adjustedFlySpeed * 0.65,
+                adjustedFlySpeed * 1.8
             )
 
             if distance < 7 then
-                speed = math.min(speed, adjustedFlySpeed * 0.35)
+                speed = math.min(speed, adjustedFlySpeed * 0.55)
             end
 
             root.AssemblyLinearVelocity = direction * speed
@@ -2683,4 +2892,4 @@ end)
 
 showCategory("Início")
 
-print("Blox F' - Tales 4.1 carregado.")
+print("Blox F' - Tales 4.2 carregado.")
