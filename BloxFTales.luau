@@ -1,6 +1,6 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 4.2
--- Velocidade de caminhada, Fly e aproximação configuradas separadamente.
+-- BLOX F' - TALES | VERSAO 4.3
+-- Anti-Ataque coordenado com perseguição e combate automático.
 --========================================================
 
 local Players = game:GetService("Players")
@@ -1526,6 +1526,10 @@ local function getCurrentSelectedTarget()
 end
 
 local function performCombatDodge(humanoid, root, targetRoot, force)
+    -- Com o Anti-Ataque ativo, somente ele decide quando desviar.
+    -- Isso evita que a esquiva periódica do combate empurre o personagem
+    -- repetidamente para longe e interrompa a perseguição do alvo.
+    if antiAttackEnabled then return false end
     if not humanoid or not root or not targetRoot then return false end
 
     local now = os.clock()
@@ -1636,10 +1640,28 @@ local function startAttackLoop()
                     end
                 end
 
-                -- Esquiva quando uma habilidade acabou de ser tentada, quando recebe dano,
-                -- ou periodicamente enquanto o inimigo está perto e as habilidades recarregam.
+                -- Arbitragem de movimento:
+                -- 1) A janela de esquiva do Anti-Ataque tem prioridade absoluta.
+                -- 2) Enquanto desvia, o combate continua atualizando o alvo e usando
+                --    ataques/habilidades, mas não envia MoveTo concorrente.
+                -- 3) Assim que a esquiva termina, a perseguição é retomada do ponto atual.
                 local now = os.clock()
-                if now < combatDodgeUntil then
+                local antiAttackDodging = antiAttackEnabled and now < antiAttackDodgeUntil
+
+                if antiAttackDodging then
+                    -- Não emitir MoveTo durante a esquiva: o Heartbeat do Anti-Ataque
+                    -- controla temporariamente a velocidade e a direção.
+                elseif antiAttackEnabled then
+                    -- Com Anti-Ataque ligado, não usar esquivas periódicas do combate.
+                    -- O combate permanece responsável por perseguir e atacar o alvo.
+                    if not flyEnabled then
+                        if distance > 16 then
+                            hum:MoveTo(targetRoot.Position - targetRoot.CFrame.LookVector * 9)
+                        elseif distance > 10 then
+                            hum:MoveTo(targetRoot.Position - targetRoot.CFrame.LookVector * 7)
+                        end
+                    end
+                elseif now < combatDodgeUntil then
                     if now - lastDodge >= 0.45 then
                         performCombatDodge(hum, root, targetRoot, true)
                     end
@@ -1676,7 +1698,7 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 4.2", 36)
+        makeLabel("BLOX F' - TALES 4.3", 36)
         makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
@@ -2566,7 +2588,14 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
         local now = os.clock()
         local followPosition
 
-        if now < combatDodgeUntil then
+        if antiAttackEnabled and now < antiAttackDodgeUntil then
+            -- O Heartbeat dedicado do Anti-Ataque tem prioridade nesta janela.
+            -- Não zerar a velocidade aqui, pois isso cancelaria a esquiva.
+            followFlyActive = true
+            return
+        end
+
+        if not antiAttackEnabled and now < combatDodgeUntil then
             followPosition = root.Position + combatDodgeVector * 16 + Vector3.new(0, 3, 0)
         else
             followPosition = targetRoot.Position
