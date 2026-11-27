@@ -1,6 +1,6 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 4.6
--- Fly com velocidade vetorial constante e arbitragem unica de movimento entre defesa e combate.
+-- BLOX F' - TALES | VERSAO 4.7
+-- Fly suavizado e combate coordenado com Anti-Ataque sem esquivas por simples proximidade.
 -- Defesa baseada em sinais observaveis; nao presume cooldown fixo de todas as habilidades.
 --========================================================
 
@@ -125,6 +125,27 @@ local antiAttackWasDriving = false
 local combatLastMoveGoal = nil
 local combatLastMoveAt = 0
 local combatWasInRange = false
+
+-- Filtro de velocidade para reduzir trancos ao mudar de direcao ou seguir alvo.
+local flyCurrentVelocity = Vector3.zero
+local flyVelocityRoot = nil
+local flyLastHeartbeatAt = os.clock()
+local FLY_ACCELERATION_RESPONSE = 13.5
+
+local function getSmoothedFlyVelocity(root, desiredVelocity, deltaTime)
+    if flyVelocityRoot ~= root then
+        flyVelocityRoot = root
+        flyCurrentVelocity = root.AssemblyLinearVelocity
+    end
+    local dt = math.clamp(deltaTime or (1 / 60), 1 / 240, 0.08)
+    local alpha = 1 - math.exp(-FLY_ACCELERATION_RESPONSE * dt)
+    flyCurrentVelocity = flyCurrentVelocity:Lerp(desiredVelocity, alpha)
+    local maximum = 1400
+    if flyCurrentVelocity.Magnitude > maximum then
+        flyCurrentVelocity = flyCurrentVelocity.Unit * maximum
+    end
+    return flyCurrentVelocity
+end
 
 local Screen = Instance.new("ScreenGui")
 Screen.Name = "BloxFTales"
@@ -1519,21 +1540,32 @@ end
 
 local function activateCombatTools(character, humanoid)
     local now = os.clock()
+    local tool = nil
 
-    if autoSkillsEnabled then
+    -- A fruta confirmada no painel tem prioridade; nao troca para uma Tool aleatoria.
+    if selectedFruitName then
+        tool = getEquippedFruitTool(character)
+        if tool and tool.Parent ~= character then
+            pcall(function() humanoid:EquipTool(tool) end)
+            return false
+        end
+    end
+
+    if autoSkillsEnabled and tool and tool.Parent == character then
         activateFruitSkills(character)
     end
 
-    if now - lastToolUse < 0.45 then return end
+    if now - lastToolUse < 0.55 then return false end
     lastToolUse = now
 
-    local tool = equipCombatTool(character, humanoid)
-
-    if tool and tool.Parent == character then
-        pcall(function()
-            tool:Activate()
-        end)
+    if not tool or tool.Parent ~= character then
+        tool = equipCombatTool(character, humanoid)
     end
+    if tool and tool.Parent == character then
+        pcall(function() tool:Activate() end)
+        return true
+    end
+    return false
 end
 
 local function getCurrentSelectedTarget()
@@ -1679,8 +1711,11 @@ local function startAttackLoop()
 
                 handleFollowJump(hum, root, targetRoot)
 
-                -- Mantém ataques básicos/habilidades ativos também durante a recarga.
-                if distance <= 24 then
+                -- Habilidades podem ser tentadas antes do alcance corpo a corpo.
+                -- Ataque basico permanece limitado a uma distancia util do alvo.
+                if distance <= 180 and autoSkillsEnabled then
+                    activateCombatTools(character, hum)
+                elseif distance <= 24 and autoAttackEnabled then
                     activateCombatTools(character, hum)
                 end
 
@@ -1715,12 +1750,12 @@ local function startAttackLoop()
                     -- O Anti-Ataque nao bloqueia o combate fora da janela de esquiva.
                     -- A perseguicao atualiza o destino apenas quando necessario.
                     if not flyEnabled then
-                        if distance > 10 then
-                            local desiredRange = distance > 16 and 9 or 7
+                        if distance > 11 then
+                            local desiredRange = distance > 24 and 9 or 7
                             local goal = targetRoot.Position - targetRoot.CFrame.LookVector * desiredRange
                             if not combatLastMoveGoal
-                                or (goal - combatLastMoveGoal).Magnitude > 3
-                                or now - combatLastMoveAt > 0.35 then
+                                or (goal - combatLastMoveGoal).Magnitude > 4.5
+                                or now - combatLastMoveAt > 0.65 then
                                 hum:MoveTo(goal)
                                 combatLastMoveGoal = goal
                                 combatLastMoveAt = now
@@ -1742,20 +1777,26 @@ local function startAttackLoop()
                     performCombatDodge(hum, root, targetRoot, false)
                 elseif distance <= 9 and now - lastDodge >= 1.15 then
                     performCombatDodge(hum, root, targetRoot, false)
-                elseif distance > 16 and not flyEnabled then
-                    local approachPosition = targetRoot.Position - targetRoot.CFrame.LookVector * 9
-                    hum:MoveTo(approachPosition)
-                    combatLastMoveGoal = approachPosition
-                    combatLastMoveAt = now
+                elseif distance > 11 and not flyEnabled then
+                    local desiredRange = distance > 24 and 9 or 7
+                    local approachPosition = targetRoot.Position - targetRoot.CFrame.LookVector * desiredRange
+                    if not combatLastMoveGoal
+                        or (approachPosition - combatLastMoveGoal).Magnitude > 4.5
+                        or now - combatLastMoveAt > 0.65 then
+                        hum:MoveTo(approachPosition)
+                        combatLastMoveGoal = approachPosition
+                        combatLastMoveAt = now
+                    end
                     combatWasInRange = false
+                elseif distance <= 11 and not flyEnabled then
+                    if not combatWasInRange then
+                        hum:MoveTo(root.Position)
+                        combatLastMoveGoal = root.Position
+                        combatLastMoveAt = now
+                        combatWasInRange = true
+                    end
                 elseif distance > 16 and flyEnabled then
-                    -- O Heartbeat do Fly faz a perseguição rápida.
-                elseif distance > 10 and not flyEnabled then
-                    local approachPosition = targetRoot.Position - targetRoot.CFrame.LookVector * 7
-                    hum:MoveTo(approachPosition)
-                    combatLastMoveGoal = approachPosition
-                    combatLastMoveAt = now
-                    combatWasInRange = false
+                    -- O Heartbeat do Fly faz a perseguicao suavizada.
                 end
             else
                 combatFollowTarget = nil
@@ -1836,7 +1877,7 @@ local function showCategory(category)
             setStatus("Velocidade do Fly: " .. flySpeed)
         end)
 
-        makeLabel("Fly omnidirecional: limite até 1400 em todas as direções, com controlador vetorial para compensar a gravidade. O servidor ainda pode limitar a velocidade real.", 52)
+        makeLabel("Fly omnidirecional: limite até 1400 em todas as direções, com aceleração suavizada para reduzir trancos. O servidor ainda pode limitar a velocidade real.", 52)
         makeLabel("O Fly acompanha a direção da câmera. Quando o ataque automático está perseguindo um alvo selecionado, o Fly também acompanha esse alvo.", 62)
         endSection()
 
@@ -2063,6 +2104,7 @@ local function showCategory(category)
             if not on then
                 antiAttackDodgeUntil = 0
                 antiAttackDodgeDirection = Vector3.zero
+                antiAttackThreatMemory = {}
             end
             setStatus(on and "Anti-Ataque ativo: prioridade PvP" or "Anti-Ataque desligado")
         end)
@@ -2653,9 +2695,16 @@ end))
 -- FLY
 --========================================================
 
-table.insert(connections, RunService.Heartbeat:Connect(function()
+table.insert(connections, RunService.Heartbeat:Connect(function(deltaTime)
+    local nowHeartbeat = os.clock()
+    local frameDelta = math.clamp(nowHeartbeat - flyLastHeartbeatAt, 1 / 240, 0.08)
+    flyLastHeartbeatAt = nowHeartbeat
     if not flyEnabled then
         followFlyActive = false
+        if not antiAttackWasDriving then
+            flyCurrentVelocity = Vector3.zero
+            flyVelocityRoot = nil
+        end
         return
     end
 
@@ -2683,9 +2732,11 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
         local followPosition
 
         if antiAttackEnabled and now < antiAttackDodgeUntil then
-            -- O Heartbeat dedicado do Anti-Ataque tem prioridade nesta janela.
-            -- Não zerar a velocidade aqui, pois isso cancelaria a esquiva.
+            -- O Anti-Ataque e dono do movimento durante a esquiva.
+            -- Sincroniza o filtro para o Fly retomar sem tranco ao terminar.
             followFlyActive = true
+            flyCurrentVelocity = root.AssemblyLinearVelocity
+            flyVelocityRoot = root
             return
         end
 
@@ -2701,14 +2752,14 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
         local offset = followPosition - root.Position
         local distance = offset.Magnitude
 
-        if distance > 1.5 then
+        local desiredVelocity = Vector3.zero
+        if distance > 2.5 then
             local direction = offset.Unit
-            -- Sem redutor de velocidade ao chegar perto: mantém resposta alta no combate.
-            local speed = math.min(adjustedFlySpeed, math.max(70, distance * 3.5))
-            setManagedVelocity(root, direction * speed)
-        else
-            setManagedVelocity(root, Vector3.zero)
+            -- Controle proporcional reduz ultrapassagens e oscilacoes ao orbitar o alvo.
+            local speed = math.min(adjustedFlySpeed, distance * 2.15)
+            desiredVelocity = direction * speed
         end
+        setManagedVelocity(root, getSmoothedFlyVelocity(root, desiredVelocity, frameDelta))
 
         root.AssemblyAngularVelocity = Vector3.zero
         hum:ChangeState(Enum.HumanoidStateType.Physics)
@@ -2760,8 +2811,9 @@ table.insert(connections, RunService.Heartbeat:Connect(function()
         + Vector3.new(0, verticalInput, 0)
     if direction.Magnitude > 1 then direction = direction.Unit end
 
+    local desiredVelocity = direction * adjustedFlySpeed
     root.AssemblyAngularVelocity = Vector3.zero
-    setManagedVelocity(root, direction * adjustedFlySpeed)
+    setManagedVelocity(root, getSmoothedFlyVelocity(root, desiredVelocity, frameDelta))
     hum:ChangeState(Enum.HumanoidStateType.Physics)
 end))
 
@@ -2786,7 +2838,9 @@ end
 
 local function beginAntiAttackDodge(root, threatPosition, longRange)
     local now = os.clock()
-    if now - antiAttackLastTrigger < 0.28 then return false end
+    -- Evita reiniciar a mesma esquiva a cada ciclo de deteccao.
+    if now < antiAttackDodgeUntil then return false end
+    if now - antiAttackLastTrigger < 0.38 then return false end
     antiAttackLastTrigger = now
     antiAttackSide = -antiAttackSide
 
@@ -2915,8 +2969,13 @@ local function hasActionAnimation(humanoid)
     pcall(function()
         for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
             if track.IsPlaying and track.Priority.Value >= Enum.AnimationPriority.Action.Value then
-                found = true
-                break
+                local length = track.Length
+                local position = track.TimePosition
+                -- Prioriza o inicio do movimento ou animacoes curtas de golpe.
+                if position <= 0.42 or (length > 0 and length <= 0.7) then
+                    found = true
+                    break
+                end
             end
         end
     end)
@@ -2942,34 +3001,39 @@ local function findIncomingPlayerThreat(root, character)
                     local facing = attackerRoot.CFrame.LookVector:Dot(towardPlayer)
                     local relativeVelocity = attackerRoot.AssemblyLinearVelocity - root.AssemblyLinearVelocity
                     local closingSpeed = relativeVelocity:Dot(towardPlayer)
-                    local horizontalDistance = Vector3.new(offset.X, 0, offset.Z).Magnitude
                     local toolClass, equippedTool = getEquippedThreatClass(model)
                     local actionAnimation = hasActionAnimation(humanoid)
-                    local movingToward = closingSpeed > 5 or attackerRoot.AssemblyLinearVelocity.Magnitude > 22
-                    local closeFacing = distance <= 24 and facing > 0.58
-                    local rangedFacing = distance <= 260 and facing > 0.86
-                    local hasAttackEvidence = actionAnimation or movingToward or closeFacing
+                    local genuinelyClosing = closingSpeed > 6
+                    local closeMeleeApproach = distance <= 18 and genuinelyClosing
+                    local hasAttackEvidence
 
-                    -- Ferramenta equipada amplia o contexto, mas so dispara a esquiva
-                    -- quando combinada com sinal de ataque/movimento observavel.
-                    if toolClass == "ranged" and (actionAnimation or (facing > 0.94 and movingToward)) then
-                        hasAttackEvidence = true
-                    elseif (toolClass == "ability" or toolClass == "fruit") and actionAnimation then
-                        hasAttackEvidence = true
-                    elseif toolClass == "melee" and (actionAnimation or (distance <= 18 and movingToward)) then
-                        hasAttackEvidence = true
+                    if toolClass == "ranged" or toolClass == "fruit" or toolClass == "ability" then
+                        -- Para ataques de longa distancia, exige animacao de ataque
+                        -- direcionada; a Tool equipada sozinha nao provoca esquiva.
+                        hasAttackEvidence = actionAnimation and facing > 0.48
+                    elseif toolClass == "melee" then
+                        hasAttackEvidence = actionAnimation or closeMeleeApproach
+                    else
+                        hasAttackEvidence = actionAnimation
+                            or (distance <= 14 and genuinelyClosing and facing > 0.62)
                     end
 
-                    if hasAttackEvidence and (closeFacing or movingToward or actionAnimation or (toolClass == "ranged" and rangedFacing and movingToward)) then
-                        local rangeWeight = toolClass == "ranged" and 0.002 or 0.012
-                        local score = (actionAnimation and 0 or 0.35)
+                    local previousThreatAt = antiAttackThreatMemory[player] or 0
+                    local playerReady = (now - previousThreatAt) >= 0.85
+                    local directionalEvidence = (actionAnimation and facing > 0.25)
+                        or (closeMeleeApproach and facing > 0.55)
+
+                    if hasAttackEvidence and directionalEvidence and playerReady then
+                        local ranged = toolClass == "ranged" or toolClass == "fruit" or toolClass == "ability"
+                        local rangeWeight = ranged and 0.0018 or 0.014
+                        local score = (actionAnimation and 0 or 0.4)
                             + distance * rangeWeight
-                            - math.clamp(closingSpeed, 0, 40) * 0.018
-                            - (toolClass ~= "unknown" and 0.08 or 0)
+                            - math.clamp(closingSpeed, 0, 45) * 0.02
+                            - (toolClass ~= "unknown" and 0.1 or 0)
                         if score < bestScore then
                             bestScore = score
                             bestThreat = attackerRoot.Position
-                            bestLongRange = toolClass == "ranged" or toolClass == "ability" or toolClass == "fruit" or distance > 28
+                            bestLongRange = ranged or distance > 28
                             antiAttackLastPlayerThreat = {
                                 player = player,
                                 tool = equippedTool and equippedTool.Name or "unknown",
@@ -2977,6 +3041,7 @@ local function findIncomingPlayerThreat(root, character)
                                 distance = distance,
                                 seenAt = now
                             }
+                            antiAttackThreatMemory[player] = now
                         end
                     end
                 end
