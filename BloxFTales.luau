@@ -1,7 +1,9 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 5.1
+-- BLOX F' - TALES | VERSAO 5.3
 -- Fly suavizado e combate coordenado com Anti-Ataque sem esquivas por simples proximidade.
 -- Defesa baseada em sinais observaveis; nao presume cooldown fixo de todas as habilidades.
+-- Versao focada em controles locais e combate somente contra NPCs.
+-- Acoes de inventario, missao, evento e recompensa exigem integracao oficial no servidor.
 --========================================================
 
 local Players = game:GetService("Players")
@@ -72,12 +74,12 @@ local function getAdjustedFlySpeed()
     return flySpeed
 end
 
+-- NOVO: velocidade da aproximação até o jogador.
+local playerTeleportSpeed = 100
+
 local function getAdjustedTeleportSpeed()
     return playerTeleportSpeed
 end
-
--- NOVO: velocidade da aproximação até o jogador.
-local playerTeleportSpeed = 100
 local playerTeleportSequence = 0
 
 local aimAssistEnabled = false
@@ -87,11 +89,19 @@ local autoAttackEnabled = false
 local autoHakiEnabled = false
 local autoSkillsEnabled = false
 local autoFarmEnabled = false
+local autoBossFarmEnabled = false
+local selectedCombatToolName = nil
 local autoChestEnabled = false
 local autoFruitEnabled = false
 local autoMissionEnabled = false
 local autoEvolutionEnabled = false
 local autoRewardsEnabled = false
+
+-- Parametros configuraveis de combate contra NPCs.
+local combatAttackRange = 24
+local combatSkillRange = 180
+local combatFollowDistance = 9
+local combatStopDistance = 11
 
 local selectedAimTarget = "NPCs"
 local attackDropdownOpen = false
@@ -161,7 +171,7 @@ FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
 FOVCircle.Size = UDim2.fromOffset(aimFovRadius * 2, aimFovRadius * 2)
 FOVCircle.BackgroundTransparency = 1
 FOVCircle.Visible = false
-FOVCircle.ZIndex = 20
+FOVCircle.ZIndex = 100
 FOVCircle.Parent = Screen
 
 local FOVCorner = Instance.new("UICorner")
@@ -173,6 +183,7 @@ FOVStroke.Color = COLORS.purple
 FOVStroke.Thickness = 2
 FOVStroke.Transparency = 0.15
 FOVStroke.Parent = FOVCircle
+FOVCircle.Active = false
 
 local Main = Instance.new("Frame")
 Main.Name = "Main"
@@ -199,7 +210,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  5.1"
+Title.Text = "Blox F' - Tales  |  5.3"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -1221,60 +1232,29 @@ local function getPlayerFromModel(model)
 end
 
 local function isValidAimType(model)
-    local player = getPlayerFromModel(model)
-
-    if selectedAimTarget == "NPCs" then
-        return player == nil
-    elseif selectedAimTarget == "Jogadores" then
-        return player ~= nil
-    elseif selectedAimTarget == "Todos" then
-        return true
-    end
-
-    return false
+    -- Mira e combate automaticos ficam restritos a NPCs da experiencia.
+    return model ~= nil
+        and model ~= getCharacter()
+        and getPlayerFromModel(model) == nil
 end
 
 local function getAttackableTargets()
     local targets = {}
-
-    if selectedAimTarget == "Jogadores" or selectedAimTarget == "Todos" then
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                local hum = player.Character:FindFirstChildOfClass("Humanoid")
-                local root = getRoot(player.Character)
-
-                if hum and hum.Health > 0 and root then
-                    table.insert(targets, {
-                        model = player.Character,
-                        humanoid = hum,
-                        root = root,
-                        name = player.DisplayName
-                    })
-                end
+    for _, item in ipairs(Workspace:GetDescendants()) do
+        if item:IsA("Model") and item ~= getCharacter()
+            and not getPlayerFromModel(item) then
+            local hum = item:FindFirstChildOfClass("Humanoid")
+            local root = getRoot(item)
+            if hum and hum.Health > 0 and root then
+                table.insert(targets, {
+                    model = item,
+                    humanoid = hum,
+                    root = root,
+                    name = item.Name
+                })
             end
         end
     end
-
-    if selectedAimTarget == "NPCs" or selectedAimTarget == "Todos" then
-        for _, item in ipairs(Workspace:GetDescendants()) do
-            if item:IsA("Model") and item ~= getCharacter()
-                and not getPlayerFromModel(item) then
-
-                local hum = item:FindFirstChildOfClass("Humanoid")
-                local root = getRoot(item)
-
-                if hum and hum.Health > 0 and root then
-                    table.insert(targets, {
-                        model = item,
-                        humanoid = hum,
-                        root = root,
-                        name = item.Name
-                    })
-                end
-            end
-        end
-    end
-
     return targets
 end
 
@@ -1378,30 +1358,38 @@ local function equipCombatTool(character, humanoid)
     local tools = getCombatTools(character)
     local equipped = nil
 
-    for _, tool in ipairs(tools) do
-        if tool.Parent == character then
-            equipped = tool
-            break
-        end
-    end
-
-    if not equipped then
-        local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-
-        if backpack then
-            for _, tool in ipairs(backpack:GetChildren()) do
-                if tool:IsA("Tool") then
-                    pcall(function()
-                        humanoid:EquipTool(tool)
-                    end)
-
-                    equipped = tool
-                    break
-                end
+    if selectedCombatToolName then
+        local wanted = normalizeName(selectedCombatToolName)
+        for _, tool in ipairs(tools) do
+            if normalizeName(tool.Name) == wanted then
+                equipped = tool
+                break
             end
         end
     end
 
+    if not equipped then
+        for _, tool in ipairs(tools) do
+            if tool.Parent == character then
+                equipped = tool
+                break
+            end
+        end
+    end
+
+    if equipped and equipped.Parent ~= character then
+        pcall(function() humanoid:EquipTool(equipped) end)
+    end
+
+    if not equipped then
+        for _, tool in ipairs(tools) do
+            if tool:IsA("Tool") then
+                pcall(function() humanoid:EquipTool(tool) end)
+                equipped = tool
+                break
+            end
+        end
+    end
     return equipped
 end
 
@@ -1568,6 +1556,8 @@ local function activateCombatTools(character, humanoid)
     return false
 end
 
+local nearestNpcInfo, nearestBossInfo
+
 local function getCurrentSelectedTarget()
     local validTargets = {}
 
@@ -1593,6 +1583,19 @@ local function getCurrentSelectedTarget()
     end
 
     if #validTargets == 0 then
+        local fallbackModel = nil
+        if autoBossFarmEnabled then
+            fallbackModel = nearestBossInfo()
+        elseif autoFarmEnabled then
+            fallbackModel = nearestNpcInfo()
+        end
+        if fallbackModel and fallbackModel.Parent then
+            local fallbackHum = fallbackModel:FindFirstChildOfClass("Humanoid")
+            local fallbackRoot = getRoot(fallbackModel)
+            if fallbackHum and fallbackHum.Health > 0 and fallbackRoot then
+                return {model = fallbackModel, humanoid = fallbackHum, root = fallbackRoot}
+            end
+        end
         return nil
     end
 
@@ -1679,7 +1682,7 @@ local function startAttackLoop()
     attackLoopRunning = true
 
     task.spawn(function()
-        while (autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled)
+        while (autoAttackEnabled or autoHakiEnabled or autoSkillsEnabled or autoFarmEnabled or autoBossFarmEnabled)
             and Screen.Parent do
 
             local character = getCharacter()
@@ -1713,9 +1716,9 @@ local function startAttackLoop()
 
                 -- Habilidades podem ser tentadas antes do alcance corpo a corpo.
                 -- Ataque basico permanece limitado a uma distancia util do alvo.
-                if distance <= 180 and autoSkillsEnabled then
+                if distance <= combatSkillRange and autoSkillsEnabled then
                     activateCombatTools(character, hum)
-                elseif distance <= 24 and autoAttackEnabled then
+                elseif distance <= combatAttackRange and (autoAttackEnabled or autoFarmEnabled or autoBossFarmEnabled) then
                     activateCombatTools(character, hum)
                 end
 
@@ -1750,8 +1753,8 @@ local function startAttackLoop()
                     -- O Anti-Ataque nao bloqueia o combate fora da janela de esquiva.
                     -- A perseguicao atualiza o destino apenas quando necessario.
                     if not flyEnabled then
-                        if distance > 11 then
-                            local desiredRange = distance > 24 and 9 or 7
+                        if distance > combatStopDistance then
+                            local desiredRange = distance > combatAttackRange and combatFollowDistance or math.max(4, combatFollowDistance - 2)
                             local goal = targetRoot.Position - targetRoot.CFrame.LookVector * desiredRange
                             if not combatLastMoveGoal
                                 or (goal - combatLastMoveGoal).Magnitude > 4.5
@@ -1777,8 +1780,8 @@ local function startAttackLoop()
                     performCombatDodge(hum, root, targetRoot, false)
                 elseif distance <= 9 and now - lastDodge >= 1.15 then
                     performCombatDodge(hum, root, targetRoot, false)
-                elseif distance > 11 and not flyEnabled then
-                    local desiredRange = distance > 24 and 9 or 7
+                elseif distance > combatStopDistance and not flyEnabled then
+                    local desiredRange = distance > combatAttackRange and combatFollowDistance or math.max(4, combatFollowDistance - 2)
                     local approachPosition = targetRoot.Position - targetRoot.CFrame.LookVector * desiredRange
                     if not combatLastMoveGoal
                         or (approachPosition - combatLastMoveGoal).Magnitude > 4.5
@@ -1788,7 +1791,7 @@ local function startAttackLoop()
                         combatLastMoveAt = now
                     end
                     combatWasInRange = false
-                elseif distance <= 11 and not flyEnabled then
+                elseif distance <= combatStopDistance and not flyEnabled then
                     if not combatWasInRange then
                         hum:MoveTo(root.Position)
                         combatLastMoveGoal = root.Position
@@ -1817,6 +1820,83 @@ local function startAttackLoop()
     end)
 end
 
+
+local function makeToolSelector(title, terms)
+    makeLabel(title .. ": escolha uma ferramenta que esteja no Backpack ou equipada.", 42)
+    local selectedLabel = makeLabel("Ferramenta selecionada: " .. (selectedCombatToolName or "automática"), 26)
+    local list = Instance.new("Frame")
+    list.Size = UDim2.new(1, -4, 0, 0)
+    list.AutomaticSize = Enum.AutomaticSize.Y
+    list.BackgroundTransparency = 1
+    list.Parent = activeContainer
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 5)
+    layout.Parent = list
+
+    makeButton("ATUALIZAR FERRAMENTAS", function()
+        for _, child in ipairs(list:GetChildren()) do
+            if child:IsA("TextButton") or child:IsA("TextLabel") then child:Destroy() end
+        end
+        local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+        local found, seen = {}, {}
+        local function scan(container)
+            if not container then return end
+            for _, item in ipairs(container:GetChildren()) do
+                if item:IsA("Tool") then
+                    local lower = string.lower(item.Name)
+                    local match = #terms == 0
+                    for _, term in ipairs(terms) do
+                        if string.find(lower, term, 1, true) then match = true break end
+                    end
+                    if match and not seen[item.Name] then
+                        seen[item.Name] = true
+                        table.insert(found, item.Name)
+                    end
+                end
+            end
+        end
+        scan(backpack)
+        scan(getCharacter())
+        table.sort(found)
+        if #found == 0 then
+            local empty = Instance.new("TextLabel")
+            empty.Size = UDim2.new(1, -4, 0, 32)
+            empty.BackgroundTransparency = 1
+            empty.Text = "Nenhuma ferramenta correspondente no inventário local."
+            empty.TextColor3 = COLORS.white
+            empty.TextSize = 11
+            empty.Parent = list
+        end
+        for _, toolName in ipairs(found) do
+            local option = Instance.new("TextButton")
+            option.Size = UDim2.new(1, -4, 0, 38)
+            option.BackgroundColor3 = selectedCombatToolName == toolName and COLORS.green or COLORS.row
+            option.Text = (selectedCombatToolName == toolName and "✓  " or "○  ") .. toolName
+            option.TextColor3 = COLORS.white
+            option.TextSize = 12
+            option.Font = Enum.Font.Gotham
+            option.Parent = list
+            Instance.new("UICorner", option).CornerRadius = UDim.new(0, 7)
+            option.Activated:Connect(function()
+                selectedCombatToolName = toolName
+                selectedLabel.Text = "Ferramenta selecionada: " .. toolName
+                for _, sibling in ipairs(list:GetChildren()) do
+                    if sibling:IsA("TextButton") then
+                        sibling.BackgroundColor3 = sibling.Text:find(toolName, 1, true) and COLORS.green or COLORS.row
+                    end
+                end
+                setStatus("Ferramenta selecionada: " .. toolName)
+            end)
+        end
+        setStatus(#found .. " ferramenta(s) encontrada(s).")
+    end, COLORS.purple)
+
+    makeButton("USAR FERRAMENTA AUTOMÁTICA", function()
+        selectedCombatToolName = nil
+        selectedLabel.Text = "Ferramenta selecionada: automática"
+        setStatus("Seleção manual removida; será usada a ferramenta equipada/disponível.")
+    end)
+end
 
 local function addWorkspaceScanner(title, terms, maxItems)
     makeLabel(title .. " — leitura local dos objetos replicados no mapa.", 42)
@@ -2013,12 +2093,29 @@ local function localStatsText()
     return table.concat(lines, "\n")
 end
 
-local function nearestNpcInfo()
+nearestNpcInfo = function()
     local root = getRoot(getCharacter())
     if not root then return nil, math.huge end
     local nearest, distance = nil, math.huge
     for _, model in ipairs(scanReplicatedObjects({}, 500, false, true)) do
         if model ~= getCharacter() and not getPlayerFromModel(model) then
+            local hum, pos = model:FindFirstChildOfClass("Humanoid"), objectPosition(model)
+            if hum and hum.Health > 0 and pos then
+                local d = (pos - root.Position).Magnitude
+                if d < distance then nearest, distance = model, d end
+            end
+        end
+    end
+    return nearest, distance
+end
+
+nearestBossInfo = function()
+    local root = getRoot(getCharacter())
+    if not root then return nil, math.huge end
+    local terms = {"boss", "leviathan", "leviata", "raid", "chefe"}
+    local nearest, distance = nil, math.huge
+    for _, model in ipairs(scanReplicatedObjects(terms, 500, false, true)) do
+        if model:IsA("Model") and model ~= getCharacter() and not getPlayerFromModel(model) then
             local hum, pos = model:FindFirstChildOfClass("Humanoid"), objectPosition(model)
             if hum and hum.Health > 0 and pos then
                 local d = (pos - root.Position).Magnitude
@@ -2040,6 +2137,202 @@ local function listObjectPaths(items, cap)
     return #rows > 0 and table.concat(rows, "\n") or "Nenhum objeto correspondente encontrado."
 end
 
+--========================================================
+-- AUTOMACOES DE INTERACAO DO MAPA (CLIENTE)
+-- Usa apenas movimento normal e ProximityPrompt existente.
+-- O servidor continua validando coleta, missao, evento e recompensa.
+--========================================================
+local worldAutomationJobs = {}
+local worldAutomationStats = {}
+
+local function normalizedSearchText(value)
+    value = string.lower(tostring(value or ""))
+    value = string.gsub(value, "[%s_%-]", "")
+    return value
+end
+
+local function getSearchableObjectText(object)
+    local parts, current, depth = {}, object, 0
+    while current and current ~= Workspace and depth < 5 do
+        parts[#parts + 1] = normalizedSearchText(current.Name)
+        current = current.Parent
+        depth += 1
+    end
+    return table.concat(parts, " ")
+end
+
+local function getPromptForObject(object)
+    if not object then return nil end
+    if object:IsA("ProximityPrompt") then return object end
+    local ok, prompt = pcall(function()
+        return object:FindFirstChildWhichIsA("ProximityPrompt", true)
+    end)
+    if ok then return prompt end
+    return nil
+end
+
+local function getAutomationPosition(object)
+    if not object or not object.Parent then return nil end
+    if object:IsA("BasePart") then return object.Position end
+    if object:IsA("Model") then
+        local part = object.PrimaryPart
+            or object:FindFirstChild("HumanoidRootPart")
+            or object:FindFirstChildWhichIsA("BasePart", true)
+        return part and part.Position or nil
+    end
+    if object:IsA("Tool") then
+        local handle = object:FindFirstChild("Handle")
+        return handle and handle.Position or nil
+    end
+    return nil
+end
+
+local function findWorldAutomationTarget(terms, requirePrompt, exactFruit)
+    local root = getRoot(getCharacter())
+    if not root then return nil end
+    local best, bestDistance, bestPrompt = nil, math.huge, nil
+    local needles = {}
+    for _, term in ipairs(terms or {}) do
+        local clean = normalizedSearchText(term)
+        if clean ~= "" then needles[#needles + 1] = clean end
+    end
+    local descendants = Workspace:GetDescendants()
+    local inspected = 0
+    for _, object in ipairs(descendants) do
+        inspected += 1
+        if inspected > 18000 then break end
+        if object:IsA("Model") or object:IsA("BasePart") or object:IsA("Tool") then
+            local textName = getSearchableObjectText(object)
+            local matches = #needles == 0
+            for _, needle in ipairs(needles) do
+                if string.find(textName, needle, 1, true) then
+                    matches = true
+                    break
+                end
+            end
+            if matches and exactFruit and selectedFruitName then
+                matches = string.find(textName, normalizedSearchText(selectedFruitName), 1, true) ~= nil
+            end
+            local ancestorModel = object:IsA("Model") and object or object:FindFirstAncestorOfClass("Model")
+            local belongsToPlayer = ancestorModel ~= nil and getPlayerFromModel(ancestorModel) ~= nil
+            local belongsToLocalCharacter = ancestorModel ~= nil and ancestorModel == getCharacter()
+            if matches and not belongsToPlayer and not belongsToLocalCharacter then
+                local prompt = getPromptForObject(object)
+                local canCollectTool = object:IsA("Tool") and object.Parent == Workspace
+                if (not requirePrompt or prompt or canCollectTool) then
+                    local position = getAutomationPosition(object)
+                    if position then
+                        local distance = (position - root.Position).Magnitude
+                        if distance < bestDistance then
+                            best, bestDistance, bestPrompt = object, distance, prompt
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return best, bestDistance, bestPrompt
+end
+
+local function approachWorldObject(object, prompt)
+    local character = getCharacter()
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local root = getRoot(character)
+    local position = getAutomationPosition(object)
+    if not humanoid or not root or not position then return false end
+    local activationDistance = prompt and math.max(4, prompt.MaxActivationDistance - 1) or 4
+    if (root.Position - position).Magnitude > activationDistance then
+        humanoid:MoveTo(position)
+        local deadline = os.clock() + 8
+        repeat
+            task.wait(0.15)
+            character = getCharacter()
+            humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            root = getRoot(character)
+            position = getAutomationPosition(object)
+            if not root or not humanoid or not position or not object.Parent then
+                return false
+            end
+        until (root.Position - position).Magnitude <= activationDistance or os.clock() >= deadline
+    end
+    if prompt and prompt.Parent and prompt.Enabled then
+        local currentRoot = getRoot(getCharacter())
+        local promptPart = prompt.Parent:IsA("BasePart") and prompt.Parent
+            or prompt.Parent:FindFirstAncestorWhichIsA("BasePart")
+        if currentRoot and promptPart
+            and (currentRoot.Position - promptPart.Position).Magnitude <= prompt.MaxActivationDistance + 1 then
+            local ok = pcall(function()
+                prompt:InputHoldBegin()
+                task.wait(math.clamp(prompt.HoldDuration, 0, 4) + 0.12)
+                prompt:InputHoldEnd()
+            end)
+            return ok
+        end
+    end
+    return object:IsA("Tool") and object.Parent == Workspace
+end
+
+local function stopWorldAutomation(key)
+    worldAutomationJobs[key] = nil
+end
+
+local function startWorldAutomation(key, terms, options)
+    options = options or {}
+    stopWorldAutomation(key)
+    local token = {}
+    worldAutomationJobs[key] = token
+    worldAutomationStats[key] = {attempts = 0, lastTarget = "nenhum", lastResult = "iniciando"}
+    logSession("Automacao de interacao iniciada: " .. key)
+    task.spawn(function()
+        while Screen.Parent and worldAutomationJobs[key] == token do
+            local target, distance, prompt = findWorldAutomationTarget(
+                terms,
+                options.requirePrompt == true,
+                options.exactFruit == true
+            )
+            if target then
+                local stats = worldAutomationStats[key]
+                stats.lastTarget = target:GetFullName()
+                stats.attempts += 1
+                stats.lastResult = "aproximando"
+                setStatus(options.statusPrefix or "Interagindo")
+                local approached = approachWorldObject(target, prompt)
+                if approached then
+                    stats.lastResult = prompt and "interacao solicitada ao prompt" or "aproximacao de ferramenta"
+                    if prompt then
+                        logSession(key .. ": prompt acionado em " .. target.Name)
+                    end
+                else
+                    stats.lastResult = "alvo inacessivel ou sem prompt"
+                end
+                task.wait(options.interval or 1.1)
+            else
+                worldAutomationStats[key].lastTarget = "nenhum objeto correspondente"
+                worldAutomationStats[key].lastResult = options.requirePrompt
+                    and "aguardando objeto com ProximityPrompt" or "aguardando objeto"
+                task.wait(options.scanInterval or 1.5)
+            end
+        end
+    end)
+end
+
+local function stopAllWorldAutomations()
+    for key in pairs(worldAutomationJobs) do
+        stopWorldAutomation(key)
+    end
+end
+
+local function addAutomationStatus(key, title)
+    makeButton("VER STATUS — " .. title, function()
+        local stats = worldAutomationStats[key]
+        if not stats then
+            setStatus(title .. ": automacao ainda nao foi iniciada")
+            return
+        end
+        setStatus(title .. ": " .. stats.lastResult .. " | alvo: " .. stats.lastTarget)
+    end)
+end
+
 local function showCategory(category)
     activeContainer = Content
     clearContent()
@@ -2047,7 +2340,7 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 5.1", 36)
+        makeLabel("BLOX F' - TALES 5.3", 36)
         makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
@@ -2066,7 +2359,7 @@ local function showCategory(category)
         endSection()
 
         beginSection("Informações")
-        makeLabel("Os recursos locais atuam no cliente. Ações internas do jogo dependem dos sistemas oficiais da experiência.", 58)
+        makeLabel("Farm de NPCs e chefes atua somente em NPCs. Coleta e interações usam movimento normal e prompts existentes; o servidor valida inventário, missões, eventos, evolução e recompensas.", 76)
         endSection()
 
     elseif category == "Jogador" then
@@ -2317,7 +2610,7 @@ local function showCategory(category)
             refreshObjectHighlights("chest", on)
         end)
 
-        makeLabel("Os localizadores procuram objetos replicados no Workspace com nomes relacionados a frutas e baús.", 48)
+        makeLabel("Os localizadores destacam objetos que a experiência já replicou ao cliente. Coleta e recompensas dependem das regras oficiais do servidor.", 54)
         endSection()
 
     elseif category == "Anti-Ataque" then
@@ -2329,9 +2622,9 @@ local function showCategory(category)
                 antiAttackDodgeDirection = Vector3.zero
                 antiAttackThreatMemory = {}
             end
-            setStatus(on and "Anti-Ataque ativo: prioridade PvP" or "Anti-Ataque desligado")
+            setStatus(on and "Anti-Ataque defensivo ativo" or "Anti-Ataque desligado")
         end)
-        makeLabel("Monitora continuamente projeteis em trajetoria de colisao e NPCs/jogadores proximos que aparentam estar atacando. Tenta desviar sem precisar selecionar ou atacar um alvo.", 78)
+        makeLabel("Monitora sinais de ameacas e tenta desviar defensivamente. Não seleciona jogadores para ataque.", 60)
         makeLabel("Durante a esquiva, controla temporariamente o movimento e pode usar velocidade elevada sem ligar Fly ou Pulo infinito na interface.", 66)
         makeLabel("A deteccao depende dos projeteis, movimentos e sinais replicados pelo jogo. Golpes calculados apenas no servidor ou sem sinais antecipados podem nao ser detectados.", 72)
         endSection()
@@ -2341,7 +2634,7 @@ local function showCategory(category)
 
         makeToggle("Aim Assist", function(on)
             aimAssistEnabled = on
-            setStatus(on and "Aim Assist ativado" or "Aim Assist desativado")
+            setStatus(on and "Aim Assist de NPCs ativado" or "Aim Assist desativado")
         end)
 
         makeToggle("Mostrar FOV", function(on)
@@ -2405,13 +2698,30 @@ local function showCategory(category)
                     refreshAttackTargetList(attackList, attackStatus)
                 end
 
-                setStatus("Mira configurada para: " .. targetType)
+                setStatus("Mira configurada para NPCs")
             end)
         end
 
         endSection()
 
         beginSection("Ataque, habilidades e Haki", false)
+
+        makeSlider("Alcance do ataque básico (studs)", 8, 80, combatAttackRange, function(value)
+            combatAttackRange = value
+            setStatus("Alcance do ataque: " .. value .. " studs")
+        end)
+        makeSlider("Alcance para tentar habilidades (studs)", 20, 300, combatSkillRange, function(value)
+            combatSkillRange = value
+            setStatus("Alcance das habilidades: " .. value .. " studs")
+        end)
+        makeSlider("Distância de aproximação do NPC (studs)", 4, 24, combatFollowDistance, function(value)
+            combatFollowDistance = value
+            setStatus("Aproximação configurada: " .. value .. " studs")
+        end)
+        makeSlider("Distância para parar junto ao NPC (studs)", 4, 30, combatStopDistance, function(value)
+            combatStopDistance = value
+            setStatus("Distância de parada: " .. value .. " studs")
+        end)
 
         attackButton = makeButton("▼  Selecionar alvos para ataque", function()
             attackDropdownOpen = not attackDropdownOpen
@@ -2579,92 +2889,179 @@ local function showCategory(category)
         endSection()
 
     elseif category == "Frutas" then
-        beginSection("Catálogo e localização", false)
+        beginSection("Fruta desejada", false)
+        local fruitInput = makeInput("Nome da fruta para procurar", "Ex.: Dragon, Kitsune, Buddha", selectedFruitName or "", nil)
+        local fruitStatus = makeLabel("Fruta configurada: " .. (selectedFruitName or "nenhuma"), 28)
+        makeButton("CONFIRMAR FRUTA DESEJADA", function()
+            local requested = string.gsub(tostring(fruitInput.Text or ""), "^%s*(.-)%s*$", "%1")
+            if requested == "" then
+                setStatus("Digite o nome de uma fruta antes de confirmar.")
+                return
+            end
+            selectedFruitName = requested
+            pendingFruitName = requested
+            fruitStatus.Text = "Fruta configurada: " .. requested
+            setStatus("Busca configurada para: " .. requested)
+        end, COLORS.green)
+        makeLabel("A busca compara o nome da fruta com os objetos replicados no mapa. A coleta só ocorre se houver Tool coletável ou ProximityPrompt válido.", 58)
+        endSection()
 
-        makeToggle("Detector de frutas", function(on)
+        beginSection("Localização e coleta", false)
+        makeToggle("Detector visual de frutas", function(on)
             fruitFinder = on
             refreshObjectHighlights("fruit", on)
-            setStatus(on and "Detector de frutas ligado" or "Detector de frutas desligado")
+            setStatus(on and "Detector visual de frutas ligado" or "Detector visual de frutas desligado")
         end)
-
-        makeToggle("Monitor automático de frutas", function(on)
+        makeToggle("Auto coletar fruta desejada", function(on)
             autoFruitEnabled = on
-            if on then startMonitor("fruit", {"fruit", "fruta", "devilfruit", "bloxfruit"}, COLORS.green, 2, false)
-            else stopMonitor("fruit") end
-            setStatus(on and "Monitor de frutas ativo: objetos replicados serão destacados" or "Monitor de frutas desligado")
+            if on then
+                if not selectedFruitName or selectedFruitName == "" then
+                    autoFruitEnabled = false
+                    setStatus("Configure a fruta desejada antes de ativar a coleta.")
+                    return
+                end
+                startWorldAutomation("fruit_collect", {"fruit", "fruta", "devilfruit", "bloxfruit", selectedFruitName}, {
+                    exactFruit = true, requirePrompt = false, interval = 1.2,
+                    statusPrefix = "Procurando fruta " .. selectedFruitName
+                })
+            else
+                stopWorldAutomation("fruit_collect")
+                setStatus("Auto coleta de frutas desligada")
+            end
         end)
-
-        makeLabel("Catálogo de frutas: Rocket, Spin, Blade, Spring, Bomb, Smoke, Spike, Flame, Falcon, Ice, Sand, Dark, Diamond, Light, Rubber, Barrier, Ghost, Magma, Quake, Buddha, Love, Spider, Sound, Phoenix, Portal, Rumble, Pain, Blizzard, Gravity, Mammoth, T-Rex, Dough, Shadow, Venom, Control, Spirit, Dragon, Leopard, Kitsune, Gas e Yeti.", 110)
-
+        addAutomationStatus("fruit_collect", "frutas")
+        makeLabel("Se a fruta aparecer como Tool no Workspace, o personagem se aproxima para recolhê-la. Se usar prompt, o prompt é acionado normalmente; sem esses mecanismos, a coleta fica sob controle do servidor.", 74)
         endSection()
 
     elseif category == "Coleta e evolução" then
         beginSection("Coleta automática", false)
 
-        makeToggle("Auto Farm — monitorar NPCs", function(on)
+        makeToggle("Auto Farm de NPCs", function(on)
             autoFarmEnabled = on
-            if on then startMonitor("farm_npc", {"bandit", "pirate", "enemy", "npc", "mob", "soldier", "guard", "raider"}, COLORS.red, 1.5, true)
-            else stopMonitor("farm_npc") end
-            local npc, distance = nearestNpcInfo()
-            setStatus(on and (npc and ("Monitor ativo; NPC mais próximo: " .. npc.Name .. " (" .. math.floor(distance) .. " studs)") or "Monitor ativo; aguardando NPC") or "Monitor de NPC desligado")
+            if on then
+                autoBossFarmEnabled = false
+                startAttackLoop()
+                local npc, distance = nearestNpcInfo()
+                setStatus(npc and ("Auto Farm ativo; alvo NPC: " .. npc.Name .. " (" .. math.floor(distance) .. " studs)") or "Auto Farm ativo; aguardando NPC")
+            else
+                setStatus("Auto Farm de NPCs desligado")
+            end
         end)
+        makeLabel("Persegue NPCs com Humanoid e usa a ferramenta selecionada dentro do alcance configurado. Jogadores reais ficam fora da seleção e do ataque automático.", 54)
 
-        makeToggle("Auto Chest — monitorar baús", function(on)
+        makeToggle("Auto Chest — aproximar e abrir", function(on)
             autoChestEnabled = on
-            if on then startMonitor("chests", {"chest", "baú", "bau", "treasure", "coffer"}, COLORS.purple, 2, false)
-            else stopMonitor("chests") end
-            setStatus(on and "Monitor de baús ativo e destacando objetos" or "Monitor de baús desligado")
+            if on then
+                startWorldAutomation("chests", {"chest", "bau", "treasure", "coffer"}, {
+                    requirePrompt = true, interval = 1.4, statusPrefix = "Procurando baus"
+                })
+            else
+                stopWorldAutomation("chests")
+                setStatus("Auto Chest desligado")
+            end
         end)
+        addAutomationStatus("chests", "baus")
 
-        makeToggle("Auto Fruit — monitorar frutas", function(on)
+        makeToggle("Auto Fruit — coleta configurada", function(on)
             autoFruitEnabled = on
-            if on then startMonitor("farm_fruit", {"fruit", "fruta", "devilfruit", "bloxfruit"}, COLORS.green, 2, false)
-            else stopMonitor("farm_fruit") end
-            setStatus(on and "Monitor de frutas ativo e destacando objetos" or "Monitor de frutas desligado")
+            if on then
+                if not selectedFruitName or selectedFruitName == "" then
+                    autoFruitEnabled = false
+                    setStatus("Configure a fruta na aba Frutas antes de ativar.")
+                    return
+                end
+                startWorldAutomation("farm_fruit", {"fruit", "fruta", "devilfruit", "bloxfruit", selectedFruitName}, {
+                    exactFruit = true, requirePrompt = false, interval = 1.2,
+                    statusPrefix = "Procurando " .. selectedFruitName
+                })
+            else
+                stopWorldAutomation("farm_fruit")
+                setStatus("Auto Fruit desligado")
+            end
         end)
 
-        makeToggle("Auto Mission — monitorar indicadores", function(on)
+        makeToggle("Auto Mission — interagir com indicadores", function(on)
             autoMissionEnabled = on
-            if on then startMonitor("missions", {"quest", "mission", "trial", "objective", "questgiver"}, COLORS.purple, 2.5, false)
-            else stopMonitor("missions") end
-            setStatus(on and "Monitor de missões ativo; observando indicadores visíveis" or "Monitor de missões desligado")
+            if on then
+                startWorldAutomation("missions", {"quest", "mission", "trial", "objective", "questgiver"}, {
+                    requirePrompt = true, interval = 1.5, statusPrefix = "Procurando interacao de missao"
+                })
+            else
+                stopWorldAutomation("missions")
+                setStatus("Auto Mission desligado")
+            end
         end)
+        addAutomationStatus("missions", "missoes")
 
         endSection()
 
         beginSection("Evolução e recompensas", false)
 
-        makeToggle("Auto Evolution — monitorar evolução", function(on)
+        makeToggle("Auto Evolution — localizar interação", function(on)
             autoEvolutionEnabled = on
-            if on then startMonitor("evolution", {"evolution", "awakening", "evolve", "upgrade", "despertar"}, COLORS.green, 3, false)
-            else stopMonitor("evolution") end
-            setStatus(on and "Monitor de evolução ativo; lendo objetos replicados" or "Monitor de evolução desligado")
+            if on then
+                startWorldAutomation("evolution", {"evolution", "awakening", "evolve", "upgrade", "despertar"}, {
+                    requirePrompt = true, interval = 2, statusPrefix = "Localizando evolucao"
+                })
+            else
+                stopWorldAutomation("evolution")
+                setStatus("Localizador de evolução desligado")
+            end
         end)
+        addAutomationStatus("evolution", "evolucao")
+        makeLabel("O script pode aproximar e acionar um ProximityPrompt existente. O servidor decide se os requisitos foram cumpridos e se a evolução será aplicada.", 58)
 
-        makeToggle("Auto Rewards — monitorar recompensas", function(on)
+        makeToggle("Auto Rewards — localizar resgate", function(on)
             autoRewardsEnabled = on
-            if on then startMonitor("rewards", {"reward", "prize", "claim", "daily", "recompensa", "premio"}, COLORS.green, 3, false)
-            else stopMonitor("rewards") end
-            setStatus(on and "Monitor de recompensas ativo; resgate continua validado pelo servidor" or "Monitor de recompensas desligado")
+            if on then
+                startWorldAutomation("rewards", {"reward", "prize", "claim", "daily", "recompensa", "premio"}, {
+                    requirePrompt = true, interval = 2, statusPrefix = "Localizando resgate"
+                })
+            else
+                stopWorldAutomation("rewards")
+                setStatus("Localizador de recompensas desligado")
+            end
         end)
+        addAutomationStatus("rewards", "recompensas")
+        makeLabel("O resgate só é concluído quando o servidor aceitar a interação e validar as condições da experiência.", 50)
 
         endSection()
 
     elseif category == "Espadas" then
+        beginSection("Equipamento", false)
+        makeToolSelector("Selecionar espada", {"sword", "katana", "blade", "sabre", "espada"})
+        makeLabel("A seleção equipa a ferramenta local escolhida quando o combate contra NPCs estiver ativo.", 46)
+        endSection()
         beginSection("Catálogo e rastreamento", false)
         addWorkspaceScanner("Espadas e lâminas", {"sword", "katana", "blade", "sabre", "espada"}, 35)
-        makeLabel("O scanner mostra apenas nomes encontrados no mapa. Requisitos, propriedade e progresso precisam vir do sistema oficial do jogo.", 62)
         endSection()
 
     elseif category == "Armas" then
+        beginSection("Equipamento", false)
+        makeToolSelector("Selecionar arma/ferramenta", {"weapon", "gun", "rifle", "pistol", "bow", "arma", "musket"})
+        makeLabel("A seleção define qual ferramenta local será priorizada no combate contra NPCs.", 46)
+        endSection()
         beginSection("Catálogo e rastreamento", false)
         addWorkspaceScanner("Armas e ferramentas", {"weapon", "gun", "rifle", "pistol", "bow", "arma", "musket"}, 35)
-        makeLabel("Não equipa nem dispara ferramentas. A aba serve para conferir objetos replicados durante o desenvolvimento da experiência.", 56)
         endSection()
 
     elseif category == "Chefes" then
+        beginSection("Farm de chefes NPC", false)
+        makeToggle("Auto Farm de chefes", function(on)
+            autoBossFarmEnabled = on
+            if on then
+                autoFarmEnabled = false
+                startAttackLoop()
+                local boss, distance = nearestBossInfo()
+                setStatus(boss and ("Farm de chefe ativo: " .. boss.Name .. " (" .. math.floor(distance) .. " studs)") or "Farm ativo; aguardando chefe reconhecido")
+            else
+                setStatus("Farm de chefes desligado")
+            end
+        end)
+        makeLabel("Procura NPCs cujo nome contenha Boss, Leviathan, Leviatã, Raid ou Chefe. A experiência precisa permitir que o cliente equipe e ative ferramentas.", 62)
+        endSection()
         beginSection("Chefes e NPCs", false)
-        addWorkspaceScanner("Modelos de chefes", {"boss", "raid", "chief", "chefe"}, 40)
+        addWorkspaceScanner("Modelos de chefes", {"boss", "raid", "chief", "chefe", "leviathan", "leviata"}, 40)
         makeButton("LISTAR MODELOS COM HUMANOID", function()
             local rows = {}
             for _, item in ipairs(Workspace:GetDescendants()) do
@@ -2679,21 +3076,60 @@ local function showCategory(category)
         endSection()
 
     elseif category == "Eventos Marítimos" then
+        beginSection("Interações de eventos marítimos", false)
+        makeToggle("Auto interagir com eventos", function(on)
+            if on then
+                startWorldAutomation("sea_events", {"seaevent", "leviathan", "leviata", "sea beast", "ship", "barco", "event"}, {
+                    requirePrompt = true, interval = 1.5, statusPrefix = "Procurando interacao de evento"
+                })
+            else
+                stopWorldAutomation("sea_events")
+                setStatus("Interação automática de eventos desligada")
+            end
+        end)
+        addAutomationStatus("sea_events", "eventos maritimos")
+        makeLabel("Aproxima e aciona prompts já existentes. O início, combate, conclusão e recompensa do evento continuam dependendo das regras oficiais do servidor.", 68)
+        endSection()
         beginSection("Monitor de eventos", false)
         addWorkspaceScanner("Eventos e criaturas marítimas", {"sea", "leviathan", "leviata", "sea beast", "beast", "ship", "barco"}, 40)
-        makeLabel("A detecção depende dos nomes e objetos que o servidor replica. Não inicia eventos nem concede recompensas.", 58)
         endSection()
 
     elseif category == "Factory" then
-        beginSection("Monitor da Factory", false)
+        beginSection("Factory — interação", false)
+        makeToggle("Auto Factory — aproximar e interagir", function(on)
+            if on then
+                startWorldAutomation("factory", {"factory", "fabrica", "core", "factorydoor"}, {
+                    requirePrompt = true, interval = 1.4, statusPrefix = "Procurando interacao da Factory"
+                })
+            else
+                stopWorldAutomation("factory")
+                setStatus("Automacao de interacao da Factory desligada")
+            end
+        end)
+        addAutomationStatus("factory", "Factory")
+        makeLabel("A automação procura objetos da Factory que tenham ProximityPrompt, aproxima o personagem e solicita a interação normal. Não inicia evento nem cria recompensas se o servidor não oferecer essa interação.", 78)
+        endSection()
+        beginSection("Objetos encontrados", false)
         addWorkspaceScanner("Objetos relacionados à Factory", {"factory", "fabrica", "core", "factory door"}, 35)
-        makeLabel("Use esta lista para descobrir os nomes internos dos objetos da sua experiência e integrar depois ao sistema de eventos do servidor.", 58)
         endSection()
 
     elseif category == "Materiais" then
-        beginSection("Materiais e drops", false)
-        addWorkspaceScanner("Materiais e itens", {"material", "fragment", "scrap", "ore", "essence", "scale", "mat"}, 45)
-        makeLabel("A quantidade no inventário não pode ser inferida com segurança apenas pelo Workspace. É necessário consultar o inventário oficial no servidor.", 62)
+        beginSection("Coleta de materiais", false)
+        makeToggle("Auto coletar materiais com prompt", function(on)
+            if on then
+                startWorldAutomation("materials", {"material", "fragment", "scrap", "ore", "essence", "scale", "mat"}, {
+                    requirePrompt = true, interval = 1.2, statusPrefix = "Procurando material"
+                })
+            else
+                stopWorldAutomation("materials")
+                setStatus("Coleta automática de materiais desligada")
+            end
+        end)
+        addAutomationStatus("materials", "materiais")
+        makeLabel("Aproxima e aciona somente prompts já existentes em objetos com nomes relacionados a materiais. Quantidades e recompensas são confirmadas pelo inventário do servidor.", 68)
+        endSection()
+        beginSection("Catálogo e localização", false)
+        addWorkspaceScanner("Materiais e drops", {"material", "fragment", "scrap", "ore", "essence", "scale", "mat"}, 45)
         endSection()
 
     elseif category == "Objetivos" then
@@ -2715,12 +3151,43 @@ local function showCategory(category)
                 highlightMonitoredObject("objective", objectiveSelection, COLORS.green)
             end
         end, COLORS.purple)
+        makeButton("IR ATÉ O OBJETIVO LOCALIZADO", function()
+            if not objectiveSelection or not objectiveSelection.Parent then
+                setStatus("Localize um objetivo antes de solicitar o teletransporte.")
+                return
+            end
+            local destination
+            if objectiveSelection:IsA("BasePart") then
+                destination = objectiveSelection.CFrame + Vector3.new(0, 5, 0)
+            elseif objectiveSelection:IsA("Model") then
+                local ok, pivot = pcall(function() return objectiveSelection:GetPivot() end)
+                if ok then destination = pivot + Vector3.new(0, 5, 0) end
+            end
+            if destination then
+                teleportLocal(destination)
+            else
+                setStatus("O objetivo localizado não possui posição utilizável.")
+            end
+        end, COLORS.green)
         endSection()
 
     elseif category == "Missões e Trials" then
-        beginSection("Missões e etapas", false)
+        beginSection("Interação com missões e Trials", false)
+        makeToggle("Auto interagir com NPCs de missão", function(on)
+            if on then
+                startWorldAutomation("quest_givers", {"quest", "mission", "missiongiver", "questgiver", "trial", "prova"}, {
+                    requirePrompt = true, interval = 1.5, statusPrefix = "Procurando NPC ou prompt de missao"
+                })
+            else
+                stopWorldAutomation("quest_givers")
+                setStatus("Interação automática com missões desligada")
+            end
+        end)
+        addAutomationStatus("quest_givers", "missoes e Trials")
+        makeLabel("O personagem se aproxima de NPCs e objetos com ProximityPrompt. Aceitar, avançar ou concluir uma missão depende da resposta oficial do servidor.", 64)
+        endSection()
+        beginSection("Indicadores encontrados", false)
         addWorkspaceScanner("Indicadores de missão e Trial", {"quest", "mission", "trial", "missiongiver", "questgiver", "prova"}, 40)
-        makeLabel("O progresso, temporizadores e recompensas devem vir de valores ou módulos oficiais do servidor; esta aba não simula conclusão.", 62)
         endSection()
 
     elseif category == "Administração" then
@@ -2769,13 +3236,15 @@ local function showCategory(category)
             logSession("Histórico reiniciado")
             setStatus("Histórico local reiniciado.")
         end, COLORS.red)
-        makeButton("PARAR TODOS OS MONITORES", function()
+        makeButton("PARAR TODAS AS AUTOMACOES", function()
             stopAllMonitors()
-            autoFarmEnabled, autoChestEnabled, autoFruitEnabled = false, false, false
+            stopAllWorldAutomations()
+            autoFarmEnabled, autoBossFarmEnabled, autoChestEnabled, autoFruitEnabled = false, false, false, false
+            autoAttackEnabled, autoHakiEnabled, autoSkillsEnabled = false, false, false
             autoMissionEnabled, autoEvolutionEnabled, autoRewardsEnabled = false, false, false
             setStatus("Todos os monitores locais foram encerrados.")
         end, COLORS.red)
-        makeLabel("Versão 5.1 — monitoramento local ampliado. Recompensas, inventário e missões continuam sob autoridade do servidor.", 56)
+        makeLabel("Versão 5.3 — automações de interação local ampliadas. Recompensas, inventário e missões continuam sob autoridade do servidor.", 56)
         endSection()
 
     elseif category == "Configurações" then
@@ -2880,9 +3349,12 @@ Min.Activated:Connect(MinimizePanel)
 
 Close.Activated:Connect(function()
     destroyed = true
+    stopAllWorldAutomations()
     autoAttackEnabled = false
     autoHakiEnabled = false
     autoSkillsEnabled = false
+    autoFarmEnabled = false
+    autoBossFarmEnabled = false
     antiAttackEnabled = false
     antiAttackDodgeUntil = 0
     flyEnabled = false
@@ -3600,7 +4072,7 @@ local function getAimCandidates()
         })
     end
 
-    if selectedAimTarget == "NPCs" or selectedAimTarget == "Todos" then
+    if selectedAimTarget == "NPCs" then
         for _, item in ipairs(Workspace:GetDescendants()) do
             if item:IsA("Model")
                 and item ~= getCharacter()
@@ -3608,14 +4080,6 @@ local function getAimCandidates()
                 and item:FindFirstChildOfClass("Humanoid") then
 
                 addCandidate(item)
-            end
-        end
-    end
-
-    if selectedAimTarget == "Jogadores" or selectedAimTarget == "Todos" then
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                addCandidate(player.Character)
             end
         end
     end
@@ -3698,4 +4162,4 @@ end)
 
 showCategory("Início")
 
-print("Blox F' - Tales 5.1 carregado.")
+print("Blox F' - Tales 5.3 carregado.")
