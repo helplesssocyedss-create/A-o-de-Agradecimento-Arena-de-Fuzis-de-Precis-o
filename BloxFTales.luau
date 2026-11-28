@@ -1,5 +1,5 @@
 --========================================================
--- BLOX F' - TALES | VERSAO 4.7
+-- BLOX F' - TALES | VERSAO 5.1
 -- Fly suavizado e combate coordenado com Anti-Ataque sem esquivas por simples proximidade.
 -- Defesa baseada em sinais observaveis; nao presume cooldown fixo de todas as habilidades.
 --========================================================
@@ -199,7 +199,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -105, 1, 0)
 Title.Position = UDim2.fromOffset(14, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "Blox F' - Tales  |  4.6"
+Title.Text = "Blox F' - Tales  |  5.1"
 Title.TextColor3 = COLORS.white
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -377,7 +377,7 @@ local function makeButton(text, callback, color)
     button.Parent = activeContainer
     Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
 
-    button.MouseButton1Click:Connect(function()
+    button.Activated:Connect(function()
         if callback then callback() end
     end)
 
@@ -456,7 +456,7 @@ local function makeToggle(name, callback, initial)
 
     update()
 
-    switch.MouseButton1Click:Connect(function()
+    switch.Activated:Connect(function()
         states[name] = not states[name]
         update()
 
@@ -508,7 +508,7 @@ local function beginSection(title, initiallyOpen)
     padding.PaddingBottom = UDim.new(0, 5)
     padding.Parent = body
 
-    header.MouseButton1Click:Connect(function()
+    header.Activated:Connect(function()
         local open = not body.Visible
         body.Visible = open
         body.AutomaticSize = open and Enum.AutomaticSize.Y or Enum.AutomaticSize.None
@@ -539,7 +539,7 @@ local function makeOption(labelText, isSelected, callback)
     button.Parent = activeContainer
     Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
 
-    button.MouseButton1Click:Connect(function()
+    button.Activated:Connect(function()
         if callback then callback() end
     end)
 
@@ -1173,12 +1173,12 @@ local function makePlayerSelection()
         no.ZIndex = 31
         no.Parent = dialog
 
-        yes.MouseButton1Click:Connect(function()
+        yes.Activated:Connect(function()
             teleportToPlayer(target)
             dialog:Destroy()
         end)
 
-        no.MouseButton1Click:Connect(function()
+        no.Activated:Connect(function()
             dialog:Destroy()
         end)
     end, COLORS.purple)
@@ -1321,7 +1321,7 @@ local function refreshAttackTargetList(container, statusLabel)
         option.Parent = container
         Instance.new("UICorner", option).CornerRadius = UDim.new(0, 6)
 
-        option.MouseButton1Click:Connect(function()
+        option.Activated:Connect(function()
             selectedAttackTargets[target.model] = not selectedAttackTargets[target.model]
 
             option.BackgroundColor3 =
@@ -1817,6 +1817,229 @@ local function startAttackLoop()
     end)
 end
 
+
+local function addWorkspaceScanner(title, terms, maxItems)
+    makeLabel(title .. " — leitura local dos objetos replicados no mapa.", 42)
+    makeButton("ATUALIZAR LISTA", function()
+        local matches, seen = {}, {}
+        for _, item in ipairs(Workspace:GetDescendants()) do
+            local lower = string.lower(item.Name)
+            local match = false
+            for _, term in ipairs(terms) do
+                if string.find(lower, term, 1, true) then
+                    match = true
+                    break
+                end
+            end
+            if match and (item:IsA("Model") or item:IsA("BasePart") or item:IsA("Tool")) then
+                local fullName = item:GetFullName()
+                if not seen[fullName] then
+                    seen[fullName] = true
+                    table.insert(matches, fullName)
+                end
+            end
+        end
+        table.sort(matches)
+        local shown = math.min(#matches, maxItems or 30)
+        setStatus(tostring(#matches) .. " resultado(s); exibindo " .. tostring(shown))
+        local output = {}
+        for index = 1, shown do
+            table.insert(output, matches[index])
+        end
+        if #output == 0 then
+            table.insert(output, "Nenhum objeto correspondente foi encontrado no Workspace.")
+        end
+        makeLabel(table.concat(output, "\n"), math.clamp(#output * 20, 42, 360))
+    end, COLORS.purple)
+end
+
+--========================================================
+-- CAMADA DE MONITORAMENTO LOCAL 5.1
+-- Descoberta e destaque de objetos já replicados ao cliente.
+-- Não dispara RemoteEvents desconhecidos nem altera dados do servidor.
+--========================================================
+local monitorJobs = {}
+local monitorHighlights = {}
+local monitorSnapshots = {}
+local sessionEvents = {}
+local objectiveSelection = nil
+
+local function logSession(message)
+    table.insert(sessionEvents, 1, os.date("%H:%M:%S") .. " | " .. tostring(message))
+    while #sessionEvents > 100 do table.remove(sessionEvents) end
+end
+
+local function objectPosition(object)
+    if not object or not object.Parent then return nil end
+    if object:IsA("BasePart") then return object.Position end
+    if object:IsA("Model") then
+        local root = object.PrimaryPart or object:FindFirstChild("HumanoidRootPart") or object:FindFirstChildWhichIsA("BasePart", true)
+        return root and root.Position or nil
+    end
+    return nil
+end
+
+local function scanReplicatedObjects(terms, limit, includeStorage, humanoidOnly)
+    local roots = {Workspace}
+    if includeStorage then table.insert(roots, game:GetService("ReplicatedStorage")) end
+    local character = getCharacter()
+    if character then table.insert(roots, character) end
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if backpack then table.insert(roots, backpack) end
+    local needles = {}
+    for _, term in ipairs(terms or {}) do needles[#needles + 1] = string.lower(tostring(term)) end
+    local found, seen = {}, {}
+    for _, root in ipairs(roots) do
+        local ok, descendants = pcall(function() return root:GetDescendants() end)
+        if ok then
+            for _, item in ipairs(descendants) do
+                local kind = item:IsA("Model") or item:IsA("BasePart") or item:IsA("Tool")
+                local hasHumanoid = item:IsA("Model") and item:FindFirstChildOfClass("Humanoid") ~= nil
+                if kind and (not humanoidOnly or hasHumanoid) then
+                    local name, matches = string.lower(item.Name), #needles == 0
+                    for _, needle in ipairs(needles) do
+                        if needle ~= "" and string.find(name, needle, 1, true) then matches = true break end
+                    end
+                    local path = item:GetFullName()
+                    if matches and not seen[path] then
+                        seen[path] = true
+                        found[#found + 1] = item
+                        if #found >= (limit or 100) then break end
+                    end
+                end
+            end
+        end
+        if #found >= (limit or 100) then break end
+    end
+    table.sort(found, function(a,b) return a:GetFullName() < b:GetFullName() end)
+    return found
+end
+
+local function clearMonitorHighlights(key)
+    for _, highlight in pairs(monitorHighlights[key] or {}) do
+        pcall(function() highlight:Destroy() end)
+    end
+    monitorHighlights[key] = nil
+end
+
+local function highlightMonitoredObject(key, object, color)
+    if not object or not object.Parent then return end
+    local adornee = object
+    if object:IsA("Tool") then adornee = object:FindFirstAncestorOfClass("Model") or object:FindFirstChild("Handle") end
+    if not adornee or not (adornee:IsA("Model") or adornee:IsA("BasePart")) then return end
+    monitorHighlights[key] = monitorHighlights[key] or {}
+    if monitorHighlights[key][object] then return end
+    local h = Instance.new("Highlight")
+    h.Name = "BloxFTales_" .. key
+    h.Adornee = adornee
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.FillColor = color or COLORS.purple
+    h.OutlineColor = COLORS.white
+    h.FillTransparency = 0.78
+    h.OutlineTransparency = 0.1
+    h.Parent = Screen
+    monitorHighlights[key][object] = h
+end
+
+local function stopMonitor(key)
+    monitorJobs[key] = nil
+    clearMonitorHighlights(key)
+    monitorSnapshots[key] = nil
+end
+
+local function startMonitor(key, terms, color, interval, humanoidOnly)
+    stopMonitor(key)
+    local token = {}
+    monitorJobs[key], monitorSnapshots[key], monitorHighlights[key] = token, {}, {}
+    logSession("Monitor iniciado: " .. key)
+    task.spawn(function()
+        while Screen.Parent and monitorJobs[key] == token do
+            local current = {}
+            local items = scanReplicatedObjects(terms, 150, true, humanoidOnly)
+            local added = 0
+            for _, object in ipairs(items) do
+                current[object] = true
+                if not monitorSnapshots[key][object] then
+                    added += 1
+                    highlightMonitoredObject(key, object, color)
+                end
+            end
+            for object in pairs(monitorSnapshots[key]) do
+                if not current[object] then
+                    local h = monitorHighlights[key] and monitorHighlights[key][object]
+                    if h then pcall(function() h:Destroy() end) end
+                    if monitorHighlights[key] then monitorHighlights[key][object] = nil end
+                end
+            end
+            monitorSnapshots[key] = current
+            if added > 0 then logSession(key .. ": " .. added .. " novo(s) objeto(s)") end
+            task.wait(math.clamp(interval or 2, 0.5, 15))
+        end
+        if monitorJobs[key] == token then stopMonitor(key) end
+    end)
+end
+
+local function stopAllMonitors()
+    local keys = {}
+    for key in pairs(monitorJobs) do keys[#keys + 1] = key end
+    for _, key in ipairs(keys) do stopMonitor(key) end
+end
+
+local function localInventory()
+    local names, seen = {}, {}
+    for _, container in ipairs({LocalPlayer:FindFirstChildOfClass("Backpack"), getCharacter()}) do
+        if container then
+            for _, item in ipairs(container:GetChildren()) do
+                if item:IsA("Tool") and not seen[item.Name] then seen[item.Name] = true names[#names + 1] = item.Name end
+            end
+        end
+    end
+    table.sort(names)
+    return names
+end
+
+local function localStatsText()
+    local lines, stats = {}, LocalPlayer:FindFirstChild("leaderstats")
+    if stats then
+        for _, value in ipairs(stats:GetChildren()) do
+            if value:IsA("ValueBase") then lines[#lines + 1] = value.Name .. ": " .. tostring(value.Value) end
+        end
+    end
+    for _, key in ipairs({"Level", "Beli", "Money", "Fragments", "Race", "Awakening"}) do
+        local value = LocalPlayer:GetAttribute(key)
+        if value ~= nil then lines[#lines + 1] = key .. ": " .. tostring(value) end
+    end
+    if #lines == 0 then lines[1] = "Nenhum leaderstats ou atributo conhecido foi replicado." end
+    return table.concat(lines, "\n")
+end
+
+local function nearestNpcInfo()
+    local root = getRoot(getCharacter())
+    if not root then return nil, math.huge end
+    local nearest, distance = nil, math.huge
+    for _, model in ipairs(scanReplicatedObjects({}, 500, false, true)) do
+        if model ~= getCharacter() and not getPlayerFromModel(model) then
+            local hum, pos = model:FindFirstChildOfClass("Humanoid"), objectPosition(model)
+            if hum and hum.Health > 0 and pos then
+                local d = (pos - root.Position).Magnitude
+                if d < distance then nearest, distance = model, d end
+            end
+        end
+    end
+    return nearest, distance
+end
+
+local function listObjectPaths(items, cap)
+    local rows, root = {}, getRoot(getCharacter())
+    for i, object in ipairs(items) do
+        if i > (cap or 35) then break end
+        local suffix, pos = "", objectPosition(object)
+        if root and pos then suffix = " | " .. math.floor((pos - root.Position).Magnitude) .. " studs" end
+        rows[#rows + 1] = object:GetFullName() .. suffix
+    end
+    return #rows > 0 and table.concat(rows, "\n") or "Nenhum objeto correspondente encontrado."
+end
+
 local function showCategory(category)
     activeContainer = Content
     clearContent()
@@ -1824,7 +2047,7 @@ local function showCategory(category)
 
     if category == "Início" then
         beginSection("Painel e status")
-        makeLabel("BLOX F' - TALES 4.6", 36)
+        makeLabel("BLOX F' - TALES 5.1", 36)
         makeLabel("Interface organizada por seções. Toque na seta para abrir ou recolher os controles.", 52)
         setStatus("Pronto.")
 
@@ -2154,7 +2377,7 @@ local function showCategory(category)
         typeLayout.Padding = UDim.new(0, 4)
         typeLayout.Parent = targetTypeDropdown
 
-        for _, targetType in ipairs({"NPCs", "Jogadores", "Todos"}) do
+        for _, targetType in ipairs({"NPCs"}) do
             local option = Instance.new("TextButton")
             option.Size = UDim2.new(1, 0, 0, 34)
             option.BackgroundColor3 = selectedAimTarget == targetType and COLORS.green or COLORS.row
@@ -2165,7 +2388,7 @@ local function showCategory(category)
             option.Parent = targetTypeDropdown
             Instance.new("UICorner", option).CornerRadius = UDim.new(0, 6)
 
-            option.MouseButton1Click:Connect(function()
+            option.Activated:Connect(function()
                 selectedAimTarget = targetType
                 typeButton.Text = "▶  Tipo de alvo: " .. targetType
                 targetTypeDropdownOpen = false
@@ -2303,7 +2526,7 @@ local function showCategory(category)
 
             fruitOptionButtons[fruitName] = option
 
-            option.MouseButton1Click:Connect(function()
+            option.Activated:Connect(function()
                 pendingFruitName = fruitName
                 updateFruitOptions()
                 setStatus("Fruta selecionada: " .. fruitName .. ". Confirme para salvar.")
@@ -2364,9 +2587,11 @@ local function showCategory(category)
             setStatus(on and "Detector de frutas ligado" or "Detector de frutas desligado")
         end)
 
-        makeToggle("Coletar frutas automaticamente", function(on)
+        makeToggle("Monitor automático de frutas", function(on)
             autoFruitEnabled = on
-            setStatus(on and "Coleta automática de frutas ligada" or "Coleta automática de frutas desligada")
+            if on then startMonitor("fruit", {"fruit", "fruta", "devilfruit", "bloxfruit"}, COLORS.green, 2, false)
+            else stopMonitor("fruit") end
+            setStatus(on and "Monitor de frutas ativo: objetos replicados serão destacados" or "Monitor de frutas desligado")
         end)
 
         makeLabel("Catálogo de frutas: Rocket, Spin, Blade, Spring, Bomb, Smoke, Spike, Flame, Falcon, Ice, Sand, Dark, Diamond, Light, Rubber, Barrier, Ghost, Magma, Quake, Buddha, Love, Spider, Sound, Phoenix, Portal, Rumble, Pain, Blizzard, Gravity, Mammoth, T-Rex, Dough, Shadow, Venom, Control, Spirit, Dragon, Leopard, Kitsune, Gas e Yeti.", 110)
@@ -2376,40 +2601,181 @@ local function showCategory(category)
     elseif category == "Coleta e evolução" then
         beginSection("Coleta automática", false)
 
-        makeToggle("Auto Farm", function(on)
+        makeToggle("Auto Farm — monitorar NPCs", function(on)
             autoFarmEnabled = on
-            setStatus(on and "Auto Farm ativado" or "Auto Farm desativado")
+            if on then startMonitor("farm_npc", {"bandit", "pirate", "enemy", "npc", "mob", "soldier", "guard", "raider"}, COLORS.red, 1.5, true)
+            else stopMonitor("farm_npc") end
+            local npc, distance = nearestNpcInfo()
+            setStatus(on and (npc and ("Monitor ativo; NPC mais próximo: " .. npc.Name .. " (" .. math.floor(distance) .. " studs)") or "Monitor ativo; aguardando NPC") or "Monitor de NPC desligado")
         end)
 
-        makeToggle("Auto Chest", function(on)
+        makeToggle("Auto Chest — monitorar baús", function(on)
             autoChestEnabled = on
-            setStatus(on and "Auto Chest ativado" or "Auto Chest desativado")
+            if on then startMonitor("chests", {"chest", "baú", "bau", "treasure", "coffer"}, COLORS.purple, 2, false)
+            else stopMonitor("chests") end
+            setStatus(on and "Monitor de baús ativo e destacando objetos" or "Monitor de baús desligado")
         end)
 
-        makeToggle("Auto Fruit", function(on)
+        makeToggle("Auto Fruit — monitorar frutas", function(on)
             autoFruitEnabled = on
-            setStatus(on and "Auto Fruit ativado" or "Auto Fruit desativado")
+            if on then startMonitor("farm_fruit", {"fruit", "fruta", "devilfruit", "bloxfruit"}, COLORS.green, 2, false)
+            else stopMonitor("farm_fruit") end
+            setStatus(on and "Monitor de frutas ativo e destacando objetos" or "Monitor de frutas desligado")
         end)
 
-        makeToggle("Auto Mission", function(on)
+        makeToggle("Auto Mission — monitorar indicadores", function(on)
             autoMissionEnabled = on
-            setStatus(on and "Auto Mission ativado" or "Auto Mission desativado")
+            if on then startMonitor("missions", {"quest", "mission", "trial", "objective", "questgiver"}, COLORS.purple, 2.5, false)
+            else stopMonitor("missions") end
+            setStatus(on and "Monitor de missões ativo; observando indicadores visíveis" or "Monitor de missões desligado")
         end)
 
         endSection()
 
         beginSection("Evolução e recompensas", false)
 
-        makeToggle("Auto Evolution", function(on)
+        makeToggle("Auto Evolution — monitorar evolução", function(on)
             autoEvolutionEnabled = on
-            setStatus(on and "Auto Evolution ativado" or "Auto Evolution desativado")
+            if on then startMonitor("evolution", {"evolution", "awakening", "evolve", "upgrade", "despertar"}, COLORS.green, 3, false)
+            else stopMonitor("evolution") end
+            setStatus(on and "Monitor de evolução ativo; lendo objetos replicados" or "Monitor de evolução desligado")
         end)
 
-        makeToggle("Auto Rewards", function(on)
+        makeToggle("Auto Rewards — monitorar recompensas", function(on)
             autoRewardsEnabled = on
-            setStatus(on and "Auto Rewards ativado" or "Auto Rewards desativado")
+            if on then startMonitor("rewards", {"reward", "prize", "claim", "daily", "recompensa", "premio"}, COLORS.green, 3, false)
+            else stopMonitor("rewards") end
+            setStatus(on and "Monitor de recompensas ativo; resgate continua validado pelo servidor" or "Monitor de recompensas desligado")
         end)
 
+        endSection()
+
+    elseif category == "Espadas" then
+        beginSection("Catálogo e rastreamento", false)
+        addWorkspaceScanner("Espadas e lâminas", {"sword", "katana", "blade", "sabre", "espada"}, 35)
+        makeLabel("O scanner mostra apenas nomes encontrados no mapa. Requisitos, propriedade e progresso precisam vir do sistema oficial do jogo.", 62)
+        endSection()
+
+    elseif category == "Armas" then
+        beginSection("Catálogo e rastreamento", false)
+        addWorkspaceScanner("Armas e ferramentas", {"weapon", "gun", "rifle", "pistol", "bow", "arma", "musket"}, 35)
+        makeLabel("Não equipa nem dispara ferramentas. A aba serve para conferir objetos replicados durante o desenvolvimento da experiência.", 56)
+        endSection()
+
+    elseif category == "Chefes" then
+        beginSection("Chefes e NPCs", false)
+        addWorkspaceScanner("Modelos de chefes", {"boss", "raid", "chief", "chefe"}, 40)
+        makeButton("LISTAR MODELOS COM HUMANOID", function()
+            local rows = {}
+            for _, item in ipairs(Workspace:GetDescendants()) do
+                if item:IsA("Model") and item:FindFirstChildOfClass("Humanoid") then
+                    table.insert(rows, item:GetFullName())
+                    if #rows >= 35 then break end
+                end
+            end
+            setStatus(#rows .. " modelo(s) com Humanoid")
+            makeLabel(#rows > 0 and table.concat(rows, "\n") or "Nenhum NPC encontrado.", math.clamp(#rows * 19, 40, 360))
+        end)
+        endSection()
+
+    elseif category == "Eventos Marítimos" then
+        beginSection("Monitor de eventos", false)
+        addWorkspaceScanner("Eventos e criaturas marítimas", {"sea", "leviathan", "leviata", "sea beast", "beast", "ship", "barco"}, 40)
+        makeLabel("A detecção depende dos nomes e objetos que o servidor replica. Não inicia eventos nem concede recompensas.", 58)
+        endSection()
+
+    elseif category == "Factory" then
+        beginSection("Monitor da Factory", false)
+        addWorkspaceScanner("Objetos relacionados à Factory", {"factory", "fabrica", "core", "factory door"}, 35)
+        makeLabel("Use esta lista para descobrir os nomes internos dos objetos da sua experiência e integrar depois ao sistema de eventos do servidor.", 58)
+        endSection()
+
+    elseif category == "Materiais" then
+        beginSection("Materiais e drops", false)
+        addWorkspaceScanner("Materiais e itens", {"material", "fragment", "scrap", "ore", "essence", "scale", "mat"}, 45)
+        makeLabel("A quantidade no inventário não pode ser inferida com segurança apenas pelo Workspace. É necessário consultar o inventário oficial no servidor.", 62)
+        endSection()
+
+    elseif category == "Objetivos" then
+        beginSection("Acompanhamento de objetivo", false)
+        makeLabel("Digite uma palavra do nome do item, NPC ou local que você quer localizar no mapa.", 48)
+        local queryBox = makeInput("Pesquisar objetivo", "Ex.: Dragon, Factory, Leviathan", "", nil)
+        makeButton("LOCALIZAR OBJETIVO", function()
+            local query = string.lower(queryBox.Text or "")
+            if query == "" then
+                setStatus("Digite um nome para pesquisar.")
+                return
+            end
+            local matches = scanReplicatedObjects({query}, 80, true, false)
+            objectiveSelection = matches[1]
+            setStatus(#matches .. " correspondência(s) para: " .. query)
+            makeLabel(listObjectPaths(matches, 35), math.clamp(math.min(#matches, 35) * 19, 42, 420))
+            if objectiveSelection then
+                clearMonitorHighlights("objective")
+                highlightMonitoredObject("objective", objectiveSelection, COLORS.green)
+            end
+        end, COLORS.purple)
+        endSection()
+
+    elseif category == "Missões e Trials" then
+        beginSection("Missões e etapas", false)
+        addWorkspaceScanner("Indicadores de missão e Trial", {"quest", "mission", "trial", "missiongiver", "questgiver", "prova"}, 40)
+        makeLabel("O progresso, temporizadores e recompensas devem vir de valores ou módulos oficiais do servidor; esta aba não simula conclusão.", 62)
+        endSection()
+
+    elseif category == "Administração" then
+        beginSection("Ferramentas administrativas locais", false)
+        makeLabel("UserId local: " .. tostring(LocalPlayer.UserId), 28)
+        makeLabel("Esta aba não concede permissões. Comandos administrativos reais precisam validar UserId e permissões no servidor.", 62)
+        makeButton("RECARREGAR PERSONAGEM", function()
+            local ok = pcall(function() LocalPlayer:LoadCharacter() end)
+            setStatus(ok and "Solicitação de respawn enviada." or "Respawn não disponível neste contexto.")
+        end)
+        makeButton("LER STATUS E ATRIBUTOS", function()
+            local text = localStatsText()
+            makeLabel(text, math.clamp(select(2, text:gsub("\n", "")) * 22, 42, 320))
+        end, COLORS.purple)
+        makeButton("LISTAR FERRAMENTAS DO JOGADOR", function()
+            local items = localInventory()
+            makeLabel(#items > 0 and table.concat(items, "\n") or "Nenhuma Tool no Backpack ou personagem.", math.clamp(#items * 22, 42, 320))
+            setStatus("Ferramentas locais encontradas: " .. #items)
+        end)
+        endSection()
+
+    elseif category == "Extras" then
+        beginSection("Diagnóstico", false)
+        makeButton("CONTAR MODELOS E PARTES", function()
+            local models, parts, tools = 0, 0, 0
+            for _, item in ipairs(Workspace:GetDescendants()) do
+                if item:IsA("Model") then models += 1
+                elseif item:IsA("BasePart") then parts += 1
+                elseif item:IsA("Tool") then tools += 1 end
+            end
+            setStatus("Modelos: " .. models .. " | Partes: " .. parts .. " | Tools: " .. tools)
+        end)
+        makeButton("RECENTRALIZAR PAINEL", function()
+            Main.Position = UDim2.new(0.5, -Main.AbsoluteSize.X / 2, 0.5, -Main.AbsoluteSize.Y / 2)
+            setStatus("Painel recentralizado.")
+        end)
+        makeButton("LISTAR INVENTÁRIO LOCAL", function()
+            local items = localInventory()
+            makeLabel(#items > 0 and table.concat(items, "\n") or "Nenhuma Tool no Backpack ou personagem.", math.clamp(#items * 22, 42, 360))
+        end, COLORS.purple)
+        makeButton("MOSTRAR HISTÓRICO DA SESSÃO", function()
+            makeLabel(#sessionEvents > 0 and table.concat(sessionEvents, "\n") or "Ainda não há eventos nesta sessão.", math.clamp(math.min(#sessionEvents, 30) * 20, 42, 600))
+        end)
+        makeButton("LIMPAR HISTÓRICO DA SESSÃO", function()
+            table.clear(sessionEvents)
+            logSession("Histórico reiniciado")
+            setStatus("Histórico local reiniciado.")
+        end, COLORS.red)
+        makeButton("PARAR TODOS OS MONITORES", function()
+            stopAllMonitors()
+            autoFarmEnabled, autoChestEnabled, autoFruitEnabled = false, false, false
+            autoMissionEnabled, autoEvolutionEnabled, autoRewardsEnabled = false, false, false
+            setStatus("Todos os monitores locais foram encerrados.")
+        end, COLORS.red)
+        makeLabel("Versão 5.1 — monitoramento local ampliado. Recompensas, inventário e missões continuam sob autoridade do servidor.", 56)
         endSection()
 
     elseif category == "Configurações" then
@@ -2464,14 +2830,24 @@ end
 
 local categories = {
     "Início",
-    "Anti-Ataque",
-    "Combate",
-    "Frutas",
     "Jogador",
     "Teletransporte",
-    "Coleta e evolução",
+    "Frutas",
+    "Espadas",
+    "Armas",
+    "Chefes",
+    "Eventos Marítimos",
+    "Factory",
+    "Materiais",
+    "Objetivos",
+    "Missões e Trials",
+    "Combate",
+    "Anti-Ataque",
     "Visualização",
-    "Configurações"
+    "Coleta e evolução",
+    "Administração",
+    "Configurações",
+    "Extras"
 }
 
 for index, category in ipairs(categories) do
@@ -2488,7 +2864,7 @@ for index, category in ipairs(categories) do
 
     Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 7)
 
-    tab.MouseButton1Click:Connect(function()
+    tab.Activated:Connect(function()
         for _, sibling in ipairs(Sidebar:GetChildren()) do
             if sibling:IsA("TextButton") then
                 sibling.BackgroundColor3 = COLORS.row
@@ -2500,9 +2876,9 @@ for index, category in ipairs(categories) do
     end)
 end
 
-Min.MouseButton1Click:Connect(MinimizePanel)
+Min.Activated:Connect(MinimizePanel)
 
-Close.MouseButton1Click:Connect(function()
+Close.Activated:Connect(function()
     destroyed = true
     autoAttackEnabled = false
     autoHakiEnabled = false
@@ -2521,6 +2897,8 @@ Close.MouseButton1Click:Connect(function()
         end)
     end
 
+    stopAllMonitors()
+    clearMonitorHighlights("objective")
     removeHighlights(playerHighlights)
     removeHighlights(fruitHighlights)
     removeHighlights(chestHighlights)
@@ -3320,4 +3698,4 @@ end)
 
 showCategory("Início")
 
-print("Blox F' - Tales 4.5 carregado.")
+print("Blox F' - Tales 5.1 carregado.")
